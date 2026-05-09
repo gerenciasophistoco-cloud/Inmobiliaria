@@ -6,25 +6,30 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive
 
-# ── Dependencias del sistema + Node.js 20 + Chrome ──────────────────────────
+# ── Dependencias del sistema ─────────────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
         curl wget gnupg ca-certificates \
-        # FFmpeg para generación de video
+        # ── FFmpeg (video) ──
         ffmpeg \
-        # Fuentes para los overlays de texto
+        # ── Fuentes para overlays de texto ──
         fonts-dejavu-core \
+        fonts-dejavu \
         fonts-liberation \
-        # Chromium para Remotion (fallback)
-        chromium \
-        fonts-liberation libatk1.0-0 libatk-bridge2.0-0 \
-        libcups2 libdrm2 libgbm1 libgtk-3-0 \
-        libnss3 libxcomposite1 libxdamage1 libxfixes3 \
-        libxkbcommon0 libxrandr2 libasound2 \
+        fontconfig \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    # Actualizar caché de fuentes
+    && fc-cache -fv
 
-ENV CHROME_EXECUTABLE=/usr/bin/chromium
+# ── Verificar que FFmpeg está instalado (falla el build si no) ───────────────
+RUN ffmpeg -version 2>&1 | head -1 && \
+    echo "✅ FFmpeg instalado correctamente" && \
+    ffprobe -version 2>&1 | head -1
+
+# ── Verificar fuentes disponibles ────────────────────────────────────────────
+RUN fc-list | grep -i "dejavu\|liberation" | head -5 && \
+    echo "✅ Fuentes instaladas correctamente"
 
 # ── Directorio de trabajo ─────────────────────────────────────────────────────
 WORKDIR /app
@@ -33,18 +38,14 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# ── Dependencias Node.js para el generador de video ──────────────────────────
-COPY video/package.json video/package-lock.json* ./video/
-RUN cd video && npm install --omit=dev
-
 # ── Código fuente ─────────────────────────────────────────────────────────────
 COPY . .
 
-# ── Directorio de outputs de video ───────────────────────────────────────────
+# ── Directorios necesarios ────────────────────────────────────────────────────
 RUN mkdir -p video_output uploads
 
-# ── Exponer puerto ────────────────────────────────────────────────────────────
+# ── Puerto ────────────────────────────────────────────────────────────────────
 EXPOSE 8000
 
-# ── Arrancar servidor ─────────────────────────────────────────────────────────
+# ── Arrancar ──────────────────────────────────────────────────────────────────
 CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
