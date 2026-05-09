@@ -1,0 +1,593 @@
+import asyncio
+import json as _json
+import os
+import re
+import shutil
+import tempfile
+import uuid
+from pathlib import Path
+from typing import List, Optional
+
+from dotenv import load_dotenv
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from anthropic import AsyncAnthropic
+from pydantic import BaseModel
+
+import db
+import storage
+
+load_dotenv()
+
+app = FastAPI(title="ListaPro")
+
+BASE_DIR = Path(__file__).parent
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+
+# Crear carpetas necesarias si no existen (por si Railway no las recibe del repo)
+_static_dir  = BASE_DIR / "static"
+_uploads_dir = BASE_DIR / "uploads"
+_static_dir.mkdir(exist_ok=True)
+_uploads_dir.mkdir(exist_ok=True)
+
+app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
+
+# Uploads locales solo en desarrollo (Cloudinary los reemplaza en producción)
+if not os.getenv("CLOUDINARY_URL"):
+    app.mount("/uploads", StaticFiles(directory=str(_uploads_dir)), name="uploads")
+
+
+# ── Modelo para video y página web ───────────────────────────────────────────
+class PropertyRequest(BaseModel):
+    tipo_propiedad: str
+    operacion: str
+    direccion: str
+    ciudad: str
+    precio: str
+    habitaciones: Optional[str] = None
+    banos: Optional[str] = None
+    metros_construidos: Optional[str] = None
+    metros_terreno: Optional[str] = None
+    estacionamientos: Optional[str] = None
+    amenidades: List[str] = []
+    descripcion: str
+    descripcion_2: Optional[str] = None
+    frase_inspiradora: Optional[str] = None
+    fotos: List[str] = []
+    nombre_agente: str
+    telefono_agente: str
+    email_agente: Optional[str] = None
+    logo: Optional[str] = None
+    foto_agente: Optional[str] = None
+    estrato: Optional[str] = None
+    ano_construccion: Optional[str] = None
+    nombre_inmobiliaria: Optional[str] = None
+    label_2: Optional[str] = None
+    label_3: Optional[str] = None
+    label_4: Optional[str] = None
+    label_5: Optional[str] = None
+    label_6: Optional[str] = None
+    label_7: Optional[str] = None
+    label_8: Optional[str] = None
+    label_9: Optional[str] = None
+    label_10: Optional[str] = None
+    property_id: Optional[str] = None        # para actualizar DB cuando el video termine
+    video_url_propio: Optional[str] = None   # Plan A: URL del video subido por el usuario
+
+
+def extract_logo_palette(logo_path: str) -> dict:
+    try:
+        from PIL import Image
+        img = Image.open(logo_path).convert("RGB").resize((120, 120))
+        q = img.quantize(colors=8, method=2)
+        pal = q.getpalette()[:24]
+        raw = [(pal[i], pal[i+1], pal[i+2]) for i in range(0, 24, 3)]
+        filtered = [c for c in raw if 30 < (c[0]+c[1]+c[2])/3 < 220]
+        if not filtered:
+            filtered = raw
+        p = filtered[0] if filtered else (12, 38, 82)
+        s = filtered[1] if len(filtered) > 1 else (205, 162, 50)
+        a = filtered[2] if len(filtered) > 2 else (29, 78, 216)
+        return {"primary": list(p), "secondary": list(s), "accent": list(a)}
+    except Exception:
+        return {"primary": [12, 38, 82], "secondary": [205, 162, 50], "accent": [29, 78, 216]}
+
+
+def _parse_descriptions(raw: str) -> list:
+    """Extrae el array de descripciones del texto del modelo, tolerando markdown."""
+    # Eliminar bloques de código markdown (```json ... ``` o ``` ... ```)
+    text = re.sub(r'```(?:json)?', '', raw).replace('```', '').strip()
+
+    # Intentar parsear directamente
+    try:
+        result = _json.loads(text)
+        if isinstance(result, list) and result:
+            return [str(s).strip() for s in result if s]
+    except Exception:
+        pass
+
+    # Buscar el primer array JSON dentro del texto
+    try:
+        start = text.index('[')
+        end   = text.rindex(']')
+        result = _json.loads(text[start:end + 1])
+        if isinstance(result, list) and result:
+            return [str(s).strip() for s in result if s]
+    except Exception:
+        pass
+
+    # Fallback: devolver el texto completo como única descripción
+    return [raw]
+
+
+def get_client() -> AsyncAnthropic:
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise HTTPException(
+            status_code=500,
+            detail="ANTHROPIC_API_KEY no configurada. Agrégala en Railway → Variables.",
+        )
+    return AsyncAnthropic(api_key=api_key)
+
+
+def _whatsapp_link(telefono: str, mensaje: str = "") -> str:
+    clean = re.sub(r"\D", "", telefono)
+    import urllib.parse
+    return f"https://wa.me/57{clean}?text={urllib.parse.quote(mensaje)}" if clean else "#"
+
+
+# ── Página principal (formulario) ────────────────────────────────────────────
+@app.get("/", response_class=HTMLResponse)
+async def root():
+    with open("static/index.html", "r", encoding="utf-8") as f:
+        return f.read()
+
+
+# ── Ruta de prueba con datos de ejemplo ──────────────────────────────────────
+@app.get("/test")
+async def test_propiedad(request: Request):
+    datos_ejemplo = {
+        "tipo_propiedad":    "Apartamento",
+        "operacion":         "Venta",
+        "ciudad":            "Bogotá",
+        "direccion":         "Calle 127 # 15-40, Usaquén",
+        "precio":            "$850.000.000 COP",
+        "habitaciones":      "3",
+        "banos":             "2",
+        "metros":            "95",
+        "metros_terreno":    None,
+        "estacionamientos":  "1",
+        "estrato":           "5",
+        "ano_construccion":  "2019",
+        "amenidades": [
+            "Piscina", "Gimnasio", "Salón comunal",
+            "Seguridad 24h", "Ascensor", "BBQ / Asador",
+        ],
+        "descripcion": (
+            "Moderno apartamento ubicado en uno de los sectores más exclusivos de Bogotá. "
+            "Amplios espacios con acabados de primera, iluminación natural en todos los ambientes "
+            "y una vista privilegiada de la ciudad. El conjunto residencial cuenta con completas "
+            "zonas comunes diseñadas para el disfrute de toda la familia. Una oportunidad única "
+            "para vivir con confort, seguridad y distinción."
+        ),
+        "frase_inspiradora": "Donde cada amanecer se convierte en el horizonte que siempre soñaste.",
+        "fotos": [
+            "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1200",
+            "https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?w=800",
+            "https://images.unsplash.com/photo-1560448204-603b3fc33ddc?w=800",
+            "https://images.unsplash.com/photo-1484154218962-a197022b5858?w=800",
+            "https://images.unsplash.com/photo-1586105251261-72a756497a11?w=800",
+            "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=800",
+            "https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=800",
+            "https://images.unsplash.com/photo-1615529328331-f8917597711f?w=800",
+            "https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=800",
+        ],
+        "logo_url":            None,
+        "foto_agente_url":     None,
+        "nombre_agente":       "María Fernanda Gómez",
+        "telefono_agente":     "310 456 7890",
+        "email_agente":        "mfgomez@inmobiliaria.co",
+        "nombre_inmobiliaria": "Sophisto Inmobiliaria",
+        "whatsapp_link":       "https://wa.me/573104567890?text=Hola%2C%20me%20interesa%20el%20apartamento",
+        "video_url":           "https://www.w3schools.com/html/mov_bbb.mp4",
+        "otras_propiedades": [
+            {"nombre": "Apartamento en Tintal",   "precio": "$280.000.000 COP", "metros": "62", "habitaciones": "3", "banos": "2", "badge": "NUEVO",
+             "foto": "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=600"},
+            {"nombre": "Apartamento en Modelia",  "precio": "$410.000.000 COP", "metros": "75", "habitaciones": "3", "banos": "2", "badge": None,
+             "foto": "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=600"},
+            {"nombre": "Apartamento en Hayuelos", "precio": "$320.000.000 COP", "metros": "65", "habitaciones": "3", "banos": "2", "badge": None,
+             "foto": "https://images.unsplash.com/photo-1570129477492-45c003edd2be?w=600"},
+        ],
+    }
+    return templates.TemplateResponse("propiedad.html", {"request": request, **datos_ejemplo})
+
+
+# ── Generación de contenido ──────────────────────────────────────────────────
+@app.post("/generate")
+async def generate_content(
+    tipo_propiedad: str = Form(...),
+    operacion: str = Form(...),
+    direccion: str = Form(...),
+    ciudad: str = Form(...),
+    precio: str = Form(...),
+    habitaciones: Optional[str] = Form(None),
+    banos: Optional[str] = Form(None),
+    metros_construidos: Optional[str] = Form(None),
+    metros_terreno: Optional[str] = Form(None),
+    estacionamientos: Optional[str] = Form(None),
+    estrato: Optional[str] = Form(None),
+    ano_construccion: Optional[str] = Form(None),
+    amenidades: List[str] = Form(default=[]),
+    descripcion_agente: str = Form(...),
+    nombre_inmobiliaria: Optional[str] = Form(None),
+    nombre_agente: str = Form(...),
+    telefono_agente: str = Form(...),
+    email_agente: Optional[str] = Form(None),
+    fotos: List[UploadFile] = File(default=[]),
+    logo: Optional[UploadFile] = File(default=None),
+    foto_agente: Optional[UploadFile] = File(default=None),
+):
+    # Guardar logo
+    # ── Subir archivos (Cloudinary en prod, disco local en dev) ──────────────
+    logo_path = None
+    logo_colors = None
+    if logo and logo.filename and logo.filename.strip():
+        logo_path = storage.upload_file(logo.file, logo.filename, folder="listapro/logos")
+        if logo_path and logo_path.startswith("/uploads/"):
+            logo_colors = extract_logo_palette(str(BASE_DIR / logo_path.lstrip("/")))
+
+    foto_agente_path = None
+    if foto_agente and foto_agente.filename and foto_agente.filename.strip():
+        foto_agente_path = storage.upload_file(
+            foto_agente.file, foto_agente.filename, folder="listapro/agentes"
+        )
+
+    foto_paths = []
+    for foto in fotos:
+        if foto.filename and foto.filename.strip():
+            url = storage.upload_file(foto.file, foto.filename, folder="listapro/fotos")
+            if url:
+                foto_paths.append(url)
+
+    # Formatear precio
+    precio_digits = "".join(filter(str.isdigit, precio))
+    precio_num = int(precio_digits) if precio_digits else 0
+    precio_formatted = "$" + f"{precio_num:,}".replace(",", ".") + " COP"
+
+    # Construir contexto para los prompts
+    specs = []
+    if habitaciones and habitaciones.strip() and habitaciones != "0":
+        specs.append(f"{habitaciones} habitaciones")
+    if banos and banos.strip() and banos != "0":
+        specs.append(f"{banos} baños")
+    if metros_construidos and metros_construidos.strip():
+        specs.append(f"{metros_construidos} m² construidos")
+    if metros_terreno and metros_terreno.strip():
+        specs.append(f"{metros_terreno} m² de terreno")
+    if estacionamientos and estacionamientos.strip() and estacionamientos != "0":
+        specs.append(f"{estacionamientos} garaje(s)")
+
+    amenidades_str = ", ".join(amenidades) if amenidades else "Ninguna especificada"
+    property_info = f"""Tipo de propiedad: {tipo_propiedad}
+Operación: {operacion}
+Ubicación: {direccion}, {ciudad}, Colombia
+Precio: {precio_formatted}
+Especificaciones: {", ".join(specs) if specs else "No especificadas"}
+Amenidades: {amenidades_str}
+Observaciones del agente: {descripcion_agente}
+Contacto: {nombre_agente} | {telefono_agente}{" | " + email_agente if email_agente else ""}"""
+
+    desc_prompt = f"""Eres un experto en bienes raíces en Colombia con años de experiencia redactando descripciones que venden propiedades.
+
+Genera 5 descripciones DIFERENTES para esta propiedad en {operacion.lower()}. Cada una con un enfoque distinto:
+1. Emocional y aspiracional
+2. Enfocada en la ubicación y el barrio
+3. Técnica y detallada (características y especificaciones)
+4. Estilo de vida (qué ofrece vivir ahí)
+5. Breve y directa al grano
+
+Requisitos por descripción:
+- Español colombiano, tono elegante y persuasivo
+- Entre 50 y 70 palabras
+- Texto plano, sin asteriscos ni markdown
+
+Devuelve ÚNICAMENTE un JSON array con 5 strings, sin explicaciones:
+["descripción 1", "descripción 2", "descripción 3", "descripción 4", "descripción 5"]
+
+Datos:
+{property_info}"""
+
+    ig_prompt = f"""Eres un especialista en marketing digital inmobiliario en Colombia.
+
+Crea un copy irresistible para Instagram sobre esta propiedad en {operacion.lower()}.
+- Inicia con un gancho con emojis
+- Destaca 3-4 características
+- Menciona precio y ubicación
+- CTA para contactar a {nombre_agente} al {telefono_agente}
+- Cierra con 15-20 hashtags colombianos de bienes raíces
+- Máximo 2200 caracteres, texto plano sin markdown
+
+Datos:
+{property_info}"""
+
+    frase_prompt = f"""Crea UNA frase corta y poética (máximo 18 palabras) en español que inspire a querer vivir en esta propiedad.
+Sin signos de exclamación, sin hashtags. Solo la frase.
+
+Datos:
+{property_info}"""
+
+    client = get_client()
+
+    try:
+        desc_resp, ig_resp, frase_resp = await asyncio.gather(
+            client.messages.create(model="claude-sonnet-4-5", max_tokens=500,
+                                   messages=[{"role": "user", "content": desc_prompt}]),
+            client.messages.create(model="claude-sonnet-4-5", max_tokens=800,
+                                   messages=[{"role": "user", "content": ig_prompt}]),
+            client.messages.create(model="claude-sonnet-4-5", max_tokens=80,
+                                   messages=[{"role": "user", "content": frase_prompt}]),
+        )
+        raw_desc = desc_resp.content[0].text.strip()
+        descripciones = _parse_descriptions(raw_desc)
+        descripcion = descripciones[0]
+        ig_copy = ig_resp.content[0].text.strip()
+        frase_inspiradora = frase_resp.content[0].text.strip().strip('"').strip("'")
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al generar contenido: {str(e)}")
+
+    # Guardar en Supabase (o fallback memoria)
+    property_id = str(uuid.uuid4())
+    db.save_property(property_id, {
+        "tipo_propiedad":    tipo_propiedad,
+        "operacion":         operacion,
+        "direccion":         direccion,
+        "ciudad":            ciudad,
+        "precio":            precio_formatted,
+        "habitaciones":      habitaciones,
+        "banos":             banos,
+        "metros":            metros_construidos,
+        "metros_terreno":    metros_terreno,
+        "estacionamientos":  estacionamientos,
+        "estrato":           estrato,
+        "ano_construccion":  ano_construccion,
+        "amenidades":        amenidades,
+        "descripcion":       descripcion,
+        "frase_inspiradora": frase_inspiradora,
+        "fotos":             foto_paths,
+        "logo_url":          logo_path,
+        "foto_agente_url":   foto_agente_path,
+        "nombre_agente":     nombre_agente,
+        "telefono_agente":   telefono_agente,
+        "email_agente":      email_agente or "",
+        "nombre_inmobiliaria": nombre_inmobiliaria or nombre_agente,
+        "whatsapp_link":     _whatsapp_link(
+            telefono_agente,
+            f"Hola, estoy interesado en la propiedad en {direccion}, {ciudad}"
+        ),
+        "video_url":         None,
+        "otras_propiedades": None,
+    })
+
+    return JSONResponse({
+        "descripcion":       descripcion,
+        "descripciones":     descripciones,
+        "ig_copy":           ig_copy,
+        "frase_inspiradora": frase_inspiradora,
+        "fotos":             foto_paths,
+        "logo":              logo_path,
+        "foto_agente":       foto_agente_path,
+        "colors":            logo_colors,
+        "property_id":       property_id,
+        "propiedad": {
+            "tipo":      tipo_propiedad,
+            "operacion": operacion,
+            "direccion": direccion,
+            "ciudad":    ciudad,
+            "precio":    precio_formatted,
+            "agente":    nombre_agente,
+            "telefono":  telefono_agente,
+            "email":     email_agente or "",
+        },
+        "specs": {
+            "habitaciones":      habitaciones,
+            "banos":             banos,
+            "metros_construidos": metros_construidos,
+            "metros_terreno":    metros_terreno,
+            "estacionamientos":  estacionamientos,
+            "estrato":           estrato,
+            "ano_construccion":  ano_construccion,
+            "amenidades":        amenidades,
+            "nombre_inmobiliaria": nombre_inmobiliaria,
+        },
+    })
+
+
+# ── Upload de video del usuario (Plan A) ─────────────────────────────────────
+@app.post("/upload-video")
+async def upload_video_endpoint(video: UploadFile = File(...)):
+    """Recibe el video del usuario y lo sube a Cloudinary. Devuelve la URL."""
+    ext = Path(video.filename or "video.mp4").suffix.lower()
+    if ext not in {".mp4", ".mov", ".avi", ".mkv", ".webm"}:
+        raise HTTPException(status_code=400, detail="Formato de video no soportado")
+
+    # Guardar temporalmente
+    tmp = Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}{ext}"
+    with open(tmp, "wb") as f:
+        content = await video.read()
+        f.write(content)
+
+    # Intentar Cloudinary primero
+    try:
+        if os.getenv("CLOUDINARY_URL"):
+            import cloudinary
+            import cloudinary.uploader
+            cloudinary.config(cloudinary_url=os.getenv("CLOUDINARY_URL"))
+            result = cloudinary.uploader.upload(
+                str(tmp),
+                resource_type="video",
+                folder="listapro/videos_usuarios",
+                public_id=str(uuid.uuid4()),
+            )
+            tmp.unlink(missing_ok=True)
+            return JSONResponse({"url": result["secure_url"]})
+    except Exception as e:
+        pass
+
+    # Fallback: guardar local
+    dest = _local_uploads / tmp.name
+    shutil.move(str(tmp), str(dest))
+    return JSONResponse({"url": f"/uploads/{dest.name}"})
+
+
+# ── Página web de la propiedad ───────────────────────────────────────────────
+@app.get("/propiedad/{property_id}", response_class=HTMLResponse)
+async def ver_propiedad(property_id: str, request: Request):
+    data = db.get_property(property_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Propiedad no encontrada.")
+    return templates.TemplateResponse("propiedad.html", {"request": request, **data})
+
+
+# ── Consulta de video para la página pública ─────────────────────────────────
+@app.get("/propiedad-video-status/{property_id}")
+async def propiedad_video_status(property_id: str):
+    """El template de propiedad hace polling a este endpoint para saber si el video ya está listo."""
+    data = db.get_property(property_id)
+    if not data:
+        raise HTTPException(status_code=404)
+    video_url = data.get("video_url")
+    # Comprobar si hay alguna tarea de video corriendo para esta propiedad
+    generating = any(
+        t.get("status") == "running" for t in _video_tasks.values()
+    )
+    return JSONResponse({"video_url": video_url, "generating": generating})
+
+
+# ── Video endpoints ───────────────────────────────────────────────────────────
+
+# Estado en memoria de tareas de video (suficiente para un servidor persistente)
+_video_tasks: dict = {}
+
+
+def _video_task(task_id: str, data: dict, prop_id: Optional[str]):
+    """Hilo de fondo: genera o procesa el video y sube a Cloudinary."""
+    import video_utils
+
+    def _update(**kw):
+        _video_tasks[task_id].update(kw)
+
+    try:
+        _update(progress=5, status_text="preparando")
+
+        nombre   = data.get("nombre_agente", "")
+        telefono = data.get("telefono_agente", "") or data.get("telefono", "")
+        specs    = {
+            "metros":        data.get("metros_construidos") or data.get("metros", ""),
+            "habitaciones":  data.get("habitaciones", ""),
+            "banos":         data.get("banos", ""),
+        }
+        fotos           = [f for f in data.get("fotos", []) if f][:6]
+        video_url_propio = data.get("video_url_propio")
+
+        _update(progress=10, status_text="generando video")
+
+        if video_url_propio:
+            # Plan A: añadir overlays al video del usuario
+            local_out = video_utils.add_overlays(video_url_propio, nombre, telefono, specs)
+        else:
+            # Plan B: slideshow Ken Burns desde las fotos
+            if not fotos:
+                raise ValueError("No hay fotos para generar el video")
+            local_out = video_utils.generate_slideshow(fotos, nombre, telefono, specs)
+
+        _update(progress=75, status_text="subiendo a la nube")
+
+        # Subir a Cloudinary
+        cloud_url = video_utils.upload_video(local_out)
+
+        if cloud_url:
+            video_url = cloud_url
+        else:
+            # Fallback local (solo funciona en desarrollo)
+            dest = Path("video_output") / f"{task_id}.mp4"
+            dest.parent.mkdir(exist_ok=True)
+            shutil.copy2(local_out, str(dest))
+            video_url = f"/download-video/{task_id}"
+            _update(output_path=str(dest))
+
+        # Guardar URL en la propiedad (Supabase o memoria)
+        if prop_id:
+            db.update_property(prop_id, {"video_url": video_url})
+
+        _update(status="done", progress=100, status_text="completado", video_url=video_url)
+
+        try:
+            Path(local_out).unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        _update(status="error", error=str(e), progress=0)
+
+
+@app.post("/generate-video")
+async def generate_video(request: PropertyRequest):
+    import threading
+
+    data    = request.model_dump()
+    base    = Path(__file__).parent
+    prop_id = data.pop("property_id", None)
+
+    # Convertir rutas locales a absolutas; URLs de Cloudinary pasan intactas
+    data["fotos"] = [
+        str(base / p.lstrip("/").replace("/", os.sep)) if p.startswith("/uploads/") else p
+        for p in data.get("fotos", []) if p
+    ]
+
+    task_id = str(uuid.uuid4())
+    _video_tasks[task_id] = {
+        "status": "running", "progress": 0,
+        "status_text": "iniciando", "output_path": None,
+        "error": None, "video_url": None,
+    }
+
+    threading.Thread(target=_video_task, args=(task_id, data, prop_id), daemon=True).start()
+    return JSONResponse({"task_id": task_id})
+
+
+@app.get("/video-status/{task_id}")
+async def video_status(task_id: str):
+    task = _video_tasks.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Tarea no encontrada")
+    return JSONResponse({
+        "status":      task["status"],
+        "progress":    task["progress"],
+        "status_text": task.get("status_text", ""),
+        "error":       task.get("error"),
+        "video_url":   task.get("video_url"),
+    })
+
+
+@app.get("/download-video/{task_id}")
+async def download_video(task_id: str):
+    from video_generator import get_task_output_path
+    output = get_task_output_path(task_id)
+    if not output or not os.path.exists(output):
+        raise HTTPException(status_code=404, detail="Video no listo o no encontrado")
+
+    def iter_file():
+        with open(output, "rb") as f:
+            while chunk := f.read(65536):
+                yield chunk
+
+    return StreamingResponse(
+        iter_file(),
+        media_type="video/mp4",
+        headers={"Content-Disposition": f"attachment; filename=ListaPro_reel_{task_id[:8]}.mp4"},
+    )

@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# Variables de entorno (nunca subir al repo)
+.env
+
+# Uploads locales (las fotos reales van a Cloudinary en producción)
+uploads/
+
+# Outputs de video
+video_output/
+
+# Temporales
+*.tmp
+*.log
+node_modules/

@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "secondary-container": "#454747",
+                    "outline-variant": "#444748",
+                    "primary-container": "#121212",
+                    "inverse-surface": "#e4e2e1",
+                    "secondary": "#c6c6c7",
+                    "on-secondary-fixed": "#1a1c1c",
+                    "surface-container": "#1f2020",
+                    "on-background": "#e4e2e1",
+                    "outline": "#8e9192",
+                    "error-container": "#93000a",
+                    "primary": "#c8c6c5",
+                    "surface-container-high": "#2a2a2a",
+                    "primary-fixed": "#e5e2e1",
+                    "on-secondary-fixed-variant": "#454747",
+                    "error": "#ffb4ab",
+                    "on-tertiary": "#3c2f00",
+                    "tertiary-container": "#181100",
+                    "tertiary-fixed": "#ffe088",
+                    "on-secondary-container": "#b4b5b5",
+                    "surface-bright": "#393939",
+                    "on-error": "#690005",
+                    "primary-fixed-dim": "#c8c6c5",
+                    "surface-tint": "#c8c6c5",
+                    "on-primary-fixed": "#1c1b1b",
+                    "on-tertiary-fixed-variant": "#574500",
+                    "inverse-on-surface": "#303030",
+                    "background": "#131313",
+                    "on-primary-container": "#7e7d7d",
+                    "tertiary": "#e9c349",
+                    "surface-dim": "#131313",
+                    "on-surface": "#e4e2e1",
+                    "on-tertiary-fixed": "#241a00",
+                    "on-error-container": "#ffdad6",
+                    "inverse-primary": "#5f5e5e",
+                    "surface-container-lowest": "#0e0e0e",
+                    "secondary-fixed": "#e2e2e2",
+                    "on-surface-variant": "#c4c7c7",
+                    "surface-container-low": "#1b1c1c",
+                    "secondary-fixed-dim": "#c6c6c7",
+                    "on-tertiary-container": "#987a00",
+                    "surface": "#131313",
+                    "on-secondary": "#2f3131",
+                    "surface-container-highest": "#353535",
+                    "on-primary": "#313030",
+                    "surface-variant": "#353535",
+                    "tertiary-fixed-dim": "#e9c349",
+                    "on-primary-fixed-variant": "#474646",
+                    "whatsapp": "#25D366"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "container-padding": "48px",
+                    "stack-lg": "32px",
+                    "stack-md": "16px",
+                    "gutter": "24px",
+                    "unit": "8px",
+                    "stack-sm": "8px"
+            },
+            "fontFamily": {
+                    "label-caps": ["Inter"],
+                    "headline-lg": ["Inter"],
+                    "badge-text": ["Inter"],
+                    "headline-md": ["Inter"],
+                    "body-lg": ["Inter"],
+                    "headline-xl": ["Inter"],
+                    "body-md": ["Inter"]
+            },
+            "fontSize": {
+                    "label-caps": ["12px", {"lineHeight": "1", "letterSpacing": "0.1em", "fontWeight": "700"}],
+                    "headline-lg": ["32px", {"lineHeight": "1.2", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "badge-text": ["11px", {"lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "800"}],
+                    "headline-md": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                    "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                    "headline-xl": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "body-md": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 200, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            margin: 0;
+            padding: 0;
+        }
+        .glassmorphic {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body-md relative">
+<!-- Top Navigation Bar -->
+<header class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-12 h-24 bg-stone-950/40 backdrop-blur-[20px] border-b border-white/10">
+<div class="flex items-center gap-4"><img alt="SOLUCIONES Y GESTIÓN SAS Logo" class="h-10 w-10 object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC5qVq83r7BTUR23KTh8CkXEvdAMclulddRjdmZgGz_7NGraxYXcLY_OUVoyGliCgsVkskqZle_AaR5jDha32orakKpSxfKRM9SWMUqEdrT2NL-PZHumMshKIMsp1CcZ6intMPcUBiXMkZtZXLACrlCOmima5GxsyBBwQvvO4JGSw14fDJVb_9JaT-Vg8-R_E_wLSu44V6k9Zz49_oqGY6kdpj0Ra-KL2wvHBj9Yuk7OafNidZwAYTjPQ53RIdR5EelJ0F2luROWCg"/><span class="text-white font-light tracking-[0.2em] uppercase text-sm">SOLUCIONES Y GESTIÓN SAS</span></div>
+<a class="bg-whatsapp text-white px-8 py-3 font-label-caps hover:brightness-110 transition-all active:scale-95 flex items-center gap-2" href="https://wa.me/573001234567?text=Hi,%20I'm%20interested%20in%20the%20property%20in%20Barrio%20Borcelle" target="_blank">
+<span class="material-symbols-outlined text-[18px]">chat</span>
+            WhatsApp
+        </a>
+</header>
+<!-- Main Content Container -->
+<main class="relative h-screen w-screen flex flex-row overflow-hidden bg-cover bg-center" data-alt="Stunning architectural exterior of a modern luxury villa at dusk with warm interior lighting and manicured minimalist landscaping" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCgXwAnxZblRn3Q4InTAft_haWGIPD-8GlsM1aOr34qNQiEdgYObdwYqYs3c7ReOLHbFmHw3Z8tC0mz6xjwwloS0GptxKE0uzcRzQG6cX7IFsyUNWaL5BZ_buS66H2jiuNe1Hkz7gIh6FnUFNcOAhuM80fcGbTceZQzUw8e-MYa2EZF0P6kaPMmC3Kmjxs5afzR1jCQ5q6OrMnl9cdBVZ_6584V4-Gu_sTzziwX3MQLazMj7r2yqELST7A2bvoT6woMoQVPwebO8v0");'>
+<!-- Gradient Overlay -->
+<div class="absolute inset-0 bg-gradient-to-r from-stone-950 via-stone-950/80 to-transparent w-[80%] pointer-events-none"></div>
+<!-- Content Grid -->
+<div class="relative z-10 grid grid-cols-12 w-full h-full pt-24 px-12">
+<!-- Left Column: Intentional Grouping for High-End Look -->
+<div class="col-span-5 flex flex-col h-full py-16">
+<!-- Top Branding & Header Group -->
+<div class="flex flex-col gap-10">
+<div>
+<span class="material-symbols-outlined text-white text-4xl" data-icon="home_work">home_work</span>
+</div>
+<div class="flex flex-col gap-4">
+<div class="flex flex-col gap-1">
+<span class="text-white/60 font-label-caps text-[10px] tracking-[0.2em] uppercase">Propiedad en venta</span>
+<h1 class="text-white font-headline-xl uppercase tracking-tighter leading-none">BARRIO BORCELLE</h1>
+</div>
+<div class="text-white text-5xl font-extrabold tracking-tight">$ 1.250.000.000 <span class="text-2xl font-normal opacity-70 ml-2">COP</span></div>
+</div>
+</div>
+<!-- Middle Section: Metrics and Description -->
+<div class="mt-16 flex flex-col gap-12">
+<div class="grid grid-cols-5 gap-6 py-6 border-y border-white/10">
+<div class="flex flex-col">
+<span class="text-white/40 text-[9px] font-label-caps uppercase tracking-widest mb-1">Const</span>
+<span class="text-white text-sm font-bold tracking-tight">234 m²</span>
+</div>
+<div class="flex flex-col">
+<span class="text-white/40 text-[9px] font-label-caps uppercase tracking-widest mb-1">Lote</span>
+<span class="text-white text-sm font-bold tracking-tight">450 m²</span>
+</div>
+<div class="flex flex-col">
+<span class="text-white/40 text-[9px] font-label-caps uppercase tracking-widest mb-1">Estrato</span>
+<span class="text-white text-sm font-bold tracking-tight">6</span>
+</div>
+<div class="flex flex-col">
+<span class="text-white/40 text-[9px] font-label-caps uppercase tracking-widest mb-1">Año</span>
+<span class="text-white text-sm font-bold tracking-tight">2022</span>
+</div>
+<div class="flex flex-col">
+<span class="text-white/40 text-[9px] font-label-caps uppercase tracking-widest mb-1">Estado</span>
+<span class="text-white text-[10px] font-bold uppercase tracking-wider">Nuevo</span>
+</div>
+</div>
+<div class="grid grid-cols-2 lg:grid-cols-3 gap-3 mt-4 max-w-lg">
+<div class="flex items-center gap-2 bg-white/10 backdrop-blur-md border border-white/20 px-3 py-2 rounded-lg">
+<span class="text-lg">🏊</span>
+<span class="text-white text-[10px] font-label-caps uppercase tracking-wider">Piscina</span>
+</div>
+<div class="flex items-center gap-2 bg-white/10 backdrop-blur-md border border-white/20 px-3 py-2 rounded-lg">
+<span class="text-lg">🏋️</span>
+<span class="text-white text-[10px] font-label-caps uppercase tracking-wider">Gimnasio</span>
+</div>
+<div class="flex items-center gap-2 bg-white/10 backdrop-blur-md border border-white/20 px-3 py-2 rounded-lg">
+<span class="text-lg">🌳</span>
+<span class="text-white text-[10px] font-label-caps uppercase tracking-wider">Jardín</span>
+</div>
+<div class="flex items-center gap-2 bg-white/10 backdrop-blur-md border border-white/20 px-3 py-2 rounded-lg">
+<span class="text-lg">🛡️</span>
+<span class="text-white text-[10px] font-label-caps uppercase tracking-wider">Seguridad 24H</span>
+</div>
+<div class="flex items-center gap-2 bg-white/10 backdrop-blur-md border border-white/20 px-3 py-2 rounded-lg">
+<span class="text-lg">🧒</span>
+<span class="text-white text-[10px] font-label-caps uppercase tracking-wider">Parque Infantil</span>
+</div>
+<div class="flex items-center gap-2 bg-white/10 backdrop-blur-md border border-white/20 px-3 py-2 rounded-lg">
+<span class="text-lg">🥩</span>
+<span class="text-white text-[10px] font-label-caps uppercase tracking-wider">BBQ / Asador</span>
+</div>
+<div class="flex items-center gap-2 bg-white/10 backdrop-blur-md border border-white/20 px-3 py-2 rounded-lg">
+<span class="text-lg">🚗</span>
+<span class="text-white text-[10px] font-label-caps uppercase tracking-wider">Ascensor</span>
+</div>
+<div class="flex items-center gap-2 bg-white/10 backdrop-blur-md border border-white/20 px-3 py-2 rounded-lg">
+<span class="text-lg">📦</span>
+<span class="text-white text-[10px] font-label-caps uppercase tracking-wider">Bodega</span>
+</div>
+</div>
+</div>
+<!-- Bottom: Agent Card (Pushed to bottom) -->
+<div class="mt-auto pt-12">
+<div class="flex items-center gap-6 bg-white/5 backdrop-blur-2xl border border-white/10 p-6 rounded-2xl max-w-sm">
+<div class="w-24 h-24 rounded-full overflow-hidden border-2 border-white/20 shrink-0 shadow-xl">
+<img alt="Agent Profile" class="w-full h-full object-cover" data-alt="Professional portrait of a luxury real estate agent in a tailored suit with a confident, welcoming expression" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAVBTLPUsLA3KoGLzV2kJp4Knb8LnBZYp-eoNEIa_ieCgefxL2rBrc5-IfhWvwLOCZaE6aYvyibSHjgle0TTNe3q6_iuvR_EHHcLv9cqFPLINLkF5CSrDNqi3tX7b9RUg6m0iyYaT8D8Vwsbljzu_N5_vxq_c9fOxRXC-ifii2dO6VyQcKQ3Xv0PwQvoYSJKM35gjCklV8xt8cFh4BZZBwqQjadR1rbzyswG5j5jtUFk6hehRHPbLL5aB9NVJ2krxOmfltfY4_Zs9k"/>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="text-white font-headline-md tracking-tight truncate leading-tight">Luciano Borcelle</span>
+<span class="text-white/50 font-label-caps text-[9px] uppercase tracking-[0.15em] mt-1 mb-4">Senior Portfolio Advisor</span>
+<div class="flex flex-col gap-2">
+<div class="flex items-center gap-2 text-white/80 font-body-md text-xs">
+<span class="material-symbols-outlined text-[14px] text-white/40">call</span>
+                        +57 300 123 4567
+                    </div>
+<div class="flex items-center gap-2 text-white/80 font-body-md text-xs truncate">
+<span class="material-symbols-outlined text-[14px] text-white/40">mail</span>
+                        l.borcelle@aeterna.com
+                    </div>
+<div class="flex items-center gap-2 text-white/80 font-body-md text-xs truncate">
+<span class="material-symbols-outlined text-[14px] text-white/40">language</span>
+                        aeternanestates.com
+                    </div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Right Column: Stacked Cards (Preserved) -->
+<div class="col-span-7 flex flex-col justify-center items-end h-full py-12 gap-gutter">
+<!-- Card 1 -->
+<div class="w-[480px] h-60 rounded-xl overflow-hidden glassmorphic relative border border-white/10 shadow-2xl transition-transform hover:scale-105 duration-500">
+<img class="w-full h-full object-cover" data-alt="Interior of a luxury modern living room with floor-to-ceiling windows, designer furniture, and soft natural daylight" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBb2l20AlVGZzeQK1pL70LI11m3xSuCfl7WPRrij5J5b4HOvgm4KLP7H6ppi2sR08fKjvdMc0Zwb5sjYUrSmyl58V9DoPZZfzu1uLPkJv-zuJJ2Y8Gr3JP3s9wFzL12M2RyGdM8X37ogHSXgj-ybt4XA9BbcqFsUkDOg6DBdYU_ddcBuYEejcyHWMY9fRjTU58pROlKAjsBFOkKDVIY9V0Z9aMC2ooxOvbfI_K-rURhqPke7ihR0La6A7jFg4eoDJ17DoooEJCf-Ug"/>
+<div class="absolute bottom-4 left-4 bg-stone-950/60 backdrop-blur-md px-3 py-1 rounded border border-white/10">
+<span class="text-white font-label-caps text-[9px] uppercase">Main Gallery</span>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="w-[480px] h-60 rounded-xl overflow-hidden glassmorphic relative border border-white/10 shadow-2xl transition-transform hover:scale-105 duration-500">
+<img class="w-full h-full object-cover" data-alt="High-end gourmet kitchen with marble countertops, custom dark cabinetry, and premium stainless steel appliances" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAo8JhfZ1H8LZ82kLjzxYBj9kX_JqnXo31yambGwqivja-7qxLkWwGnnaVD-StRAoiairO7Psd7rbYVGUkm8vXfZn7fCTVaJH3A-S8hwiDl-5fzaFbIvHIksCVnRJY81t833lUZX9URloKSfS3UvoTQvpvj0ghNZKUWvZcDdvTfjNM8v3snrF3OJf_gSKpe4Ds3cXf_saVNHjK-YVgOdWNGLrVKgh8lGMBOBG5ei8x1M0k_4LLtJRlWYsmS70QGKIXNoZ36zFkG07Y"/>
+<div class="absolute bottom-4 left-4 bg-stone-950/60 backdrop-blur-md px-3 py-1 rounded border border-white/10">
+<span class="text-white font-label-caps text-[9px] uppercase">Gourmet Space</span>
+</div>
+</div>
+<!-- Card 3 -->
+<div class="w-[480px] h-60 rounded-xl overflow-hidden glassmorphic relative border border-white/10 shadow-2xl transition-transform hover:scale-105 duration-500">
+<img class="w-full h-full object-cover" data-alt="Spacious master suite with king-size bed, luxury linens, and a private balcony overlooking the city skyline at night" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDyoTtnZrUzXLFIfk4Li4hf8Wj69Cq2JU9MP39tMQhL982JKIlgL0bMdts2G9pPifxxzQAzp2T8tMs7HiX5lhKl4IeX3ZUTEwQOb21bAuQ5jarvtSXXRk6Beh15scF6faEVTjzDsfOaYRhdopFojcgrjvMpP1gPhPFyzWVOjkAiERkJWKHd8cODRQSHV6P01b1Yj7nzhdizOE83EIcpXEC3TiqaWu6MAmnsC1wM2w5lLImoMa01cVFYfsyhsIlWvIomNgRnCP2rmzg"/>
+<div class="absolute bottom-4 left-4 bg-stone-950/60 backdrop-blur-md px-3 py-1 rounded border border-white/10">
+<span class="text-white font-label-caps text-[9px] uppercase">Master Suite</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

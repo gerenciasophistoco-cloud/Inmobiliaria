@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&amp;family=Noto+Serif:wght@400;700&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-background": "#e2e2e2",
+                        "surface-container-high": "#282a2b",
+                        "on-tertiary-fixed": "#1b1c1c",
+                        "on-secondary-fixed": "#1b1b1c",
+                        "inverse-on-surface": "#2f3131",
+                        "secondary": "#c8c6c5",
+                        "secondary-fixed": "#e5e2e1",
+                        "tertiary-fixed": "#e4e2e1",
+                        "surface-variant": "#333535",
+                        "on-secondary-container": "#b7b5b4",
+                        "secondary-container": "#474746",
+                        "surface-dim": "#121414",
+                        "outline": "#8e9192",
+                        "primary-fixed": "#e5e2e1",
+                        "inverse-primary": "#5f5e5e",
+                        "inverse-surface": "#e2e2e2",
+                        "primary-fixed-dim": "#c9c6c5",
+                        "outline-variant": "#444748",
+                        "tertiary-fixed-dim": "#c8c6c5",
+                        "on-secondary-fixed-variant": "#474746",
+                        "tertiary": "#c8c6c5",
+                        "on-secondary": "#303030",
+                        "on-primary-fixed-variant": "#474646",
+                        "surface-container": "#1e2020",
+                        "on-surface": "#e2e2e2",
+                        "error": "#ffb4ab",
+                        "error-container": "#93000a",
+                        "on-tertiary-container": "#7a7979",
+                        "tertiary-container": "#0a0a0a",
+                        "primary-container": "#0a0a0a",
+                        "on-error": "#690005",
+                        "on-tertiary": "#303030",
+                        "on-error-container": "#ffdad6",
+                        "surface-tint": "#c9c6c5",
+                        "surface-container-lowest": "#0c0f0f",
+                        "surface-container-low": "#1a1c1c",
+                        "surface-container-highest": "#333535",
+                        "on-tertiary-fixed-variant": "#474747",
+                        "surface": "#121414",
+                        "primary": "#c9c6c5",
+                        "surface-bright": "#38393a",
+                        "on-surface-variant": "#c4c7c7",
+                        "secondary-fixed-dim": "#c8c6c5",
+                        "on-primary-container": "#7b7979",
+                        "on-primary-fixed": "#1c1b1b",
+                        "background": "#121414",
+                        "on-primary": "#313030"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline-lg": ["Noto Serif"],
+                        "display-xl": ["Noto Serif"],
+                        "body-md": ["Inter"],
+                        "label-caps": ["Inter"],
+                        "headline-md": ["Noto Serif"],
+                        "body-lg": ["Inter"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+        }
+        .a4-page {
+            width: 794px;
+            height: 1123px;
+            margin: 0 auto;
+            position: relative;
+            overflow: hidden;
+            background-color: #0A0A0A;
+        }
+        body {
+            background-color: #1a1c1c;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px 0;
+            margin: 0;
+        }
+    </style>
+</head>
+<body class="font-body-md text-on-surface">
+<main class="a4-page shadow-2xl flex flex-col">
+<!-- TopAppBar Header -->
+<header class="bg-[#0A0A0A] text-white flex justify-between items-center w-full px-12 py-8 border-b border-[#333333]">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 border border-white flex items-center justify-center"><span class="material-symbols-outlined text-white text-xl">account_balance</span></div>
+<h1 class="font-serif text-xl tracking-[0.2em] text-white uppercase">NOMBRE INMOBILIARIA</h1>
+</div>
+<a class="flex items-center gap-2 bg-white text-black hover:bg-[#c9c6c5] transition-colors duration-300 px-6 py-2 border border-white" href="https://wa.me/#">
+<span class="material-symbols-outlined text-lg" data-icon="chat">chat</span>
+<span class="font-serif tracking-widest uppercase text-xs font-bold">WHATSAPP</span>
+</a>
+</header>
+<!-- Vertical Photo Stack -->
+<section class="flex-grow px-12 pt-10 space-y-8">
+<!-- Image 1 -->
+<div class="space-y-3">
+<div class="w-full overflow-hidden bg-surface-container border border-[#333333] h-40">
+<img alt="Interior de lujo" class="w-full h-full object-cover grayscale-[20%] contrast-[1.1]" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCfsq6vyBZv3Yq2SNu7_5XhNMOH3LT2EbgUJtmFZpiRv4JAvBMWUEVqcRFS536ZtgwYowXed2OgSMShC5Iudp6-20yYyPCh-e1MRluGXzOgd5ZAksMGZkTXWcE6nO8jHsk0ErieoMuIV39vbLCXysV7ZrQt-VCqJ1nGHkN3fbHyWiyPHKzbZJIIFwoMmU0Hcxbcwe7gOSy9bb1T3iVLUNXG7pHnIuKImWGFI18_NxHcxeR2FO9usARLfm5uF8_39RtDW7W4PQG4MRs"/>
+</div>
+<div class="flex justify-between items-baseline">
+<h3 class="font-serif text-white text-base italic">Santuario Principal</h3>
+<span class="font-label-caps text-outline uppercase tracking-[0.3em] text-[10px]">ROOM 01</span>
+</div>
+</div>
+<!-- Image 2 -->
+<div class="space-y-3">
+<div class="w-full overflow-hidden bg-surface-container border border-[#333333] h-40">
+<img alt="Piscina infinity" class="w-full h-full object-cover grayscale-[20%] contrast-[1.1]" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBkQDem2ZRtyd4CscOagA4rCozAMYe9WqhgUNlD1UY688dPJ3tjBxOgTmsTZhLbd4jPlXPoH7uzi--UqFAZy_AibH_ZlvEyrhDp_2af0owjffoP-8aEMY83cb2J1uaE0F1zuOx0D_wzPbZ93TbZr9BMuve08XYREB-vZ9lj7CH1ol4IZ1YGQDZ9vNC3B4QQ8xWvJ8CEqaV3ZcASxd_QyaAydI9ykp5SfK5ICiNWmv1BXwAHblMopYsF1CGs6kDe7UtayIbebePb314"/>
+</div>
+<div class="flex justify-between items-baseline">
+<h3 class="font-serif text-white text-base italic">Terraza del Atardecer</h3>
+<span class="font-label-caps text-outline uppercase tracking-[0.3em] text-[10px]">DECK 02</span>
+</div>
+</div>
+<!-- Image 3 -->
+<div class="space-y-3">
+<div class="w-full overflow-hidden bg-surface-container border border-[#333333] h-40">
+<img alt="Bodega privada" class="w-full h-full object-cover grayscale-[20%] contrast-[1.1]" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCTGeN8ceZAqVk-IjoUmrRt5-6jAXAh4OrhmLLIowh1MuEu-udwWuhqA0CeB6JzMnSCnZE2pwEh1repGZubipY77-1bWIOXD7yqYq_S9sOH_AblBAGiiVWnAGs4oe5zJzD1CFLsMWevcvArxEkf9nIhyDFB13Pn_TzBIhDY4rR9w4D-VcT4VFyUuuetz0oGax8qoHnDa-o6g1nT1oKel_9-S540qwHHlNTOYAb1wLaZDnRVWWn7zMkyANJlZ1wUauHpcsJQu9ujfQk"/>
+</div>
+<div class="flex justify-between items-baseline">
+<h3 class="font-serif text-white text-base italic">Cava Privada</h3>
+<span class="font-label-caps text-outline uppercase tracking-[0.3em] text-[10px]">LEVEL -1</span>
+</div>
+</div>
+</section>
+<!-- New Contact Section (Style of IMAGE_10) -->
+<section class="px-12 py-16 bg-[#0A0A0A] flex flex-col items-center">
+<!-- Centered Text Section -->
+<div class="text-center space-y-2 mb-12">
+<h4 class="text-white text-2xl tracking-[0.4em] font-light uppercase">[TU NOMBRE]</h4>
+<p class="text-outline text-xs tracking-[0.3em] font-medium uppercase opacity-80">AGENTE INMOBILIARIO</p>
+<p class="text-white text-lg tracking-[0.4em] font-light uppercase mt-4">[TU NÚMERO]</p>
+</div>
+<!-- Two Large Rectangular Buttons -->
+<div class="grid grid-cols-2 gap-4 w-full">
+<a class="border border-white bg-black hover:bg-white hover:text-black transition-all duration-300 py-8 px-6 flex items-center justify-center gap-4 group" href="#">
+<span class="material-symbols-outlined text-2xl group-hover:text-black" data-icon="call">call</span>
+<span class="text-[11px] tracking-[0.25em] font-semibold text-left leading-tight">SOLICITAR UNA<br/>LLAMADA</span>
+</a>
+<a class="border border-white bg-black hover:bg-white hover:text-black transition-all duration-300 py-8 px-6 flex items-center justify-center gap-4 group" href="#">
+<span class="material-symbols-outlined text-2xl group-hover:text-black" data-icon="chat_bubble">chat_bubble</span>
+<span class="text-[11px] tracking-[0.25em] font-semibold text-left leading-tight">ESCRIBIR POR<br/>WHATSAPP</span>
+</a>
+</div>
+</section>
+<!-- Footer for Visual Balance (Optional but keeps layout clean) -->
+</main>
+</body></html>

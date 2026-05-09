@@ -1,0 +1,283 @@
+Collecting supabase
+  Downloading supabase-2.30.0-py3-none-any.whl.metadata (4.6 kB)
+Collecting cloudinary
+  Downloading cloudinary-1.44.2-py3-none-any.whl.metadata (8.0 kB)
+Collecting realtime==2.30.0 (from supabase)
+  Downloading realtime-2.30.0-py3-none-any.whl.metadata (7.0 kB)
+Collecting supabase-functions==2.30.0 (from supabase)
+  Downloading supabase_functions-2.30.0-py3-none-any.whl.metadata (2.4 kB)
+Collecting storage3==2.30.0 (from supabase)
+  Downloading storage3-2.30.0-py3-none-any.whl.metadata (2.1 kB)
+Collecting supabase-auth==2.30.0 (from supabase)
+  Downloading supabase_auth-2.30.0-py3-none-any.whl.metadata (6.4 kB)
+Collecting postgrest==2.30.0 (from supabase)
+  Downloading postgrest-2.30.0-py3-none-any.whl.metadata (3.4 kB)
+Requirement already satisfied: httpx<0.29,>=0.26 in c:\users\57310\appdata\local\python\pythoncore-3.14-64\lib\site-packages (from supabase) (0.28.1)
+Collecting yarl>=1.22.0 (from supabase)
+  Downloading yarl-1.23.0-cp314-cp314-win_amd64.whl.metadata (82 kB)
+Collecting deprecation>=2.1.0 (from postgrest==2.30.0->supabase)
+  Downloading deprecation-2.1.0-py2.py3-none-any.whl.metadata (4.6 kB)
+Requirement already satisfied: pydantic<3.0,>=1.9 in c:\users\57310\appdata\local\python\pythoncore-3.14-64\lib\site-packages (from postgrest==2.30.0->supabase) (2.13.3)
+Requirement already satisfied: typing-extensions>=4.14.0 in c:\users\57310\appdata\local\python\pythoncore-3.14-64\lib\site-packages (from realtime==2.30.0->supabase) (4.15.0)
+Collecting websockets<16,>=11 (from realtime==2.30.0->supabase)
+  Downloading websockets-15.0.1-py3-none-any.whl.metadata (6.8 kB)
+Collecting pyiceberg>=0.10.0 (from storage3==2.30.0->supabase)
+  Downloading pyiceberg-0.11.1.tar.gz (1.1 MB)
+     ---------------------------------------- 1.1/1.1 MB 6.9 MB/s  0:00:00
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Collecting pyjwt>=2.10.1 (from pyjwt[crypto]>=2.10.1->supabase-auth==2.30.0->supabase)
+  Downloading pyjwt-2.12.1-py3-none-any.whl.metadata (4.1 kB)
+Collecting strenum>=0.4.15 (from supabase-functions==2.30.0->supabase)
+  Downloading StrEnum-0.4.15-py3-none-any.whl.metadata (5.3 kB)
+Requirement already satisfied: anyio in c:\users\57310\appdata\local\python\pythoncore-3.14-64\lib\site-packages (from httpx<0.29,>=0.26->supabase) (4.13.0)
+Requirement already satisfied: certifi in c:\users\57310\appdata\local\python\pythoncore-3.14-64\lib\site-packages (from httpx<0.29,>=0.26->supabase) (2026.4.22)
+Requirement already satisfied: httpcore==1.* in c:\users\57310\appdata\local\python\pythoncore-3.14-64\lib\site-packages (from httpx<0.29,>=0.26->supabase) (1.0.9)
+Requirement already satisfied: idna in c:\users\57310\appdata\local\python\pythoncore-3.14-64\lib\site-packages (from httpx<0.29,>=0.26->supabase) (3.12)
+Requirement already satisfied: h11>=0.16 in c:\users\57310\appdata\local\python\pythoncore-3.14-64\lib\site-packages (from httpcore==1.*->httpx<0.29,>=0.26->supabase) (0.16.0)
+Collecting h2<5,>=3 (from httpx[http2]<0.29,>=0.26->postgrest==2.30.0->supabase)
+  Downloading h2-4.3.0-py3-none-any.whl.metadata (5.1 kB)
+Collecting hyperframe<7,>=6.1 (from h2<5,>=3->httpx[http2]<0.29,>=0.26->postgrest==2.30.0->supabase)
+  Downloading hyperframe-6.1.0-py3-none-any.whl.metadata (4.3 kB)
+Collecting hpack<5,>=4.1 (from h2<5,>=3->httpx[http2]<0.29,>=0.26->postgrest==2.30.0->supabase)
+  Downloading hpack-4.1.0-py3-none-any.whl.metadata (4.6 kB)
+Requirement already satisfied: annotated-types>=0.6.0 in c:\users\57310\appdata\local\python\pythoncore-3.14-64\lib\site-packages (from pydantic<3.0,>=1.9->postgrest==2.30.0->supabase) (0.7.0)
+Requirement already satisfied: pydantic-core==2.46.3 in c:\users\57310\appdata\local\python\pythoncore-3.14-64\lib\site-packages (from pydantic<3.0,>=1.9->postgrest==2.30.0->supabase) (2.46.3)
+Requirement already satisfied: typing-inspection>=0.4.2 in c:\users\57310\appdata\local\python\pythoncore-3.14-64\lib\site-packages (from pydantic<3.0,>=1.9->postgrest==2.30.0->supabase) (0.4.2)
+Collecting six (from cloudinary)
+  Downloading six-1.17.0-py2.py3-none-any.whl.metadata (1.7 kB)
+Collecting urllib3>=1.26.5 (from cloudinary)
+  Downloading urllib3-2.7.0-py3-none-any.whl.metadata (6.9 kB)
+Collecting packaging (from deprecation>=2.1.0->postgrest==2.30.0->supabase)
+  Using cached packaging-26.2-py3-none-any.whl.metadata (3.5 kB)
+Collecting mmh3<6.0.0,>=4.0.0 (from pyiceberg>=0.10.0->storage3==2.30.0->supabase)
+  Downloading mmh3-5.2.1-cp314-cp314-win_amd64.whl.metadata (15 kB)
+Collecting requests<3.0.0,>=2.20.0 (from pyiceberg>=0.10.0->storage3==2.30.0->supabase)
+  Downloading requests-2.33.1-py3-none-any.whl.metadata (4.8 kB)
+Requirement already satisfied: click<9.0.0,>=7.1.1 in c:\users\57310\appdata\local\python\pythoncore-3.14-64\lib\site-packages (from pyiceberg>=0.10.0->storage3==2.30.0->supabase) (8.3.2)
+Collecting rich<15.0.0,>=10.11.0 (from pyiceberg>=0.10.0->storage3==2.30.0->supabase)
+  Downloading rich-14.3.4-py3-none-any.whl.metadata (18 kB)
+Collecting strictyaml<2.0.0,>=1.7.0 (from pyiceberg>=0.10.0->storage3==2.30.0->supabase)
+  Downloading strictyaml-1.7.3-py3-none-any.whl.metadata (11 kB)
+Collecting fsspec>=2023.1.0 (from pyiceberg>=0.10.0->storage3==2.30.0->supabase)
+  Downloading fsspec-2026.4.0-py3-none-any.whl.metadata (10 kB)
+Collecting pyparsing<4.0.0,>=3.1.0 (from pyiceberg>=0.10.0->storage3==2.30.0->supabase)
+  Downloading pyparsing-3.3.2-py3-none-any.whl.metadata (5.8 kB)
+Collecting tenacity<10.0.0,>=8.2.3 (from pyiceberg>=0.10.0->storage3==2.30.0->supabase)
+  Downloading tenacity-9.1.4-py3-none-any.whl.metadata (1.2 kB)
+Collecting pyroaring<2.0.0,>=1.0.0 (from pyiceberg>=0.10.0->storage3==2.30.0->supabase)
+  Downloading pyroaring-1.1.0-cp314-cp314-win_amd64.whl.metadata (12 kB)
+Collecting cachetools<7.0,>=5.5 (from pyiceberg>=0.10.0->storage3==2.30.0->supabase)
+  Downloading cachetools-6.2.6-py3-none-any.whl.metadata (5.6 kB)
+Collecting zstandard<1.0.0,>=0.13.0 (from pyiceberg>=0.10.0->storage3==2.30.0->supabase)
+  Downloading zstandard-0.25.0-cp314-cp314-win_amd64.whl.metadata (3.3 kB)
+Requirement already satisfied: colorama in c:\users\57310\appdata\local\python\pythoncore-3.14-64\lib\site-packages (from click<9.0.0,>=7.1.1->pyiceberg>=0.10.0->storage3==2.30.0->supabase) (0.4.6)
+Collecting charset_normalizer<4,>=2 (from requests<3.0.0,>=2.20.0->pyiceberg>=0.10.0->storage3==2.30.0->supabase)
+  Downloading charset_normalizer-3.4.7-cp314-cp314-win_amd64.whl.metadata (41 kB)
+Collecting markdown-it-py>=2.2.0 (from rich<15.0.0,>=10.11.0->pyiceberg>=0.10.0->storage3==2.30.0->supabase)
+  Downloading markdown_it_py-4.2.0-py3-none-any.whl.metadata (7.4 kB)
+Collecting pygments<3.0.0,>=2.13.0 (from rich<15.0.0,>=10.11.0->pyiceberg>=0.10.0->storage3==2.30.0->supabase)
+  Downloading pygments-2.20.0-py3-none-any.whl.metadata (2.5 kB)
+Collecting python-dateutil>=2.6.0 (from strictyaml<2.0.0,>=1.7.0->pyiceberg>=0.10.0->storage3==2.30.0->supabase)
+  Downloading python_dateutil-2.9.0.post0-py2.py3-none-any.whl.metadata (8.4 kB)
+Collecting mdurl~=0.1 (from markdown-it-py>=2.2.0->rich<15.0.0,>=10.11.0->pyiceberg>=0.10.0->storage3==2.30.0->supabase)
+  Downloading mdurl-0.1.2-py3-none-any.whl.metadata (1.6 kB)
+Collecting cryptography>=3.4.0 (from pyjwt[crypto]>=2.10.1->supabase-auth==2.30.0->supabase)
+  Downloading cryptography-48.0.0-cp311-abi3-win_amd64.whl.metadata (4.3 kB)
+Collecting cffi>=2.0.0 (from cryptography>=3.4.0->pyjwt[crypto]>=2.10.1->supabase-auth==2.30.0->supabase)
+  Downloading cffi-2.0.0-cp314-cp314-win_amd64.whl.metadata (2.6 kB)
+Collecting pycparser (from cffi>=2.0.0->cryptography>=3.4.0->pyjwt[crypto]>=2.10.1->supabase-auth==2.30.0->supabase)
+  Downloading pycparser-3.0-py3-none-any.whl.metadata (8.2 kB)
+Collecting multidict>=4.0 (from yarl>=1.22.0->supabase)
+  Downloading multidict-6.7.1-cp314-cp314-win_amd64.whl.metadata (5.5 kB)
+Collecting propcache>=0.2.1 (from yarl>=1.22.0->supabase)
+  Downloading propcache-0.4.1-cp314-cp314-win_amd64.whl.metadata (14 kB)
+Downloading supabase-2.30.0-py3-none-any.whl (16 kB)
+Downloading postgrest-2.30.0-py3-none-any.whl (23 kB)
+Downloading realtime-2.30.0-py3-none-any.whl (22 kB)
+Downloading storage3-2.30.0-py3-none-any.whl (28 kB)
+Downloading supabase_auth-2.30.0-py3-none-any.whl (48 kB)
+Downloading supabase_functions-2.30.0-py3-none-any.whl (8.8 kB)
+Downloading h2-4.3.0-py3-none-any.whl (61 kB)
+Downloading hpack-4.1.0-py3-none-any.whl (34 kB)
+Downloading hyperframe-6.1.0-py3-none-any.whl (13 kB)
+Downloading websockets-15.0.1-py3-none-any.whl (169 kB)
+Downloading cloudinary-1.44.2-py3-none-any.whl (147 kB)
+Downloading deprecation-2.1.0-py2.py3-none-any.whl (11 kB)
+Downloading cachetools-6.2.6-py3-none-any.whl (11 kB)
+Downloading mmh3-5.2.1-cp314-cp314-win_amd64.whl (42 kB)
+Downloading pyparsing-3.3.2-py3-none-any.whl (122 kB)
+Downloading pyroaring-1.1.0-cp314-cp314-win_amd64.whl (270 kB)
+Downloading requests-2.33.1-py3-none-any.whl (64 kB)
+Downloading charset_normalizer-3.4.7-cp314-cp314-win_amd64.whl (159 kB)
+Downloading rich-14.3.4-py3-none-any.whl (310 kB)
+Downloading pygments-2.20.0-py3-none-any.whl (1.2 MB)
+   ---------------------------------------- 1.2/1.2 MB 7.9 MB/s  0:00:00
+Downloading strictyaml-1.7.3-py3-none-any.whl (123 kB)
+Downloading tenacity-9.1.4-py3-none-any.whl (28 kB)
+Downloading urllib3-2.7.0-py3-none-any.whl (131 kB)
+Downloading zstandard-0.25.0-cp314-cp314-win_amd64.whl (516 kB)
+Downloading fsspec-2026.4.0-py3-none-any.whl (203 kB)
+Downloading markdown_it_py-4.2.0-py3-none-any.whl (91 kB)
+Downloading mdurl-0.1.2-py3-none-any.whl (10.0 kB)
+Downloading pyjwt-2.12.1-py3-none-any.whl (29 kB)
+Downloading cryptography-48.0.0-cp311-abi3-win_amd64.whl (3.8 MB)
+   ---------------------------------------- 3.8/3.8 MB 10.5 MB/s  0:00:00
+Downloading cffi-2.0.0-cp314-cp314-win_amd64.whl (185 kB)
+Downloading python_dateutil-2.9.0.post0-py2.py3-none-any.whl (229 kB)
+Downloading six-1.17.0-py2.py3-none-any.whl (11 kB)
+Downloading StrEnum-0.4.15-py3-none-any.whl (8.9 kB)
+Downloading yarl-1.23.0-cp314-cp314-win_amd64.whl (89 kB)
+Downloading multidict-6.7.1-cp314-cp314-win_amd64.whl (45 kB)
+Downloading propcache-0.4.1-cp314-cp314-win_amd64.whl (41 kB)
+Using cached packaging-26.2-py3-none-any.whl (100 kB)
+Downloading pycparser-3.0-py3-none-any.whl (48 kB)
+Building wheels for collected packages: pyiceberg
+  Building wheel for pyiceberg (pyproject.toml): started
+  Building wheel for pyiceberg (pyproject.toml): finished with status 'error'
+  error: subprocess-exited-with-error
+  
+  Building wheel for pyiceberg (pyproject.toml) did not run successfully.
+  exit code: 1
+  
+  [123 lines of output]
+  running bdist_wheel
+  running build
+  running build_py
+  creating build\lib.win-amd64-cpython-314\pyiceberg
+  copying .\pyiceberg\conversions.py -> build\lib.win-amd64-cpython-314\pyiceberg
+  copying .\pyiceberg\exceptions.py -> build\lib.win-amd64-cpython-314\pyiceberg
+  copying .\pyiceberg\manifest.py -> build\lib.win-amd64-cpython-314\pyiceberg
+  copying .\pyiceberg\partitioning.py -> build\lib.win-amd64-cpython-314\pyiceberg
+  copying .\pyiceberg\schema.py -> build\lib.win-amd64-cpython-314\pyiceberg
+  copying .\pyiceberg\serializers.py -> build\lib.win-amd64-cpython-314\pyiceberg
+  copying .\pyiceberg\transforms.py -> build\lib.win-amd64-cpython-314\pyiceberg
+  copying .\pyiceberg\typedef.py -> build\lib.win-amd64-cpython-314\pyiceberg
+  copying .\pyiceberg\types.py -> build\lib.win-amd64-cpython-314\pyiceberg
+  copying .\pyiceberg\__init__.py -> build\lib.win-amd64-cpython-314\pyiceberg
+  creating build\lib.win-amd64-cpython-314\pyiceberg\avro
+  copying .\pyiceberg\avro\decoder.py -> build\lib.win-amd64-cpython-314\pyiceberg\avro
+  copying .\pyiceberg\avro\encoder.py -> build\lib.win-amd64-cpython-314\pyiceberg\avro
+  copying .\pyiceberg\avro\file.py -> build\lib.win-amd64-cpython-314\pyiceberg\avro
+  copying .\pyiceberg\avro\reader.py -> build\lib.win-amd64-cpython-314\pyiceberg\avro
+  copying .\pyiceberg\avro\resolver.py -> build\lib.win-amd64-cpython-314\pyiceberg\avro
+  copying .\pyiceberg\avro\writer.py -> build\lib.win-amd64-cpython-314\pyiceberg\avro
+  copying .\pyiceberg\avro\__init__.py -> build\lib.win-amd64-cpython-314\pyiceberg\avro
+  creating build\lib.win-amd64-cpython-314\pyiceberg\catalog
+  copying .\pyiceberg\catalog\bigquery_metastore.py -> build\lib.win-amd64-cpython-314\pyiceberg\catalog
+  copying .\pyiceberg\catalog\dynamodb.py -> build\lib.win-amd64-cpython-314\pyiceberg\catalog
+  copying .\pyiceberg\catalog\glue.py -> build\lib.win-amd64-cpython-314\pyiceberg\catalog
+  copying .\pyiceberg\catalog\hive.py -> build\lib.win-amd64-cpython-314\pyiceberg\catalog
+  copying .\pyiceberg\catalog\memory.py -> build\lib.win-amd64-cpython-314\pyiceberg\catalog
+  copying .\pyiceberg\catalog\noop.py -> build\lib.win-amd64-cpython-314\pyiceberg\catalog
+  copying .\pyiceberg\catalog\sql.py -> build\lib.win-amd64-cpython-314\pyiceberg\catalog
+  copying .\pyiceberg\catalog\__init__.py -> build\lib.win-amd64-cpython-314\pyiceberg\catalog
+  creating build\lib.win-amd64-cpython-314\pyiceberg\cli
+  copying .\pyiceberg\cli\console.py -> build\lib.win-amd64-cpython-314\pyiceberg\cli
+  copying .\pyiceberg\cli\output.py -> build\lib.win-amd64-cpython-314\pyiceberg\cli
+  copying .\pyiceberg\cli\__init__.py -> build\lib.win-amd64-cpython-314\pyiceberg\cli
+  creating build\lib.win-amd64-cpython-314\pyiceberg\expressions
+  copying .\pyiceberg\expressions\literals.py -> build\lib.win-amd64-cpython-314\pyiceberg\expressions
+  copying .\pyiceberg\expressions\parser.py -> build\lib.win-amd64-cpython-314\pyiceberg\expressions
+  copying .\pyiceberg\expressions\visitors.py -> build\lib.win-amd64-cpython-314\pyiceberg\expressions
+  copying .\pyiceberg\expressions\__init__.py -> build\lib.win-amd64-cpython-314\pyiceberg\expressions
+  creating build\lib.win-amd64-cpython-314\pyiceberg\io
+  copying .\pyiceberg\io\fsspec.py -> build\lib.win-amd64-cpython-314\pyiceberg\io
+  copying .\pyiceberg\io\pyarrow.py -> build\lib.win-amd64-cpython-314\pyiceberg\io
+  copying .\pyiceberg\io\__init__.py -> build\lib.win-amd64-cpython-314\pyiceberg\io
+  creating build\lib.win-amd64-cpython-314\pyiceberg\table
+  copying .\pyiceberg\table\delete_file_index.py -> build\lib.win-amd64-cpython-314\pyiceberg\table
+  copying .\pyiceberg\table\inspect.py -> build\lib.win-amd64-cpython-314\pyiceberg\table
+  copying .\pyiceberg\table\locations.py -> build\lib.win-amd64-cpython-314\pyiceberg\table
+  copying .\pyiceberg\table\maintenance.py -> build\lib.win-amd64-cpython-314\pyiceberg\table
+  copying .\pyiceberg\table\metadata.py -> build\lib.win-amd64-cpython-314\pyiceberg\table
+  copying .\pyiceberg\table\name_mapping.py -> build\lib.win-amd64-cpython-314\pyiceberg\table
+  copying .\pyiceberg\table\puffin.py -> build\lib.win-amd64-cpython-314\pyiceberg\table
+  copying .\pyiceberg\table\refs.py -> build\lib.win-amd64-cpython-314\pyiceberg\table
+  copying .\pyiceberg\table\snapshots.py -> build\lib.win-amd64-cpython-314\pyiceberg\table
+  copying .\pyiceberg\table\sorting.py -> build\lib.win-amd64-cpython-314\pyiceberg\table
+  copying .\pyiceberg\table\statistics.py -> build\lib.win-amd64-cpython-314\pyiceberg\table
+  copying .\pyiceberg\table\upsert_util.py -> build\lib.win-amd64-cpython-314\pyiceberg\table
+  copying .\pyiceberg\table\__init__.py -> build\lib.win-amd64-cpython-314\pyiceberg\table
+  creating build\lib.win-amd64-cpython-314\pyiceberg\utils
+  copying .\pyiceberg\utils\bin_packing.py -> build\lib.win-amd64-cpython-314\pyiceberg\utils
+  copying .\pyiceberg\utils\concurrent.py -> build\lib.win-amd64-cpython-314\pyiceberg\utils
+  copying .\pyiceberg\utils\config.py -> build\lib.win-amd64-cpython-314\pyiceberg\utils
+  copying .\pyiceberg\utils\datetime.py -> build\lib.win-amd64-cpython-314\pyiceberg\utils
+  copying .\pyiceberg\utils\decimal.py -> build\lib.win-amd64-cpython-314\pyiceberg\utils
+  copying .\pyiceberg\utils\deprecated.py -> build\lib.win-amd64-cpython-314\pyiceberg\utils
+  copying .\pyiceberg\utils\lazydict.py -> build\lib.win-amd64-cpython-314\pyiceberg\utils
+  copying .\pyiceberg\utils\parsing.py -> build\lib.win-amd64-cpython-314\pyiceberg\utils
+  copying .\pyiceberg\utils\properties.py -> build\lib.win-amd64-cpython-314\pyiceberg\utils
+  copying .\pyiceberg\utils\schema_conversion.py -> build\lib.win-amd64-cpython-314\pyiceberg\utils
+  copying .\pyiceberg\utils\singleton.py -> build\lib.win-amd64-cpython-314\pyiceberg\utils
+  copying .\pyiceberg\utils\truncate.py -> build\lib.win-amd64-cpython-314\pyiceberg\utils
+  copying .\pyiceberg\utils\__init__.py -> build\lib.win-amd64-cpython-314\pyiceberg\utils
+  creating build\lib.win-amd64-cpython-314\pyiceberg\avro\codecs
+  copying .\pyiceberg\avro\codecs\bzip2.py -> build\lib.win-amd64-cpython-314\pyiceberg\avro\codecs
+  copying .\pyiceberg\avro\codecs\codec.py -> build\lib.win-amd64-cpython-314\pyiceberg\avro\codecs
+  copying .\pyiceberg\avro\codecs\deflate.py -> build\lib.win-amd64-cpython-314\pyiceberg\avro\codecs
+  copying .\pyiceberg\avro\codecs\snappy_codec.py -> build\lib.win-amd64-cpython-314\pyiceberg\avro\codecs
+  copying .\pyiceberg\avro\codecs\zstandard_codec.py -> build\lib.win-amd64-cpython-314\pyiceberg\avro\codecs
+  copying .\pyiceberg\avro\codecs\__init__.py -> build\lib.win-amd64-cpython-314\pyiceberg\avro\codecs
+  creating build\lib.win-amd64-cpython-314\pyiceberg\catalog\rest
+  copying .\pyiceberg\catalog\rest\auth.py -> build\lib.win-amd64-cpython-314\pyiceberg\catalog\rest
+  copying .\pyiceberg\catalog\rest\response.py -> build\lib.win-amd64-cpython-314\pyiceberg\catalog\rest
+  copying .\pyiceberg\catalog\rest\scan_planning.py -> build\lib.win-amd64-cpython-314\pyiceberg\catalog\rest
+  copying .\pyiceberg\catalog\rest\__init__.py -> build\lib.win-amd64-cpython-314\pyiceberg\catalog\rest
+  creating build\lib.win-amd64-cpython-314\pyiceberg\table\update
+  copying .\pyiceberg\table\update\schema.py -> build\lib.win-amd64-cpython-314\pyiceberg\table\update
+  copying .\pyiceberg\table\update\snapshot.py -> build\lib.win-amd64-cpython-314\pyiceberg\table\update
+  copying .\pyiceberg\table\update\sorting.py -> build\lib.win-amd64-cpython-314\pyiceberg\table\update
+  copying .\pyiceberg\table\update\spec.py -> build\lib.win-amd64-cpython-314\pyiceberg\table\update
+  copying .\pyiceberg\table\update\statistics.py -> build\lib.win-amd64-cpython-314\pyiceberg\table\update
+  copying .\pyiceberg\table\update\validate.py -> build\lib.win-amd64-cpython-314\pyiceberg\table\update
+  copying .\pyiceberg\table\update\__init__.py -> build\lib.win-amd64-cpython-314\pyiceberg\table\update
+  creating build\lib.win-amd64-cpython-314\fb303
+  copying vendor\fb303\constants.py -> build\lib.win-amd64-cpython-314\fb303
+  copying vendor\fb303\FacebookService.py -> build\lib.win-amd64-cpython-314\fb303
+  copying vendor\fb303\ttypes.py -> build\lib.win-amd64-cpython-314\fb303
+  copying vendor\fb303\__init__.py -> build\lib.win-amd64-cpython-314\fb303
+  creating build\lib.win-amd64-cpython-314\hive_metastore
+  copying vendor\hive_metastore\constants.py -> build\lib.win-amd64-cpython-314\hive_metastore
+  copying vendor\hive_metastore\ThriftHiveMetastore.py -> build\lib.win-amd64-cpython-314\hive_metastore
+  copying vendor\hive_metastore\ttypes.py -> build\lib.win-amd64-cpython-314\hive_metastore
+  copying vendor\hive_metastore\__init__.py -> build\lib.win-amd64-cpython-314\hive_metastore
+  running egg_info
+  writing pyiceberg.egg-info\PKG-INFO
+  writing dependency_links to pyiceberg.egg-info\dependency_links.txt
+  writing entry points to pyiceberg.egg-info\entry_points.txt
+  writing requirements to pyiceberg.egg-info\requires.txt
+  writing top-level names to pyiceberg.egg-info\top_level.txt
+  reading manifest file 'pyiceberg.egg-info\SOURCES.txt'
+  reading manifest template 'MANIFEST.in'
+  warning: no previously-included files matching '*\__pycache__\*' found anywhere in distribution
+  no previously-included directories found matching '.venv'
+  no previously-included directories found matching 'build'
+  no previously-included directories found matching 'dist'
+  no previously-included directories found matching '.pytest_cache'
+  adding license file 'LICENSE'
+  adding license file 'NOTICE'
+  writing manifest file 'pyiceberg.egg-info\SOURCES.txt'
+  copying .\pyiceberg\py.typed -> build\lib.win-amd64-cpython-314\pyiceberg
+  copying .\pyiceberg\avro\decoder_fast.pyi -> build\lib.win-amd64-cpython-314\pyiceberg\avro
+  running build_ext
+  building 'pyiceberg.avro.decoder_fast' extension
+  error: Unable to find a compatible Visual Studio installation.
+  [end of output]
+  
+  note: This error originates from a subprocess, and is likely not a problem with pip.
+  ERROR: Failed building wheel for pyiceberg
+Failed to build pyiceberg
+
+[notice] A new release of pip is available: 25.3 -> 26.1.1
+[notice] To update, run: C:\Users\57310\AppData\Local\Python\pythoncore-3.14-64\python.exe -m pip install --upgrade pip
+error: failed-wheel-build-for-install
+
+Failed to build installable wheels for some pyproject.toml based projects
+
+pyiceberg

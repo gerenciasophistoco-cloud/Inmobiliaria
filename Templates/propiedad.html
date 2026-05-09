@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html class="light" lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>{{ tipo_propiedad }} en {{ ciudad }} | {{ nombre_inmobiliaria or nombre_agente }}</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              colors: {
+                "on-surface":             "#1c1b1b",
+                "on-surface-variant":     "#4d4635",
+                "background":             "#fcf9f8",
+                "surface":                "#fcf9f8",
+                "surface-container-low":  "#f6f3f2",
+                "surface-container":      "#f0eded",
+                "surface-container-high": "#eae7e7",
+                "primary":                "#735c00",
+                "primary-container":      "#d4af37",
+                "on-primary-container":   "#554300",
+                "primary-fixed":          "#ffe088",
+                "primary-fixed-dim":      "#e9c349",
+                "inverse-surface":        "#313030",
+                "outline-variant":        "#d0c5af",
+                "outline":                "#7f7663",
+              },
+              fontFamily: {
+                "title-sm":      ["Manrope"],
+                "body-sm":       ["Manrope"],
+                "headline-md":   ["Manrope"],
+                "body-base":     ["Manrope"],
+                "display-lg":    ["Manrope"],
+                "label-caps":    ["Manrope"],
+                "price-display": ["Manrope"],
+              },
+              fontSize: {
+                "title-sm":      ["18px", {lineHeight:"1.4", fontWeight:"600"}],
+                "body-sm":       ["14px", {lineHeight:"1.5", fontWeight:"400"}],
+                "headline-md":   ["24px", {lineHeight:"1.3", fontWeight:"600"}],
+                "body-base":     ["16px", {lineHeight:"1.6", fontWeight:"400"}],
+                "display-lg":    ["32px", {lineHeight:"1.2", letterSpacing:"-0.02em", fontWeight:"700"}],
+                "label-caps":    ["12px", {lineHeight:"1",   letterSpacing:"0.05em", fontWeight:"700"}],
+                "price-display": ["22px", {lineHeight:"1",   fontWeight:"700"}],
+              },
+            },
+          },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+
+<body class="bg-background text-on-surface font-body-base antialiased pb-24">
+
+  <!-- ══ HEADER ══ -->
+  <header class="absolute top-0 left-0 right-0 z-50">
+    <div class="max-w-7xl w-full mx-auto px-5 py-4 flex justify-between items-center">
+      <div class="flex items-center gap-3">
+        {% if logo_url %}
+        <img src="{{ logo_url }}" class="h-8 w-8 object-contain rounded"/>
+        {% else %}
+        <span class="material-symbols-outlined text-white">arrow_back</span>
+        {% endif %}
+        <h1 class="font-display-lg font-bold text-white tracking-tight text-xl">
+          {{ nombre_inmobiliaria or nombre_agente }}
+        </h1>
+      </div>
+      <a href="{{ whatsapp_link }}" target="_blank"
+         class="bg-white/20 hover:opacity-80 backdrop-blur-md px-4 py-2
+                rounded-full flex items-center gap-2 text-white transition-opacity">
+        <span class="material-symbols-outlined text-white">share</span>
+        <span class="font-label-caps text-label-caps">Compartir</span>
+      </a>
+    </div>
+  </header>
+
+  <!-- ══ HERO: full-width, altura fija en PC ══ -->
+  <section class="relative w-full overflow-hidden h-64 md:h-[450px]">
+    {% if fotos %}
+    <img class="w-full h-full object-cover"
+         src="{{ fotos[0] }}" alt="{{ tipo_propiedad }} en {{ ciudad }}"/>
+    {% else %}
+    <div class="w-full h-full bg-surface-container-high flex items-center justify-center">
+      <span class="material-symbols-outlined text-outline" style="font-size:72px;">apartment</span>
+    </div>
+    {% endif %}
+
+    <!-- Gradiente: sólido a la izquierda, transparente a la derecha (igual que Stitch) -->
+    <div class="absolute inset-0 bg-gradient-to-r from-black/90 via-black/40 to-transparent"></div>
+
+    <!-- Info sobre el hero, contenida en max-w-5xl -->
+    <div class="absolute bottom-0 left-0 right-0">
+      <div class="max-w-7xl w-full mx-auto px-5 pb-5">
+        <span class="bg-primary-container text-on-primary-container font-label-caps text-label-caps
+                     px-3 py-1 rounded-sm inline-block mb-3">
+          {{ tipo_propiedad | upper }} EN {{ operacion | upper }}
+        </span>
+        <h2 class="font-display-lg text-white text-3xl md:text-4xl leading-tight mb-1">
+          {{ tipo_propiedad }}, {{ ciudad }}
+        </h2>
+        <p class="text-white/90 text-sm mb-1">{{ direccion }}</p>
+        <div class="font-price-display text-2xl md:text-3xl text-primary-fixed-dim mb-4">
+          {{ precio }}
+        </div>
+        <div class="flex items-end justify-between text-white">
+          <div class="flex gap-5">
+            {% if metros %}
+            <div class="flex flex-col items-center">
+              <span class="material-symbols-outlined text-primary-fixed text-lg mb-1">square_foot</span>
+              <span class="font-label-caps text-[9px]">{{ metros }} m²</span>
+            </div>
+            {% endif %}
+            {% if habitaciones %}
+            <div class="flex flex-col items-center">
+              <span class="material-symbols-outlined text-primary-fixed text-lg mb-1">bed</span>
+              <span class="font-label-caps text-[9px]">{{ habitaciones }} Hab.</span>
+            </div>
+            {% endif %}
+            {% if banos %}
+            <div class="flex flex-col items-center">
+              <span class="material-symbols-outlined text-primary-fixed text-lg mb-1">bathtub</span>
+              <span class="font-label-caps text-[9px]">{{ banos }} Baños</span>
+            </div>
+            {% endif %}
+            {% if estacionamientos %}
+            <div class="flex flex-col items-center">
+              <span class="material-symbols-outlined text-primary-fixed text-lg mb-1">directions_car</span>
+              <span class="font-label-caps text-[9px]">{{ estacionamientos }} Parq.</span>
+            </div>
+            {% endif %}
+          </div>
+          {% if estrato %}
+          <div class="bg-black/40 backdrop-blur-md px-3 py-2 rounded-xl
+                      flex items-center gap-2 border border-white/10">
+            <span class="material-symbols-outlined text-primary-fixed text-sm">apartment</span>
+            <div>
+              <p class="font-label-caps text-[10px] text-white">Estrato {{ estrato }}</p>
+              <p class="text-[9px] text-white/60">{{ ciudad }}</p>
+            </div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ CONTENIDO PRINCIPAL ══ -->
+  <main class="max-w-7xl w-full mx-auto px-5 mt-10 space-y-10">
+
+    <!-- Galería de fotos -->
+    {% if fotos and fotos | length > 1 %}
+    <section>
+      <div class="flex justify-between items-center mb-3">
+        <h3 class="font-headline-md text-headline-md">Galería de fotos</h3>
+        <button onclick="openGallery(1)"
+                class="text-primary font-label-caps text-label-caps flex items-center gap-1">
+          Ver todas <span class="material-symbols-outlined text-sm">chevron_right</span>
+        </button>
+      </div>
+      <div class="grid grid-cols-2 md:grid-cols-5 gap-3 h-[200px] md:h-[180px]">
+        {% for foto in fotos[1:6] %}
+        <div class="rounded-xl overflow-hidden shadow-sm relative cursor-pointer group"
+             onclick="openGallery({{ loop.index }})">
+          <img class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105
+                      {% if loop.last and fotos | length > 6 %}brightness-[0.35]{% endif %}"
+               src="{{ foto }}" alt="Foto {{ loop.index + 1 }}"/>
+          {% if loop.last and fotos | length > 6 %}
+          <div class="absolute inset-0 flex items-center justify-center">
+            <span class="text-white font-bold text-3xl">+{{ fotos | length - 6 }}</span>
+          </div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    <!-- Lightbox -->
+    <div id="galleryModal"
+         class="hidden fixed inset-0 z-[200] bg-black/90 flex items-center justify-center p-4"
+         onclick="closeGallery()">
+      <div class="relative w-full max-w-4xl" onclick="event.stopPropagation()">
+        <button onclick="closeGallery()"
+                class="absolute -top-10 right-0 text-white text-4xl leading-none hover:opacity-70">
+          &times;
+        </button>
+        <img id="galleryModalImg" class="w-full max-h-[80vh] object-contain rounded-xl" src="" alt=""/>
+        <div class="flex justify-between items-center mt-4">
+          <button onclick="prevPhoto()"
+                  class="text-white bg-white/20 hover:bg-white/30 px-5 py-2 rounded-lg transition-colors">
+            ← Anterior
+          </button>
+          <span id="galleryCounter" class="text-white/70 text-sm"></span>
+          <button onclick="nextPhoto()"
+                  class="text-white bg-white/20 hover:bg-white/30 px-5 py-2 rounded-lg transition-colors">
+            Siguiente →
+          </button>
+        </div>
+      </div>
+    </div>
+    <script>
+      const _fotos = {{ fotos | tojson }};
+      let _cur = 0;
+      function openGallery(idx) {
+        _cur = idx || 1;
+        _render();
+        document.getElementById('galleryModal').classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+      }
+      function closeGallery() {
+        document.getElementById('galleryModal').classList.add('hidden');
+        document.body.style.overflow = '';
+      }
+      function _render() {
+        document.getElementById('galleryModalImg').src = _fotos[_cur] || _fotos[0];
+        document.getElementById('galleryCounter').textContent = (_cur + 1) + ' / ' + _fotos.length;
+      }
+      function prevPhoto() { _cur = Math.max(0, _cur - 1); _render(); }
+      function nextPhoto() { _cur = Math.min(_fotos.length - 1, _cur + 1); _render(); }
+      document.addEventListener('keydown', e => {
+        if (e.key === 'Escape')     closeGallery();
+        if (e.key === 'ArrowLeft')  prevPhoto();
+        if (e.key === 'ArrowRight') nextPhoto();
+      });
+    </script>
+
+    <!-- Video + Características: lado a lado en PC (como Stitch original) -->
+    <section class="grid grid-cols-1 lg:grid-cols-2 gap-10">
+
+      <!-- Video -->
+      {% if video_url %}
+      <div class="space-y-3">
+        <h3 class="font-headline-md text-headline-md">Video del inmueble</h3>
+        <div class="rounded-2xl overflow-hidden aspect-video w-full">
+          <video controls class="w-full h-auto rounded-2xl"
+                 poster="{{ fotos[0] if fotos else '' }}">
+            <source src="{{ video_url }}" type="video/mp4"/>
+          </video>
+        </div>
+      </div>
+      {% else %}
+      <!-- Placeholder mientras el video se genera; se actualiza automáticamente -->
+      <div id="videoPlaceholderSection" class="space-y-3">
+        <h3 class="font-headline-md text-headline-md">Video del inmueble</h3>
+        <div id="videoPlaceholderBox"
+             class="rounded-2xl border-2 border-dashed border-outline-variant
+                    bg-surface-container-low flex flex-col items-center justify-center gap-3 py-10">
+          <span class="material-symbols-outlined text-outline" style="font-size:48px;">videocam</span>
+          <p class="text-on-surface-variant text-sm font-medium" id="videoStatusMsg">
+            Verificando estado del video...
+          </p>
+          <button onclick="location.reload()"
+                  class="text-primary font-label-caps text-label-caps flex items-center gap-1 mt-2">
+            <span class="material-symbols-outlined text-sm">refresh</span> Actualizar
+          </button>
+        </div>
+      </div>
+      <script>
+        // Auto-check si el video ya está disponible (polling cada 8s)
+        const _propId = "{{ request.path_params['property_id'] if request.path_params else '' }}";
+        if (_propId) {
+          let _checkCount = 0;
+          const _checker = setInterval(async () => {
+            _checkCount++;
+            if (_checkCount > 20) { clearInterval(_checker); return; } // max 160s
+            try {
+              const r = await fetch('/propiedad-video-status/' + _propId);
+              if (!r.ok) return;
+              const d = await r.json();
+              if (d.video_url) {
+                clearInterval(_checker);
+                // Reemplazar placeholder con el video
+                const box = document.getElementById('videoPlaceholderSection');
+                box.innerHTML = `
+                  <h3 class="font-headline-md text-headline-md">Video del inmueble</h3>
+                  <div class="rounded-2xl overflow-hidden aspect-video w-full">
+                    <video controls class="w-full h-auto rounded-2xl">
+                      <source src="${d.video_url}" type="video/mp4"/>
+                    </video>
+                  </div>`;
+              } else {
+                document.getElementById('videoStatusMsg').textContent =
+                  d.generating ? '🎬 Generando video... actualiza en unos minutos' : 'Sin video disponible';
+              }
+            } catch(e) {}
+          }, 8000);
+        }
+      </script>
+      {% endif %}
+
+      <!-- Características -->
+      <div class="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/30
+                  shadow-[0px_4px_20px_rgba(0,0,0,0.05)]">
+        <h3 class="font-headline-md text-headline-md mb-6">Características principales</h3>
+        <div class="space-y-4">
+          {% if metros %}
+          <div class="flex justify-between items-center pb-3 border-b border-outline-variant/20">
+            <div class="flex items-center gap-3">
+              <span class="material-symbols-outlined text-outline">square_foot</span>
+              <span class="font-body-base">Área construida</span>
+            </div>
+            <span class="font-bold">{{ metros }} m²</span>
+          </div>
+          {% endif %}
+          {% if metros_terreno %}
+          <div class="flex justify-between items-center pb-3 border-b border-outline-variant/20">
+            <div class="flex items-center gap-3">
+              <span class="material-symbols-outlined text-outline">landscape</span>
+              <span class="font-body-base">Área terreno</span>
+            </div>
+            <span class="font-bold">{{ metros_terreno }} m²</span>
+          </div>
+          {% endif %}
+          {% if habitaciones %}
+          <div class="flex justify-between items-center pb-3 border-b border-outline-variant/20">
+            <div class="flex items-center gap-3">
+              <span class="material-symbols-outlined text-outline">bed</span>
+              <span class="font-body-base">Habitaciones</span>
+            </div>
+            <span class="font-bold">{{ habitaciones }}</span>
+          </div>
+          {% endif %}
+          {% if banos %}
+          <div class="flex justify-between items-center pb-3 border-b border-outline-variant/20">
+            <div class="flex items-center gap-3">
+              <span class="material-symbols-outlined text-outline">bathtub</span>
+              <span class="font-body-base">Baños</span>
+            </div>
+            <span class="font-bold">{{ banos }}</span>
+          </div>
+          {% endif %}
+          {% if estacionamientos %}
+          <div class="flex justify-between items-center pb-3 border-b border-outline-variant/20">
+            <div class="flex items-center gap-3">
+              <span class="material-symbols-outlined text-outline">directions_car</span>
+              <span class="font-body-base">Parqueadero</span>
+            </div>
+            <span class="font-bold">{{ estacionamientos }}</span>
+          </div>
+          {% endif %}
+          {% if estrato %}
+          <div class="flex justify-between items-center pb-3 border-b border-outline-variant/20">
+            <div class="flex items-center gap-3">
+              <span class="material-symbols-outlined text-outline">apartment</span>
+              <span class="font-body-base">Estrato</span>
+            </div>
+            <span class="font-bold">{{ estrato }}</span>
+          </div>
+          {% endif %}
+          {% if ano_construccion %}
+          <div class="flex justify-between items-center">
+            <div class="flex items-center gap-3">
+              <span class="material-symbols-outlined text-outline">calendar_today</span>
+              <span class="font-body-base">Año construido</span>
+            </div>
+            <span class="font-bold">{{ ano_construccion }}</span>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </section>
+
+    <!-- Descripción + Amenidades: lado a lado en PC -->
+    <section class="grid grid-cols-1 lg:grid-cols-3 gap-10">
+      <div class="lg:col-span-2">
+        <h3 class="font-headline-md text-headline-md mb-4">Descripción</h3>
+        <div class="space-y-4 text-on-surface-variant leading-relaxed">
+          <p>{{ descripcion }}</p>
+        </div>
+      </div>
+
+      {% if amenidades %}
+      <div class="bg-white p-6 rounded-2xl shadow-[0px_4px_20px_rgba(0,0,0,0.05)]">
+        <h3 class="font-title-sm text-title-sm mb-6">Zonas comunes</h3>
+        <div class="grid grid-cols-2 gap-y-5 gap-x-4">
+          {% set amenidad_icons = {
+            'Piscina':'pool','Jardín':'park','Seguridad 24h':'security',
+            'Gimnasio':'fitness_center','Zonas comunes':'groups',
+            'BBQ / Asador':'outdoor_grill','Cuarto de servicio':'chair',
+            'Parque infantil':'child_care','Salón comunal':'meeting_room',
+            'Ascensor':'elevator','Terraza':'deck','Bodega':'warehouse'
+          } %}
+          {% for amenidad in amenidades %}
+          <div class="flex items-center gap-3">
+            <span class="material-symbols-outlined text-primary">
+              {{ amenidad_icons.get(amenidad, 'check_circle') }}
+            </span>
+            <span class="text-body-sm">{{ amenidad }}</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    </section>
+
+
+    <!-- Otros inmuebles -->
+    {% if otras_propiedades %}
+    <section>
+      <div class="flex justify-between items-center mb-6">
+        <h3 class="font-headline-md text-headline-md">Otros inmuebles que te pueden interesar</h3>
+        <button class="text-primary font-label-caps text-label-caps flex items-center gap-1">
+          Ver todos <span class="material-symbols-outlined text-sm">chevron_right</span>
+        </button>
+      </div>
+      <div class="flex gap-4 overflow-x-auto hide-scrollbar pb-4 snap-x">
+        {% for prop in otras_propiedades %}
+        <div class="min-w-[280px] snap-start bg-white rounded-2xl overflow-hidden
+                    shadow-[0px_4px_20px_rgba(0,0,0,0.05)] border border-outline-variant/10 flex-shrink-0">
+          <div class="h-48 relative">
+            <img class="w-full h-full object-cover" src="{{ prop.foto }}" alt="{{ prop.nombre }}"/>
+            {% if prop.badge %}
+            <div class="absolute top-3 left-3 bg-white/90 backdrop-blur-md px-2 py-1
+                        rounded text-[10px] font-bold text-primary">
+              {{ prop.badge }}
+            </div>
+            {% endif %}
+          </div>
+          <div class="p-4 space-y-2">
+            <h4 class="font-title-sm text-on-surface">{{ prop.nombre }}</h4>
+            <p class="text-primary font-price-display">{{ prop.precio }}</p>
+            <div class="flex gap-3 text-on-surface-variant text-[11px] font-medium">
+              {% if prop.metros %}
+              <span class="flex items-center gap-1">
+                <span class="material-symbols-outlined text-[14px]">square_foot</span> {{ prop.metros }}m²
+              </span>
+              {% endif %}
+              {% if prop.habitaciones %}
+              <span class="flex items-center gap-1">
+                <span class="material-symbols-outlined text-[14px]">bed</span> {{ prop.habitaciones }}
+              </span>
+              {% endif %}
+              {% if prop.banos %}
+              <span class="flex items-center gap-1">
+                <span class="material-symbols-outlined text-[14px]">bathtub</span> {{ prop.banos }}
+              </span>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    <!-- Footer branding -->
+    <footer class="py-8 text-center flex items-center justify-center gap-2
+                   text-on-surface-variant/40">
+      <span class="text-[10px]">Creado con</span>
+      <div class="flex items-center gap-1 opacity-60">
+        <span class="material-symbols-outlined text-sm">apartment</span>
+        <span class="font-label-caps text-[10px] font-bold">LISTAPRO</span>
+      </div>
+    </footer>
+
+  </main>
+
+  <!-- ══ BARRA FIJA DE CONTACTO ══ -->
+  <div class="fixed bottom-0 left-0 right-0 z-50
+              bg-inverse-surface/95 backdrop-blur-md border-t border-white/10">
+    <div class="max-w-7xl w-full mx-auto px-5 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        {% if foto_agente_url %}
+        <img class="w-12 h-12 rounded-full object-cover border-2 border-primary-fixed"
+             src="{{ foto_agente_url }}" alt="{{ nombre_agente }}"/>
+        {% else %}
+        <div class="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
+          <span class="material-symbols-outlined text-white">person</span>
+        </div>
+        {% endif %}
+        <div>
+          <p class="font-title-sm text-sm text-white leading-none mb-1">
+            ¿Te interesa este inmueble?
+          </p>
+          <p class="text-[10px] text-white/60">Contáctame para más información</p>
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <a href="{{ whatsapp_link }}" target="_blank"
+           class="bg-[#25D366] text-white px-4 py-2.5 rounded-xl flex items-center gap-2
+                  hover:opacity-90 transition-opacity active:scale-95 duration-150">
+          <span class="material-symbols-outlined text-sm"
+                style="font-variation-settings:'FILL' 1;">chat</span>
+          <span class="font-label-caps text-[11px]">WhatsApp</span>
+        </a>
+        <a href="tel:{{ telefono_agente }}"
+           class="bg-primary-container text-on-primary-container px-4 py-2.5 rounded-xl
+                  flex items-center gap-2 hover:opacity-90 transition-opacity active:scale-95 duration-150">
+          <span class="material-symbols-outlined text-sm">call</span>
+          <span class="font-label-caps text-[11px]">Llamar</span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>
