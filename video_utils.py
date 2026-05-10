@@ -181,13 +181,10 @@ def _make_clip(img_path: str, idx: int, dur: float) -> str:
     Usar clips MP4 como entrada del xfade es mucho más estable que -loop 1 en filter_complex.
     """
     out = str(Path(tempfile.mkdtemp()) / f"clip_{idx}.mp4")
-    SW, SH = int(VW * 1.10), int(VH * 1.10)
-    x = [0, SW - VW, 0, SW - VW][idx % 4]
-    y = [0, 0, SH - VH, SH - VH][idx % 4]
+    # Center crop: escala para llenar 1280x720 manteniendo proporciones, recorta centrado
     vf = (
-        f"scale={SW}:{SH}:force_original_aspect_ratio=increase,"
-        f"crop={SW}:{SH},"
-        f"crop={VW}:{VH}:x={x}:y={y}"
+        f"scale={VW}:{VH}:force_original_aspect_ratio=increase,"
+        f"crop={VW}:{VH}"
     )
     cmd = [
         _ffmpeg_bin(), "-y",
