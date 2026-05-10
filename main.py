@@ -659,6 +659,8 @@ def _video_task(task_id: str, data: dict, prop_id: Optional[str],
             "operacion":           data.get("operacion", ""),
             "nombre_inmobiliaria": data.get("nombre_inmobiliaria", ""),
             "logo_path":           data.get("logo_url", "") or data.get("logo_path", ""),
+            "amenidades":          data.get("amenidades") or [],
+            "foto_agente":         data.get("foto_agente_url", "") or data.get("foto_agente", ""),
         }
         fotos            = [f for f in data.get("fotos", []) if f][:6]
         video_url_propio = data.get("video_url_propio")
