@@ -175,37 +175,36 @@ def _overlay_vf(nombre: str, telefono: str, specs: dict, dur: float) -> str:
 
 # ─── Slideshow (Plan B) ───────────────────────────────────────────────────────
 
-def _kb_segment(i: int, dur: float) -> str:
+def _make_clip(img_path: str, idx: int, dur: float) -> str:
     """
-    Ken Burns: escala al 110%, recorta desde esquina diferente por foto.
-    Sin trim — la duración la controla -t en el input.
+    Convierte una imagen JPEG a un clip MP4 de duración exacta con efecto Ken Burns.
+    Usar clips MP4 como entrada del xfade es mucho más estable que -loop 1 en filter_complex.
     """
-    SW, SH = int(VW * 1.10), int(VH * 1.10)   # 1408 × 792
-    x_offsets = [0,        SW - VW,  0,        SW - VW]
-    y_offsets = [0,        0,        SH - VH,  SH - VH]
-    x = x_offsets[i % 4]
-    y = y_offsets[i % 4]
-    return (
+    out = str(Path(tempfile.mkdtemp()) / f"clip_{idx}.mp4")
+    SW, SH = int(VW * 1.10), int(VH * 1.10)
+    x = [0, SW - VW, 0, SW - VW][idx % 4]
+    y = [0, 0, SH - VH, SH - VH][idx % 4]
+    vf = (
         f"scale={SW}:{SH}:force_original_aspect_ratio=increase,"
         f"crop={SW}:{SH},"
-        f"crop={VW}:{VH}:x={x}:y={y},"
-        f"setpts=PTS-STARTPTS"
+        f"crop={VW}:{VH}:x={x}:y={y}"
     )
-
-
-def _xfade_graph(n: int, dur: float, fade: float) -> tuple:
-    """filter_complex de crossfades encadenados. Devuelve (chain_str, out_pad)."""
-    if n == 1:
-        return "[v0]copy[vout]", "vout"
-    parts = []
-    for i in range(1, n):
-        a   = "v0" if i == 1 else f"xf{i-2}"
-        out = "vout" if i == n - 1 else f"xf{i-1}"
-        off = i * (dur - fade)
-        parts.append(
-            f"[{a}][v{i}]xfade=transition=fade:duration={fade}:offset={off:.2f}[{out}]"
+    cmd = [
+        _ffmpeg_bin(), "-y",
+        "-loop", "1", "-i", img_path,
+        "-vf", vf,
+        "-t", str(dur),
+        "-r", str(FPS),
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18",
+        "-pix_fmt", "yuv420p",
+        out,
+    ]
+    r = subprocess.run(cmd, capture_output=True, timeout=120)
+    if r.returncode != 0:
+        raise RuntimeError(
+            f"Error clip {idx}:\n{r.stderr.decode('utf-8', errors='replace')[-400:]}"
         )
-    return ";".join(parts), "vout"
+    return out
 
 
 def generate_slideshow(
@@ -229,20 +228,38 @@ def generate_slideshow(
             log.warning("Foto no disponible %s: %s", src, e)
 
     if not locals_:
-        raise ValueError("No se pudo descargar ninguna foto. Verifica las URLs de las imágenes.")
+        raise ValueError("No se pudo descargar ninguna foto.")
 
     n     = len(locals_)
     total = n * dur_per - (n - 1) * fade if n > 1 else dur_per
 
-    # -r fuerza 30 fps desde el input → frames con PTS limpios sin trim
-    inputs = []
-    for lp in locals_:
-        inputs += ["-r", str(FPS), "-loop", "1", "-t", str(dur_per), "-i", lp]
+    # Paso 1: convertir cada imagen a clip MP4 (PTS correcto, framerate fijo)
+    clips = []
+    for i, lp in enumerate(locals_):
+        clip = _make_clip(lp, i, dur_per)
+        clips.append(clip)
+        log.info("Clip %d/%d generado", i + 1, n)
 
-    kb_parts = [f"[{i}:v]{_kb_segment(i, dur_per)}[v{i}]" for i in range(n)]
-    xf_chain, out_pad = _xfade_graph(n, dur_per, fade)
+    # Paso 2: inputs desde los clips MP4
+    inputs = []
+    for clip in clips:
+        inputs += ["-i", clip]
+
+    # Paso 3: filter_complex — xfade sobre clips reales + overlays
     ov = _overlay_vf(nombre, telefono, specs, total)
-    filter_complex = ";".join(kb_parts) + ";" + xf_chain + f";[{out_pad}]{ov}[final]"
+
+    if n == 1:
+        filter_complex = f"[0:v]{ov}[final]"
+    else:
+        xf_parts = []
+        for i in range(1, n):
+            a   = "[0:v]"      if i == 1 else f"[xf{i-2}]"
+            out = "[vout]"     if i == n - 1 else f"[xf{i-1}]"
+            off = i * (dur_per - fade)
+            xf_parts.append(
+                f"{a}[{i}:v]xfade=transition=fade:duration={fade:.2f}:offset={off:.2f}{out}"
+            )
+        filter_complex = ";".join(xf_parts) + f";[vout]{ov}[final]"
 
     output = str(Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.mp4")
     cmd = [
