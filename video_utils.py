@@ -59,14 +59,35 @@ def _ffmpeg_bin() -> str:
 
 
 def _to_jpeg(src_path: str) -> str:
-    """Convierte cualquier imagen (WebP, PNG, etc.) a JPEG para compatibilidad con FFmpeg."""
+    """
+    Convierte cualquier imagen a JPEG limpio usando FFmpeg como primer intento.
+    FFmpeg lee WebP correctamente (ignora EXIF inválido) y produce JPEG sin problemas.
+    Pillow como fallback por si acaso.
+    """
+    out = str(Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.jpg")
+
+    # Intento 1: FFmpeg (más robusto con WebP/EXIF inválido de Cloudinary)
+    try:
+        r = subprocess.run(
+            [_ffmpeg_bin(), "-y", "-i", src_path,
+             "-frames:v", "1", "-q:v", "2", out],
+            capture_output=True, timeout=30
+        )
+        if r.returncode == 0 and os.path.exists(out) and os.path.getsize(out) > 500:
+            return out
+    except Exception:
+        pass
+
+    # Intento 2: Pillow
     try:
         from PIL import Image
-        out = Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.jpg"
-        Image.open(src_path).convert("RGB").save(str(out), "JPEG", quality=92)
-        return str(out)
+        Image.open(src_path).convert("RGB").save(out, "JPEG", quality=92)
+        if os.path.exists(out) and os.path.getsize(out) > 500:
+            return out
     except Exception:
-        return src_path
+        pass
+
+    return src_path  # último recurso: original
 
 
 def _download(src: str, timeout: int = 20) -> str:
