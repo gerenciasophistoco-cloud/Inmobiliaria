@@ -158,6 +158,7 @@ def _kb_segment(i: int, dur: float) -> str:
         f"scale={SW}:{SH}:force_original_aspect_ratio=increase,"
         f"crop={SW}:{SH},"
         f"crop={VW}:{VH}:x={x}:y={y},"
+        f"fps={FPS},"
         f"trim=duration={dur},setpts=PTS-STARTPTS"
     )
 
