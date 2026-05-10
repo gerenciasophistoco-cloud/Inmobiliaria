@@ -160,10 +160,11 @@ def _overlay_vf(nombre: str, telefono: str, specs: dict, dur: float,
     fp   = f":fontfile='{font}'" if font else ""
     fv   = []
 
-    # Franja cristal (60 % opacidad, ancho completo)
+    # Franja cristal (60% opacidad, ancho completo)
+    # drawbox SÍ acepta iw/ih; drawtext solo acepta w/h
     fv.append("drawbox=y=ih-80:color=black@0.60:width=iw:height=80:t=fill")
 
-    # Datos del inmueble — izquierda, rotan
+    # Datos del inmueble — izquierda, rotan cada foto
     data_items = []
     if specs.get("metros"):
         data_items.append(f"{specs['metros']} m2")
@@ -180,19 +181,20 @@ def _overlay_vf(nombre: str, telefono: str, specs: dict, dur: float,
         item = data_items[i % len(data_items)]
         t0 = i * dur_per
         t1 = (i + 1) * dur_per
+        # y=h-52 usa 'h' (válido en drawtext), NO 'ih'
         fv.append(
             f"drawtext=text='{_esc(item)}':fontsize=28{fp}:fontcolor=white"
-            f":x=30:y=ih-52:enable='between(t,{t0:.1f},{t1:.1f})'"
+            f":x=30:y=h-52:enable='between(t,{t0:.1f},{t1:.1f})'"
         )
 
-    # Agente — derecha, siempre visible
+    # Agente — derecha, fijo. Usa 'w' y 'h', NO 'iw'/'ih'
     fv.append(
         f"drawtext=text='{_esc(nombre)}':fontsize=18{fp}"
-        f":fontcolor=white:x=iw-tw-25:y=ih-60"
+        f":fontcolor=white:x=w-tw-25:y=h-60"
     )
     fv.append(
         f"drawtext=text='{_esc(telefono)}':fontsize=16{fp}"
-        f":fontcolor=#25D366:x=iw-tw-25:y=ih-34"
+        f":fontcolor=#25D366:x=w-tw-25:y=h-34"
     )
 
     return ",".join(fv)
