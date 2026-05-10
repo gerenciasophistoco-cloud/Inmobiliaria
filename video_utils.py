@@ -202,23 +202,29 @@ def _overlay_vf(nombre: str, telefono: str, specs: dict, dur: float,
 
 # ─── Slideshow (Plan B) ───────────────────────────────────────────────────────
 
+_FADE_DUR = 0.4   # duración del fade-in / fade-out por clip (segundos)
+
+
 def _make_clip(img_path: str, idx: int, dur: float) -> str:
     """
-    JPEG → clip MP4.
-    Ken Burns: escala 10% más grande y recorta desde esquina diferente por clip.
-    Crop con coordenadas ENTERAS (sin expresiones dinámicas que requieren eval=frame).
+    JPEG → clip MP4 con:
+    - Ken Burns: esquina diferente por clip (percepción de movimiento)
+    - fade=in los primeros 0.4s y fade=out los últimos 0.4s
+    → concat produce transición suave (fade a negro) entre fotos
     """
     out = str(Path(tempfile.mkdtemp()) / f"clip_{idx}.mp4")
-    SW, SH = int(VW * 1.10), int(VH * 1.10)   # 1408 × 792
-    # 4 esquinas distintas → percepción de movimiento entre fotos
-    xs = [0,       SW - VW, 0,       SW - VW]
-    ys = [0,       0,       SH - VH, SH - VH]
+    SW, SH = int(VW * 1.10), int(VH * 1.10)
+    xs = [0, SW - VW, 0,       SW - VW]
+    ys = [0, 0,       SH - VH, SH - VH]
     x, y = xs[idx % 4], ys[idx % 4]
 
+    fade_out_start = dur - _FADE_DUR
     vf = (
         f"scale={SW}:{SH}:force_original_aspect_ratio=increase,"
         f"crop={SW}:{SH},"
-        f"crop={VW}:{VH}:x={x}:y={y}"
+        f"crop={VW}:{VH}:x={x}:y={y},"
+        f"fade=t=in:st=0:d={_FADE_DUR},"
+        f"fade=t=out:st={fade_out_start:.2f}:d={_FADE_DUR}"
     )
     cmd = [
         _ffmpeg_bin(), "-y",
