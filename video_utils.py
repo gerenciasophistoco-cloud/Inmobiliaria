@@ -1,6 +1,8 @@
 """
-Generación de video — Formato 4:5 Premium.
-Dimensiones: 1088×1360 (múltiplos de 16 para compatibilidad libx264/FFmpeg 7.x).
+Generación de video — Pipeline ultra-simple.
+1. Cada imagen → clip 1080x1350 con fondo desenfocado + fade
+2. Clips → concat con transición fade
+3. Sin overlays de texto (fase 1)
 """
 import json
 import logging
@@ -15,15 +17,13 @@ from typing import List, Optional
 
 log = logging.getLogger(__name__)
 
-# 1088×1360 = múltiplos de 16 → libx264 no falla con -22 Invalid Argument
-# Ratio 1088/1360 = 0.8 = 4/5  ✓
-VW, VH  = 1088, 1360
+VW, VH  = 1080, 1350
 FPS     = 25
 DUR_PER = 3.0
-_FADE   = 0.8
+FADE    = 0.5          # fade in/out por clip (segundos)
 
 
-# ── Utilidades ────────────────────────────────────────────────────────────────
+# ── Utilidades básicas ────────────────────────────────────────────────────────
 
 def ffmpeg_available() -> bool:
     if shutil.which("ffmpeg"):
@@ -45,21 +45,21 @@ def _ffmpeg_bin() -> str:
 
 
 def _to_jpeg(src_path: str) -> str:
+    """Convierte cualquier imagen (WebP, AVIF, PNG) a JPEG limpio."""
     out = str(Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.jpg")
     try:
         r = subprocess.run(
-            [_ffmpeg_bin(), "-y", "-i", src_path,
-             "-frames:v", "1", "-q:v", "2", out],
+            [_ffmpeg_bin(), "-y", "-i", src_path, "-frames:v", "1", "-q:v", "2", out],
             capture_output=True, timeout=30
         )
-        if r.returncode == 0 and os.path.exists(out) and os.path.getsize(out) > 500:
+        if r.returncode == 0 and os.path.getsize(out) > 500:
             return out
     except Exception:
         pass
     try:
         from PIL import Image
         Image.open(src_path).convert("RGB").save(out, "JPEG", quality=92)
-        if os.path.exists(out) and os.path.getsize(out) > 500:
+        if os.path.getsize(out) > 500:
             return out
     except Exception:
         pass
@@ -67,7 +67,7 @@ def _to_jpeg(src_path: str) -> str:
 
 
 def _download(src: str, timeout: int = 20) -> str:
-    if src.startswith("http://") or src.startswith("https://"):
+    if src.startswith(("http://", "https://")):
         ext = Path(src.split("?")[0]).suffix or ".jpg"
         raw = Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}{ext}"
         req = urllib.request.Request(src, headers={"User-Agent": "ListaPro/1.0"})
@@ -75,7 +75,7 @@ def _download(src: str, timeout: int = 20) -> str:
             with open(str(raw), "wb") as f:
                 f.write(resp.read())
         return _to_jpeg(str(raw))
-    if src.startswith("/uploads/") or src.startswith("/tmp/"):
+    if src.startswith(("/uploads/", "/tmp/")):
         candidate = Path(__file__).parent / src.lstrip("/")
         if candidate.exists():
             return _to_jpeg(str(candidate))
@@ -92,16 +92,6 @@ def _font() -> str:
     ]:
         if os.path.exists(p):
             return p
-    try:
-        lines = subprocess.run(
-            ["fc-list", ":style=Bold", "--format=%{file}\n"],
-            capture_output=True, text=True, timeout=3
-        ).stdout.strip().splitlines()
-        for line in lines:
-            if line.strip() and os.path.exists(line.strip()):
-                return line.strip()
-    except Exception:
-        pass
     return ""
 
 
@@ -113,128 +103,74 @@ def _esc(text: str) -> str:
     )
 
 
-# ── Overlay ───────────────────────────────────────────────────────────────────
+# ── Paso 1: cada imagen → clip MP4 ───────────────────────────────────────────
 
-def _overlay_vf(nombre: str, telefono: str, specs: dict, dur: float,
-                n_photos: int = 1, dur_per: float = DUR_PER) -> str:
+def _make_clip(jpeg_path: str, idx: int, dur: float = DUR_PER) -> str:
     """
-    Overlay para -vf.
-    drawtext: usa w/h/tw (NUNCA iw/ih → w=0 → crash).
-    drawbox: usa iw/ih (correcto para drawbox).
-    Posiciones absolutas (enteros) → sin variables FFmpeg en y.
+    JPEG → clip MP4 1080x1350 con fondo desenfocado.
+
+    Técnica blurred background:
+      [bg] = imagen escalada para LLENAR 1080x1350 + recortada + boxblur
+      [fg] = imagen escalada para CABER dentro de 1080x1350 (sin recortar)
+      overlay centra [fg] sobre [bg]
+
+    Fade in 0.5s al inicio, fade out 0.5s al final.
+    Sin color space flags: -map_metadata -1 elimina ICC Profile.
     """
-    font = _font()
-    fp   = f":fontfile='{font}'" if font else ""
-    fv   = []
+    out          = str(Path(tempfile.mkdtemp()) / f"clip_{idx}.mp4")
+    fade_out_st  = round(dur - FADE, 2)
 
-    precio = _esc(specs.get("precio", ""))
-    ciudad = _esc(specs.get("ciudad", ""))
+    fc = (
+        # Dividir fuente en dos streams
+        "[0:v]split=2[bg_src][fg_src];"
 
-    # Precio arriba derecha
-    if precio:
-        fv.append(
-            f"drawtext=text='{precio}':fontsize=28{fp}"
-            f":fontcolor=white:x=w-tw-20:y=24"
-            f":box=1:boxcolor=black@0.55:boxborderw=8"
-        )
+        # Background: llena el frame y desenfoca
+        f"[bg_src]"
+        f"scale={VW}:{VH}:force_original_aspect_ratio=increase,"
+        f"crop={VW}:{VH},"
+        f"boxblur=25:4"
+        f"[bg];"
 
-    # Franja inferior
-    STRIP_H = 130
-    SY = VH - STRIP_H   # 1230
+        # Foreground: cabe dentro del frame sin recortar (puede tener barras negras)
+        f"[fg_src]"
+        f"scale={VW}:{VH}:force_original_aspect_ratio=decrease"
+        f"[fg];"
 
-    fv.append(f"drawbox=y={SY}:color=black@0.72:width=iw:height={STRIP_H}:t=fill")
+        # Composite: fg centrado sobre bg
+        f"[bg][fg]overlay=(W-w)/2:(H-h)/2,"
 
-    # Nombre y teléfono centrados
-    fv.append(
-        f"drawtext=text='{_esc(nombre)}':fontsize=26{fp}"
-        f":fontcolor=white:x=(w-tw)/2:y=h-85"
-    )
-    fv.append(
-        f"drawtext=text='{_esc(telefono)}':fontsize=22{fp}"
-        f":fontcolor=white:x=(w-tw)/2:y=h-52"
-    )
-
-    # Ciudad izquierda
-    if ciudad:
-        fv.append(
-            f"drawtext=text='{ciudad}':fontsize=22{fp}"
-            f":fontcolor=white:x=20:y={SY + 15}"
-        )
-
-    # Specs rotativas
-    data_items = []
-    if specs.get("metros"):
-        data_items.append(f"{specs['metros']}m2")
-    if specs.get("habitaciones"):
-        data_items.append(f"{specs['habitaciones']} Hab")
-    if specs.get("banos"):
-        data_items.append(f"{specs['banos']} Ban")
-    if specs.get("estacionamientos"):
-        data_items.append(f"{specs['estacionamientos']} Parq")
-
-    for i in range(n_photos):
-        if not data_items:
-            break
-        item = data_items[i % len(data_items)]
-        t0, t1 = i * dur_per, (i + 1) * dur_per
-        fv.append(
-            f"drawtext=text='{_esc(item)}':fontsize=22{fp}"
-            f":fontcolor=white:x=20:y={SY + 48}"
-            f":enable='between(t,{t0:.1f},{t1:.1f})'"
-        )
-
-    return ",".join(fv)
-
-
-# ── Clip ──────────────────────────────────────────────────────────────────────
-
-def _make_clip(img_path: str, idx: int, dur: float) -> str:
-    """
-    JPEG → clip MP4 1088×1360 (múltiplos de 16 → libx264 sin -22).
-    Sin filtros de colorspace (que producen clips vacíos con metadata unknown).
-    -map_metadata -1 elimina ICC Profile del container.
-    """
-    out = str(Path(tempfile.mkdtemp()) / f"clip_{idx}.mp4")
-
-    SW, SH = int(VW * 1.10), int(VH * 1.10)   # 1196 × 1496
-    xs = [0, SW - VW, 0,       SW - VW]
-    ys = [0, 0,       SH - VH, SH - VH]
-    x, y = xs[idx % 4], ys[idx % 4]
-
-    fade_dur       = min(_FADE, dur / 3.0)
-    fade_out_start = round(dur - fade_dur, 2)
-
-    vf = (
-        f"scale={SW}:{SH}:force_original_aspect_ratio=increase,"
-        f"crop={SW}:{SH},"
-        f"crop={VW}:{VH}:x={x}:y={y},"
-        f"fade=t=in:st=0:d={fade_dur:.2f},"
-        f"fade=t=out:st={fade_out_start:.2f}:d={fade_dur:.2f}"
+        # Fade in y fade out
+        f"fade=t=in:st=0:d={FADE:.2f},"
+        f"fade=t=out:st={fade_out_st:.2f}:d={FADE:.2f}"
+        f"[out]"
     )
 
     cmd = [
         _ffmpeg_bin(), "-y",
-        "-loop", "1", "-i", img_path,
-        "-vf", vf,
+        "-loop", "1", "-i", jpeg_path,
+        "-filter_complex", fc,
+        "-map", "[out]",
         "-t", str(dur),
         "-r", str(FPS),
-        "-map_metadata", "-1",
+        "-map_metadata", "-1",          # elimina ICC Profile
         "-c:v", "libx264",
-        "-profile:v", "high", "-level", "4.2",
-        "-preset", "ultrafast", "-crf", "18",
+        "-profile:v", "high",
+        "-level:v", "4.2",
+        "-preset", "ultrafast",
+        "-crf", "18",
         "-pix_fmt", "yuv420p",
         out,
     ]
     r = subprocess.run(cmd, capture_output=True, timeout=120)
     if r.returncode != 0:
         raise RuntimeError(
-            f"Error clip {idx}:\n{r.stderr.decode('utf-8', errors='replace')[-500:]}"
+            f"Clip {idx} error:\n{r.stderr.decode('utf-8', errors='replace')[-600:]}"
         )
-    log.info("Clip %d OK", idx)
+    log.info("Clip %d generado OK", idx)
     return out
 
 
-# ── Slideshow ─────────────────────────────────────────────────────────────────
+# ── Paso 2: concat clips con fade ────────────────────────────────────────────
 
 def generate_slideshow(
     photo_sources: List[str],
@@ -242,75 +178,88 @@ def generate_slideshow(
     telefono: str,
     specs: dict,
     dur_per: float = DUR_PER,
-    fade: float = _FADE,
+    fade: float = FADE,
 ) -> str:
-    if not ffmpeg_available():
-        raise RuntimeError("FFmpeg no instalado.")
+    """
+    Pipeline mínimo:
+      1. Descarga y convierte fotos a JPEG
+      2. Crea un clip por foto (_make_clip)
+      3. Une los clips con concat demuxer (sin overlay de texto)
+      4. Retorna el MP4 final
 
-    locals_: List[str] = []
+    Los fades baked en cada clip crean la transición fade-to-black entre fotos.
+    """
+    if not ffmpeg_available():
+        raise RuntimeError("FFmpeg no disponible en este servidor.")
+
+    # 1. Descargar y convertir fotos
+    jpegs: List[str] = []
     for src in photo_sources[:6]:
         try:
-            locals_.append(_download(src))
+            jpegs.append(_download(src))
+            log.info("Foto %d/%d OK", len(jpegs), min(len(photo_sources), 6))
         except Exception as e:
             log.warning("Foto omitida %s: %s", src, e)
 
-    if not locals_:
-        raise ValueError("Sin fotos disponibles.")
+    if not jpegs:
+        raise ValueError("No se pudo obtener ninguna foto.")
 
-    n = len(locals_)
+    n = len(jpegs)
+
+    # 2. Crear un clip por foto
     clips: List[str] = []
-    for i, lp in enumerate(locals_):
-        clips.append(_make_clip(lp, i, dur_per))
+    for i, jp in enumerate(jpegs):
+        clips.append(_make_clip(jp, i, dur_per))
 
-    ov     = _overlay_vf(nombre, telefono, specs,
-                         n * dur_per, n_photos=n, dur_per=dur_per)
+    # 3. Unir clips con concat demuxer
+    concat_txt = str(Path(tempfile.mkdtemp()) / "playlist.txt")
+    with open(concat_txt, "w") as f:
+        for clip in clips:
+            f.write(f"file '{clip}'\n")
+
     output = str(Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.mp4")
 
-    # Parámetros de encoding probados para 1088×1360
-    ENC = [
-        "-c:v", "libx264",
-        "-profile:v", "high", "-level", "4.2",
-        "-preset", "veryfast", "-crf", "23",
-        "-pix_fmt", "yuv420p",
+    cmd = [
+        _ffmpeg_bin(), "-y",
+        "-f", "concat", "-safe", "0", "-i", concat_txt,
         "-map_metadata", "-1",
+        "-c:v", "libx264",
+        "-profile:v", "high",
+        "-level:v", "4.2",
+        "-preset", "veryfast",
+        "-crf", "23",
+        "-pix_fmt", "yuv420p",
         "-movflags", "+faststart",
+        output,
     ]
 
-    if n == 1:
-        cmd = [_ffmpeg_bin(), "-y", "-i", clips[0], "-vf", ov, *ENC, output]
-    else:
-        concat_txt = str(Path(tempfile.mkdtemp()) / "concat.txt")
-        with open(concat_txt, "w") as f:
-            for clip in clips:
-                f.write(f"file '{clip}'\n")
-        cmd = [
-            _ffmpeg_bin(), "-y",
-            "-f", "concat", "-safe", "0", "-i", concat_txt,
-            "-vf", ov,
-            *ENC, output,
-        ]
-
-    log.info("Slideshow %d fotos → %s", n, output)
+    log.info("Ensamblando %d clips → %s", n, output)
     r = subprocess.run(cmd, capture_output=True, timeout=300)
     if r.returncode != 0:
         raise RuntimeError(
-            f"FFmpeg error:\n{r.stderr.decode('utf-8', errors='replace')[-800:]}"
+            f"FFmpeg concat error:\n{r.stderr.decode('utf-8', errors='replace')[-800:]}"
         )
     return output
 
 
-# ── Plan A ────────────────────────────────────────────────────────────────────
+# ── Plan A: overlays sobre video del usuario ─────────────────────────────────
 
-def add_overlays(video_source: str, nombre: str, telefono: str, specs: dict) -> str:
+def add_overlays(
+    video_source: str,
+    nombre: str,
+    telefono: str,
+    specs: dict,
+) -> str:
+    """Reencuadra el video del usuario a 1080x1350 con blurred background."""
     if not ffmpeg_available():
-        raise RuntimeError("FFmpeg no instalado.")
+        raise RuntimeError("FFmpeg no disponible.")
 
     local_in = _download(video_source)
     dur = 30.0
     try:
         probe = subprocess.run(
-            [_ffmpeg_bin().replace("ffmpeg", "ffprobe"), "-v", "quiet",
-             "-print_format", "json", "-show_streams", local_in],
+            [_ffmpeg_bin().replace("ffmpeg", "ffprobe"),
+             "-v", "quiet", "-print_format", "json", "-show_streams", local_in],
             capture_output=True, text=True, timeout=30,
         )
         info = json.loads(probe.stdout)
@@ -321,20 +270,25 @@ def add_overlays(video_source: str, nombre: str, telefono: str, specs: dict) -> 
     except Exception:
         pass
 
-    ov = _overlay_vf(nombre, telefono, specs, dur)
-    vf_full = (
-        f"scale={VW}:{VH}:force_original_aspect_ratio=decrease,"
-        f"pad={VW}:{VH}:(ow-iw)/2:(oh-ih)/2,{ov}"
+    fc = (
+        "[0:v]split=2[bg_src][fg_src];"
+        f"[bg_src]scale={VW}:{VH}:force_original_aspect_ratio=increase,"
+        f"crop={VW}:{VH},boxblur=25:4[bg];"
+        f"[fg_src]scale={VW}:{VH}:force_original_aspect_ratio=decrease[fg];"
+        "[bg][fg]overlay=(W-w)/2:(H-h)/2[out]"
     )
+
     output = str(Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.mp4")
     cmd = [
         _ffmpeg_bin(), "-y", "-i", local_in,
-        "-vf", vf_full,
-        "-c:v", "libx264", "-profile:v", "high", "-level", "4.2",
+        "-filter_complex", fc,
+        "-map", "[out]",
+        "-map", "0:a?",
+        "-map_metadata", "-1",
+        "-c:v", "libx264", "-profile:v", "high", "-level:v", "4.2",
         "-preset", "fast", "-crf", "23",
         "-c:a", "aac", "-b:a", "128k",
         "-pix_fmt", "yuv420p",
-        "-map_metadata", "-1",
         "-movflags", "+faststart",
         output,
     ]
