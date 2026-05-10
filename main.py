@@ -39,10 +39,7 @@ _static_dir.mkdir(exist_ok=True)
 _uploads_dir.mkdir(exist_ok=True)
 
 app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
-
-# Uploads locales solo en desarrollo (Cloudinary los reemplaza en producción)
-if not os.getenv("CLOUDINARY_URL"):
-    app.mount("/uploads", StaticFiles(directory=str(_uploads_dir)), name="uploads")
+app.mount("/uploads", StaticFiles(directory=str(_uploads_dir)), name="uploads")
 
 
 # ── Modelo para video y página web ───────────────────────────────────────────
