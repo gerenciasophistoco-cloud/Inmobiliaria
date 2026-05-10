@@ -149,63 +149,59 @@ def _overlay_vf(nombre: str, telefono: str, specs: dict, dur: float,
     ciudad    = _esc(specs.get("ciudad", ""))
     direccion = _esc(specs.get("direccion", ""))
 
-    # ── Precio arriba derecha (dorado) — usa 'w' y 'tw', válidos en drawtext ──
+    # ── Precio arriba derecha (blanco con caja, sin hex para evitar parsing issues) ──
     if precio:
         fv.append(
-            f"drawtext=text='{precio}':fontsize=30{fp}"
-            f":fontcolor=#FFD700:x=w-tw-20:y=24"
-            f":box=1:boxcolor=black@0.50:boxborderw=10"
+            f"drawtext=text='{precio}':fontsize=28{fp}"
+            f":fontcolor=white:x=w-tw-20:y=24"
+            f":box=1:boxcolor=black@0.55:boxborderw=8"
         )
 
-    # ── Franja inferior — drawbox usa iw/ih (correcto) ───────────────────────
-    STRIP_H = 150
-    SY      = VH - STRIP_H    # 1200 — entero absoluto, sin variable FFmpeg
-    fv.append(f"drawbox=y={SY}:color=black@0.65:width=iw:height={STRIP_H}:t=fill")
+    # ── Franja inferior — estructura IDÉNTICA a la que funcionó antes ─────────
+    # drawbox: iw/ih válidos. drawtext: w/h/tw válidos. Posiciones absolutas.
+    STRIP_H = 130
+    SY      = VH - STRIP_H    # 1220
 
-    # ── Izquierda: ciudad · dirección · agente — posiciones absolutas ─────────
-    if ciudad:
-        fv.append(
-            f"drawtext=text='{ciudad}':fontsize=30{fp}"
-            f":fontcolor=white:x=20:y={SY + 15}"
-        )
-    if direccion:
-        fv.append(
-            f"drawtext=text='{direccion}':fontsize=20{fp}"
-            f":fontcolor=white@0.80:x=20:y={SY + 57}"
-        )
+    fv.append(f"drawbox=y={SY}:color=black@0.72:width=iw:height={STRIP_H}:t=fill")
+
+    # Agente centrado (misma fórmula exacta que funcionó con 1280×720)
     fv.append(
-        f"drawtext=text='{_esc(nombre)}':fontsize=18{fp}"
-        f":fontcolor=white@0.70:x=20:y={SY + 100}"
+        f"drawtext=text='{_esc(nombre)}':fontsize=26{fp}"
+        f":fontcolor=white:x=(w-tw)/2:y=h-85"
+    )
+    fv.append(
+        f"drawtext=text='{_esc(telefono)}':fontsize=22{fp}"
+        f":fontcolor=white:x=(w-tw)/2:y=h-52"
     )
 
-    # ── Derecha: specs rotativas (enable sincronizado con las fotos) ───────────
+    # Ciudad izquierda (absoluto, sin hex color)
+    if ciudad:
+        fv.append(
+            f"drawtext=text='{ciudad}':fontsize=22{fp}"
+            f":fontcolor=white:x=20:y={SY + 15}"
+        )
+
+    # Specs rotativas (enable — ya funcionaba antes con drawtext)
     data_items = []
     if specs.get("metros"):
         data_items.append(f"{specs['metros']}m2")
     if specs.get("habitaciones"):
         data_items.append(f"{specs['habitaciones']} Hab")
     if specs.get("banos"):
-        data_items.append(f"{specs['banos']} Banos")
+        data_items.append(f"{specs['banos']} Ban")
     if specs.get("estacionamientos"):
         data_items.append(f"{specs['estacionamientos']} Parq")
 
-    # Cada spec visible solo durante su foto (enable usa 't' — válido en drawtext)
     for i in range(n_photos):
         if not data_items:
             break
         item = data_items[i % len(data_items)]
         t0, t1 = i * dur_per, (i + 1) * dur_per
         fv.append(
-            f"drawtext=text='{_esc(item)}':fontsize=26{fp}"
-            f":fontcolor=white:x=w-tw-20:y={SY + 22}"
+            f"drawtext=text='{_esc(item)}':fontsize=22{fp}"
+            f":fontcolor=white:x=20:y={SY + 48}"
             f":enable='between(t,{t0:.1f},{t1:.1f})'"
         )
-
-    # Teléfono dorado — fijo, siempre visible
-    fv.append(
-        f"drawtext=text='{_esc(telefono)}':fontsize=26{fp}"
-        f":fontcolor=#FFD700:x=w-tw-20:y={SY + 90}"
-    )
 
     return ",".join(fv)
 
@@ -214,69 +210,40 @@ def _overlay_vf(nombre: str, telefono: str, specs: dict, dur: float,
 
 def _make_clip(img_path: str, idx: int, dur: float) -> str:
     """
-    JPEG → clip MP4 normalizado (1080×1350, 25fps, yuv420p, bt709).
-
-    Técnica Blurred Background:
-      [bg] = imagen escalada para llenar 1080×1350 + recortada + blur fuerte
-      [fg] = imagen escalada para encajar (sin recorte) → centrada sobre [bg]
-      Ken Burns: composite escala 5% extra y recorta desde esquina diferente por clip.
-      Fade: in 0.8s · out 0.8s
-
-    Todo en un solo filter_complex para garantizar dimensiones exactas.
+    JPEG → clip MP4 (1080×1350, 25fps, yuv420p).
+    Pipeline mínimo con -vf (sin filter_complex): elimina todos los puntos de falla.
+    Ken Burns: escala 10% más grande y recorta desde esquina diferente por clip.
+    Fade in/out de 0.8s baked en el clip.
     """
-    out       = str(Path(tempfile.mkdtemp()) / f"clip_{idx}.mp4")
-    KB_W      = int(VW * 1.05)   # 1134 — oversized para Ken Burns
-    KB_H      = int(VH * 1.05)   # 1417
-    # Offset de esquina por clip (percepción de zoom/movimiento)
-    cx = [0, KB_W - VW, 0,        KB_W - VW][idx % 4]  # [0, 54, 0, 54]
-    cy = [0, 0,         KB_H - VH, KB_H - VH][idx % 4]  # [0, 0, 67, 67]
+    out = str(Path(tempfile.mkdtemp()) / f"clip_{idx}.mp4")
+
+    SW, SH = int(VW * 1.10), int(VH * 1.10)   # 1188 × 1485
+    xs = [0, SW - VW, 0,        SW - VW]
+    ys = [0, 0,       SH - VH,  SH - VH]
+    x, y = xs[idx % 4], ys[idx % 4]
 
     fade_dur       = min(_FADE, dur / 3.0)
     fade_out_start = round(dur - fade_dur, 2)
 
-    fc = (
-        # Fuente única → 2 caminos
-        "[0:v]split=2[bg_raw][fg_raw];"
-
-        # Camino bg: rellena + recorta + blur
-        f"[bg_raw]"
-        f"scale={VW}:{VH}:force_original_aspect_ratio=increase,"
-        f"crop={VW}:{VH},"
-        f"boxblur=30:5"
-        f"[bg];"
-
-        # Camino fg: encaja (sin recorte, sin padding negro visible)
-        f"[fg_raw]"
-        f"scale={VW}:{VH}:force_original_aspect_ratio=decrease"
-        f"[fg];"
-
-        # Composite: fg centrado sobre bg desenfocado
-        f"[bg][fg]overlay=(W-w)/2:(H-h)/2"
-        f"[comp];"
-
-        # Ken Burns: escala 5% + recorta esquina + fade
-        f"[comp]"
-        f"scale={KB_W}:{KB_H},"
-        f"crop={VW}:{VH}:x={cx}:y={cy},"
+    vf = (
+        f"scale={SW}:{SH}:force_original_aspect_ratio=increase,"
+        f"crop={SW}:{SH},"
+        f"crop={VW}:{VH}:x={x}:y={y},"
         f"fade=t=in:st=0:d={fade_dur:.2f},"
         f"fade=t=out:st={fade_out_start:.2f}:d={fade_dur:.2f}"
-        f"[out]"
     )
 
     cmd = [
         _ffmpeg_bin(), "-y",
         "-loop", "1", "-i", img_path,
-        "-filter_complex", fc,
-        "-map", "[out]",
-        "-map_metadata", "-1",    # strip ICC Profile
+        "-vf", vf,
         "-t", str(dur),
         "-r", str(FPS),
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18",
         "-pix_fmt", "yuv420p",
-        "-color_range", "tv",     # fuerza TV range: evita pc/bt470bg que causa frame=0
-        out,
+        out,                        # sin flags de color: evita conflictos de metadata
     ]
-    r = subprocess.run(cmd, capture_output=True, timeout=180)
+    r = subprocess.run(cmd, capture_output=True, timeout=120)
     if r.returncode != 0:
         raise RuntimeError(
             f"Error clip {idx}:\n{r.stderr.decode('utf-8', errors='replace')[-500:]}"
@@ -323,9 +290,8 @@ def generate_slideshow(
     for i, lp in enumerate(locals_):
         clips.append(_make_clip(lp, i, dur_per))
 
-    # ── Paso 3: UN SOLO PASO — normalizar + concat + overlay en un filter_complex ─
-    # El 2-pass genera un intermediario con bt470bg que libx264 rechaza en el overlay.
-    # ONE-PASS: setparams normaliza bt470bg→bt709 en cada clip ANTES del concat.
+    # ── Paso 3: ONE-PASS concat + overlay ────────────────────────────────────────
+    # format=yuv420p en cada entrada normaliza el color metadata sin setparams
     inputs: List[str] = []
     for clip in clips:
         inputs += ["-i", clip]
@@ -333,22 +299,12 @@ def generate_slideshow(
     ov = _overlay_vf(nombre, telefono, specs,
                      n * dur_per, n_photos=n, dur_per=dur_per)
 
-    # Normalización por clip: setparams fuerza bt709+tv_range, format garantiza yuv420p
-    def _norm(i: int) -> str:
-        return (
-            f"[{i}:v]"
-            f"scale={VW}:{VH}:force_original_aspect_ratio=disable,"
-            f"setparams=range=tv:color_primaries=bt709:color_trc=bt709:colorspace=bt709,"
-            f"format=yuv420p"
-            f"[n{i}]"
-        )
-
     if n == 1:
-        fc = f"{_norm(0)};[n0]{ov}[final]"
+        fc = f"[0:v]format=yuv420p,{ov}[final]"
     else:
-        norm_chain = ";".join(_norm(i) for i in range(n))
-        ci         = "".join(f"[n{i}]" for i in range(n))
-        fc         = f"{norm_chain};{ci}concat=n={n}:v=1:a=0[vout];[vout]{ov}[final]"
+        norm = "".join(f"[{i}:v]format=yuv420p[n{i}];" for i in range(n))
+        ci   = "".join(f"[n{i}]" for i in range(n))
+        fc   = f"{norm}{ci}concat=n={n}:v=1:a=0[vout];[vout]{ov}[final]"
 
     output = str(Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.mp4")
     cmd = [
@@ -361,11 +317,11 @@ def generate_slideshow(
         "-movflags", "+faststart",
         output,
     ]
-    log.info("Slideshow ONE-PASS: %d fotos → %s", n, output)
+    log.info("Slideshow %d fotos → %s", n, output)
     r = subprocess.run(cmd, capture_output=True, timeout=300)
     if r.returncode != 0:
         raise RuntimeError(
-            f"FFmpeg slideshow error:\n{r.stderr.decode('utf-8', errors='replace')[-800:]}"
+            f"FFmpeg error:\n{r.stderr.decode('utf-8', errors='replace')[-800:]}"
         )
     return output
 
