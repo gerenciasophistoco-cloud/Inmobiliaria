@@ -323,69 +323,49 @@ def generate_slideshow(
     for i, lp in enumerate(locals_):
         clips.append(_make_clip(lp, i, dur_per))
 
-    # ── Paso 3a: Concat clips → video crudo SIN overlay ─────────────────────────
-    # Separar concat del overlay elimina el conflicto de color metadata (bt709/unknown)
-    # que causa frame=0 cuando ambos están en el mismo filter_complex.
+    # ── Paso 3: UN SOLO PASO — normalizar + concat + overlay en un filter_complex ─
+    # El 2-pass genera un intermediario con bt470bg que libx264 rechaza en el overlay.
+    # ONE-PASS: setparams normaliza bt470bg→bt709 en cada clip ANTES del concat.
     inputs: List[str] = []
     for clip in clips:
         inputs += ["-i", clip]
 
-    raw = str(Path(tempfile.mkdtemp()) / f"raw_{uuid.uuid4()}.mp4")
-
-    # Normalización común: format=yuv420p + color_range tv → elimina pc/bt470bg
-    ENCODE_ARGS = [
-        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18",
-        "-pix_fmt", "yuv420p", "-color_range", "tv",
-    ]
-
-    if n == 1:
-        # Re-encodear (no copiar): strip ICC Profile + forzar TV range
-        r1 = subprocess.run(
-            [_ffmpeg_bin(), "-y", "-i", clips[0],
-             "-vf", "scale=1080:1350,format=yuv420p",
-             "-map_metadata", "-1",
-             *ENCODE_ARGS, raw],
-            capture_output=True, timeout=120
-        )
-    else:
-        # Concat: normalizar cada entrada antes de unirlas
-        norm = "".join(
-            f"[{i}:v]scale={VW}:{VH},format=yuv420p[n{i}];" for i in range(n)
-        )
-        ci  = "".join(f"[n{i}]" for i in range(n))
-        fc1 = f"{norm}{ci}concat=n={n}:v=1:a=0[v]"
-        r1 = subprocess.run(
-            [_ffmpeg_bin(), "-y", *inputs,
-             "-filter_complex", fc1, "-map", "[v]",
-             "-map_metadata", "-1",
-             *ENCODE_ARGS, raw],
-            capture_output=True, timeout=300
-        )
-
-    if r1.returncode != 0:
-        raise RuntimeError(
-            f"FFmpeg concat error:\n{r1.stderr.decode('utf-8', errors='replace')[-800:]}"
-        )
-
-    # ── Paso 3b: Overlay con -vf sobre video ya normalizado ───────────────────
     ov = _overlay_vf(nombre, telefono, specs,
                      n * dur_per, n_photos=n, dur_per=dur_per)
+
+    # Normalización por clip: setparams fuerza bt709+tv_range, format garantiza yuv420p
+    def _norm(i: int) -> str:
+        return (
+            f"[{i}:v]"
+            f"scale={VW}:{VH}:force_original_aspect_ratio=disable,"
+            f"setparams=range=tv:color_primaries=bt709:color_trc=bt709:colorspace=bt709,"
+            f"format=yuv420p"
+            f"[n{i}]"
+        )
+
+    if n == 1:
+        fc = f"{_norm(0)};[n0]{ov}[final]"
+    else:
+        norm_chain = ";".join(_norm(i) for i in range(n))
+        ci         = "".join(f"[n{i}]" for i in range(n))
+        fc         = f"{norm_chain};{ci}concat=n={n}:v=1:a=0[vout];[vout]{ov}[final]"
+
     output = str(Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.mp4")
-
-    # format=yuv420p al inicio del chain garantiza input limpio al overlay
-    r2 = subprocess.run(
-        [_ffmpeg_bin(), "-y", "-i", raw,
-         "-vf", f"scale={VW}:{VH},format=yuv420p,{ov}",
-         "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
-         "-pix_fmt", "yuv420p", "-color_range", "tv",
-         "-movflags", "+faststart",
-         output],
-        capture_output=True, timeout=300
-    )
-
-    if r2.returncode != 0:
+    cmd = [
+        _ffmpeg_bin(), "-y",
+        *inputs,
+        "-filter_complex", fc,
+        "-map", "[final]",
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+        "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
+        output,
+    ]
+    log.info("Slideshow ONE-PASS: %d fotos → %s", n, output)
+    r = subprocess.run(cmd, capture_output=True, timeout=300)
+    if r.returncode != 0:
         raise RuntimeError(
-            f"FFmpeg overlay error:\n{r2.stderr.decode('utf-8', errors='replace')[-800:]}"
+            f"FFmpeg slideshow error:\n{r.stderr.decode('utf-8', errors='replace')[-800:]}"
         )
     return output
 
