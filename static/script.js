@@ -306,6 +306,9 @@ form.addEventListener('submit', async e => {
     lastPropertyId = data.property_id || null;
     renderResults(data);
 
+    // Deshabilitar "Ver inmueble" hasta que video_ready = true en DB
+    if (lastPropertyId) startVideoReadyPolling(lastPropertyId);
+
   } catch (err) {
     showToast(`❌ ${err.message}`);
     showPanel('empty');
@@ -513,6 +516,49 @@ function openPropiedad() {
   window.open(`/propiedad/${lastPropertyId}`, '_blank');
 }
 
+/* ── Polling: esperar a que video_ready = true en DB ── */
+let _readyTimer = null;
+
+function startVideoReadyPolling(propertyId) {
+  const btn    = document.getElementById('btnVerInmueble');
+  const txtEl  = btn.querySelector('.btn-pdf-text');
+
+  // Deshabilitar botón mientras el video se procesa
+  btn.disabled = true;
+  txtEl.textContent = '⏳ Preparando link...';
+
+  if (_readyTimer) clearInterval(_readyTimer);
+
+  let elapsed = 0;
+  const MAX_WAIT = 120; // 2 minutos máximo
+
+  _readyTimer = setInterval(async () => {
+    elapsed += 5;
+    try {
+      const res  = await fetch(`/property-ready/${propertyId}`);
+      if (!res.ok) throw new Error('poll error');
+      const data = await res.json();
+
+      if (data.ready) {
+        clearInterval(_readyTimer);
+        btn.disabled = false;
+        txtEl.textContent = '🌐 Ver inmueble';
+        showToast(data.video_url
+          ? '✅ Link listo — el video ya está disponible'
+          : '✅ Link listo — abre la página del inmueble'
+        );
+        return;
+      }
+    } catch (_) { /* seguir intentando */ }
+
+    if (elapsed >= MAX_WAIT) {
+      clearInterval(_readyTimer);
+      btn.disabled = false;
+      txtEl.textContent = '🌐 Ver inmueble';
+    }
+  }, 5000);
+}
+
 /* ── Descargar imagen (legacy, mantenido por si se restaura) ── */
 function downloadImage() {
   if (!lastPDFData) return;
@@ -617,8 +663,12 @@ function resetForm() {
   photoPreview.innerHTML = '';
   uploadPlaceholder.style.display = '';
   lastPDFData = null;
+  lastPropertyId = null;
   selectedCoverIndex = 0;
   if (videoPollingTimer) { clearInterval(videoPollingTimer); videoPollingTimer = null; }
+  if (_readyTimer) { clearInterval(_readyTimer); _readyTimer = null; }
+  const btnVer = document.getElementById('btnVerInmueble');
+  if (btnVer) { btnVer.disabled = false; btnVer.querySelector('.btn-pdf-text').textContent = '🌐 Ver inmueble'; }
   document.getElementById('videoProgressWrap').style.display  = 'none';
   document.getElementById('videoDownloadWrap').style.display  = 'none';
   removeLogo();

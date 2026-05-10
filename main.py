@@ -1,10 +1,13 @@
 import asyncio
 import json as _json
+import logging
 import os
 import re
 import shutil
 import tempfile
 import uuid
+
+log = logging.getLogger(__name__)
 from pathlib import Path
 from typing import List, Optional
 
@@ -24,7 +27,10 @@ load_dotenv()
 app = FastAPI(title="ListaPro")
 
 BASE_DIR = Path(__file__).parent
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+_tpl_dir = BASE_DIR / "Templates"
+if not _tpl_dir.exists():
+    _tpl_dir = BASE_DIR / "templates"
+templates = Jinja2Templates(directory=str(_tpl_dir))
 
 # Crear carpetas necesarias si no existen (por si Railway no las recibe del repo)
 _static_dir  = BASE_DIR / "static"
@@ -96,29 +102,56 @@ def extract_logo_palette(logo_path: str) -> dict:
 
 
 def _parse_descriptions(raw: str) -> list:
-    """Extrae el array de descripciones del texto del modelo, tolerando markdown."""
-    # Eliminar bloques de código markdown (```json ... ``` o ``` ... ```)
-    text = re.sub(r'```(?:json)?', '', raw).replace('```', '').strip()
+    """
+    Extrae el array de descripciones de la respuesta del modelo.
+    Tolera markdown (```json...```), texto previo/posterior y arrays anidados.
+    """
+    m = re.search(r'```(?:json)?\s*([\s\S]*?)```', raw)
+    if m:
+        try:
+            result = _json.loads(m.group(1).strip())
+            if isinstance(result, list) and result:
+                return [str(s).strip() for s in result if s]
+        except Exception:
+            pass
 
-    # Intentar parsear directamente
     try:
-        result = _json.loads(text)
-        if isinstance(result, list) and result:
-            return [str(s).strip() for s in result if s]
+        start = raw.index('[')
+        depth, end = 0, -1
+        in_string, escape = False, False
+        for i in range(start, len(raw)):
+            c = raw[i]
+            if escape:
+                escape = False
+                continue
+            if c == '\\' and in_string:
+                escape = True
+                continue
+            if c == '"':
+                in_string = not in_string
+                continue
+            if not in_string:
+                if c == '[':
+                    depth += 1
+                elif c == ']':
+                    depth -= 1
+                    if depth == 0:
+                        end = i
+                        break
+        if end > start:
+            result = _json.loads(raw[start:end + 1])
+            if isinstance(result, list) and result:
+                return [str(s).strip() for s in result if s]
     except Exception:
         pass
 
-    # Buscar el primer array JSON dentro del texto
     try:
-        start = text.index('[')
-        end   = text.rindex(']')
-        result = _json.loads(text[start:end + 1])
-        if isinstance(result, list) and result:
-            return [str(s).strip() for s in result if s]
+        found = re.findall(r'"((?:[^"\\]|\\.){20,})"', raw)
+        if found:
+            return [s.strip() for s in found[:5]]
     except Exception:
         pass
 
-    # Fallback: devolver el texto completo como única descripción
     return [raw]
 
 
@@ -293,7 +326,7 @@ Requisitos por descripción:
 - Entre 50 y 70 palabras
 - Texto plano, sin asteriscos ni markdown
 
-Devuelve ÚNICAMENTE un JSON array con 5 strings, sin explicaciones:
+IMPORTANTE: Responde SOLO con el array JSON, sin texto antes ni después, sin bloques de código, sin comillas triples:
 ["descripción 1", "descripción 2", "descripción 3", "descripción 4", "descripción 5"]
 
 Datos:
@@ -367,9 +400,44 @@ Datos:
             telefono_agente,
             f"Hola, estoy interesado en la propiedad en {direccion}, {ciudad}"
         ),
-        "video_url":         None,
-        "otras_propiedades": None,
+        "video_url":              None,
+        "video_recorrido_url":    None,
+        # video_ready = True significa: link disponible para compartir con el cliente
+        # Si no hay FFmpeg, se habilita de inmediato (sin video)
+        "video_ready":            False,
+        "otras_propiedades":      None,
     })
+
+    # ── Auto-generar video (FFmpeg) → subir Cloudinary → video_ready = True ──
+    import threading
+    from video_utils import ffmpeg_available
+
+    if ffmpeg_available() and foto_paths:
+        _auto_task_id = str(uuid.uuid4())
+        _video_tasks[_auto_task_id] = {
+            "status": "running", "progress": 0, "status_text": "iniciando",
+            "output_path": None, "error": None, "video_url": None,
+            "property_id": property_id,
+        }
+        _auto_video_data = {
+            "fotos":             foto_paths,
+            "nombre_agente":     nombre_agente,
+            "telefono_agente":   telefono_agente,
+            "habitaciones":      habitaciones or "",
+            "banos":             banos or "",
+            "metros_construidos": metros_construidos or "",
+            "video_url_propio":  None,
+        }
+        threading.Thread(
+            target=_video_task,
+            args=(_auto_task_id, _auto_video_data, property_id, "video_url"),
+            daemon=True,
+        ).start()
+        log.info("Video task iniciado: %s para propiedad %s", _auto_task_id, property_id)
+    else:
+        # Sin FFmpeg o sin fotos: el link queda listo de inmediato
+        db.update_property(property_id, {"video_ready": True})
+        log.warning("FFmpeg no disponible o sin fotos — video_ready=True inmediato.")
 
     return JSONResponse({
         "descripcion":       descripcion,
@@ -437,7 +505,7 @@ async def upload_video_endpoint(video: UploadFile = File(...)):
         pass
 
     # Fallback: guardar local
-    dest = _local_uploads / tmp.name
+    dest = _uploads_dir / tmp.name
     shutil.move(str(tmp), str(dest))
     return JSONResponse({"url": f"/uploads/{dest.name}"})
 
@@ -448,7 +516,51 @@ async def ver_propiedad(property_id: str, request: Request):
     data = db.get_property(property_id)
     if not data:
         raise HTTPException(status_code=404, detail="Propiedad no encontrada.")
-    return templates.TemplateResponse("propiedad.html", {"request": request, **data})
+    # Propiedades relacionadas para la sección "Otros inmuebles"
+    otras = db.get_recent_properties(limit=3, exclude_id=property_id)
+    return templates.TemplateResponse("propiedad.html", {
+        "request":          request,
+        "property_id":      property_id,
+        "otras_propiedades": otras if otras else None,
+        **data,
+    })
+
+
+# ── Consulta de video para la página pública ─────────────────────────────────
+@app.get("/propiedad-video-status/{property_id}")
+async def propiedad_video_status(property_id: str):
+    data = db.get_property(property_id)
+    if not data:
+        raise HTTPException(status_code=404)
+    # Filtrar solo las tareas de ESTA propiedad (no de otras)
+    generating = any(
+        t.get("status") == "running" and t.get("property_id") == property_id
+        for t in _video_tasks.values()
+    )
+    return JSONResponse({
+        "video_url":             data.get("video_url"),
+        "video_url_error":       data.get("video_url_error"),
+        "video_recorrido_url":   data.get("video_recorrido_url"),
+        "video_recorrido_error": data.get("video_recorrido_url_error"),
+        "generating":            generating,
+        "video_ready":           bool(data.get("video_ready", False)),
+    })
+
+
+# ── Estado de preparación del link de la propiedad ───────────────────────────
+@app.get("/property-ready/{property_id}")
+async def property_ready(property_id: str):
+    """
+    El frontend hace polling aquí cada 5 s.
+    Devuelve ready=True cuando el video ya está en Cloudinary (o si no hay video que generar).
+    """
+    data = db.get_property(property_id)
+    if not data:
+        raise HTTPException(status_code=404)
+    return JSONResponse({
+        "ready":     bool(data.get("video_ready", False)),
+        "video_url": data.get("video_url"),
+    })
 
 
 # ── Consulta de video para la página pública ─────────────────────────────────
@@ -472,57 +584,60 @@ async def propiedad_video_status(property_id: str):
 _video_tasks: dict = {}
 
 
-def _video_task(task_id: str, data: dict, prop_id: Optional[str]):
-    """Hilo de fondo: genera o procesa el video y sube a Cloudinary."""
+def _video_task(task_id: str, data: dict, prop_id: Optional[str],
+               field: str = "video_url"):
+    """
+    Hilo de fondo.  field indica qué campo actualizar en DB:
+      "video_url"           → slideshow automático desde fotos
+      "video_recorrido_url" → video del usuario con overlays
+    """
     import video_utils
 
-    def _update(**kw):
+    def _up(**kw):
         _video_tasks[task_id].update(kw)
 
     try:
-        _update(progress=5, status_text="preparando")
+        _up(progress=5, status_text="preparando")
 
         nombre   = data.get("nombre_agente", "")
         telefono = data.get("telefono_agente", "") or data.get("telefono", "")
         specs    = {
-            "metros":        data.get("metros_construidos") or data.get("metros", ""),
-            "habitaciones":  data.get("habitaciones", ""),
-            "banos":         data.get("banos", ""),
+            "metros":       data.get("metros_construidos") or data.get("metros", ""),
+            "habitaciones": data.get("habitaciones", ""),
+            "banos":        data.get("banos", ""),
         }
-        fotos           = [f for f in data.get("fotos", []) if f][:6]
+        fotos            = [f for f in data.get("fotos", []) if f][:6]
         video_url_propio = data.get("video_url_propio")
 
-        _update(progress=10, status_text="generando video")
+        _up(progress=10, status_text="generando video")
 
         if video_url_propio:
-            # Plan A: añadir overlays al video del usuario
             local_out = video_utils.add_overlays(video_url_propio, nombre, telefono, specs)
         else:
-            # Plan B: slideshow Ken Burns desde las fotos
             if not fotos:
-                raise ValueError("No hay fotos para generar el video")
+                raise ValueError("No hay fotos disponibles para generar el video.")
             local_out = video_utils.generate_slideshow(fotos, nombre, telefono, specs)
 
-        _update(progress=75, status_text="subiendo a la nube")
+        _up(progress=75, status_text="subiendo a la nube")
 
-        # Subir a Cloudinary
         cloud_url = video_utils.upload_video(local_out)
-
         if cloud_url:
             video_url = cloud_url
         else:
-            # Fallback local (solo funciona en desarrollo)
+            # Fallback local solo en desarrollo
             dest = Path("video_output") / f"{task_id}.mp4"
             dest.parent.mkdir(exist_ok=True)
             shutil.copy2(local_out, str(dest))
             video_url = f"/download-video/{task_id}"
-            _update(output_path=str(dest))
+            _up(output_path=str(dest))
 
-        # Guardar URL en la propiedad (Supabase o memoria)
         if prop_id:
-            db.update_property(prop_id, {"video_url": video_url})
+            update = {field: video_url, f"{field}_error": None}
+            if field == "video_url":
+                update["video_ready"] = True  # habilita el botón "Ver inmueble"
+            db.update_property(prop_id, update)
 
-        _update(status="done", progress=100, status_text="completado", video_url=video_url)
+        _up(status="done", progress=100, status_text="completado", video_url=video_url)
 
         try:
             Path(local_out).unlink(missing_ok=True)
@@ -532,32 +647,56 @@ def _video_task(task_id: str, data: dict, prop_id: Optional[str]):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        _update(status="error", error=str(e), progress=0)
+        err_msg = str(e)
+        _up(status="error", error=err_msg, progress=0)
+        if prop_id:
+            update_err = {f"{field}_error": err_msg}
+            if field == "video_url":
+                update_err["video_ready"] = True  # error no debe bloquear el link para siempre
+            db.update_property(prop_id, update_err)
 
 
 @app.post("/generate-video")
 async def generate_video(request: PropertyRequest):
+    """
+    Genera video según el campo 'video_url_propio':
+    - Sin video propio → slideshow automático → campo video_url
+    - Con video propio → overlays → campo video_recorrido_url
+    """
     import threading
+    from video_utils import ffmpeg_available
+
+    if not ffmpeg_available():
+        raise HTTPException(
+            status_code=503,
+            detail="FFmpeg no disponible en este servidor. El video estará activo en Railway."
+        )
 
     data    = request.model_dump()
     base    = Path(__file__).parent
     prop_id = data.pop("property_id", None)
 
-    # Convertir rutas locales a absolutas; URLs de Cloudinary pasan intactas
     data["fotos"] = [
         str(base / p.lstrip("/").replace("/", os.sep)) if p.startswith("/uploads/") else p
         for p in data.get("fotos", []) if p
     ]
+
+    # Determinar qué campo actualizar en DB según el tipo de video
+    is_recorrido = bool(data.get("video_url_propio"))
+    field        = "video_recorrido_url" if is_recorrido else "video_url"
 
     task_id = str(uuid.uuid4())
     _video_tasks[task_id] = {
         "status": "running", "progress": 0,
         "status_text": "iniciando", "output_path": None,
         "error": None, "video_url": None,
+        "property_id": prop_id or "",
     }
 
-    threading.Thread(target=_video_task, args=(task_id, data, prop_id), daemon=True).start()
-    return JSONResponse({"task_id": task_id})
+    threading.Thread(
+        target=_video_task, args=(task_id, data, prop_id, field), daemon=True
+    ).start()
+    return JSONResponse({"task_id": task_id, "field": field})
 
 
 @app.get("/video-status/{task_id}")
@@ -576,10 +715,11 @@ async def video_status(task_id: str):
 
 @app.get("/download-video/{task_id}")
 async def download_video(task_id: str):
-    from video_generator import get_task_output_path
-    output = get_task_output_path(task_id)
+    """Sirve el video local cuando Cloudinary no está configurado (solo desarrollo)."""
+    task = _video_tasks.get(task_id)
+    output = task.get("output_path") if task else None
     if not output or not os.path.exists(output):
-        raise HTTPException(status_code=404, detail="Video no listo o no encontrado")
+        raise HTTPException(status_code=404, detail="Video no encontrado o ya expirado.")
 
     def iter_file():
         with open(output, "rb") as f:
@@ -589,5 +729,5 @@ async def download_video(task_id: str):
     return StreamingResponse(
         iter_file(),
         media_type="video/mp4",
-        headers={"Content-Disposition": f"attachment; filename=ListaPro_reel_{task_id[:8]}.mp4"},
+        headers={"Content-Disposition": f"attachment; filename=listapro_{task_id[:8]}.mp4"},
     )
