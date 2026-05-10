@@ -235,35 +235,28 @@ def generate_slideshow(
         raise ValueError("No se pudo descargar ninguna foto.")
 
     n     = len(locals_)
-    total = n * dur_per - (n - 1) * fade if n > 1 else dur_per
+    total = n * dur_per  # concat: sin overlap entre clips
 
-    # Paso 1: convertir cada imagen a clip MP4 (PTS correcto, framerate fijo)
+    # Paso 1: Cada imagen → clip MP4 individual (Ken Burns, PTS limpio)
     clips = []
     for i, lp in enumerate(locals_):
         clip = _make_clip(lp, i, dur_per)
         clips.append(clip)
         log.info("Clip %d/%d generado", i + 1, n)
 
-    # Paso 2: inputs desde los clips MP4
+    # Paso 2: Inputs
     inputs = []
     for clip in clips:
         inputs += ["-i", clip]
 
-    # Paso 3: filter_complex — xfade sobre clips reales + overlays
+    # Paso 3: filter_complex con concat (robusto, sin bugs de PTS que tiene xfade)
     ov = _overlay_vf(nombre, telefono, specs, total)
 
     if n == 1:
         filter_complex = f"[0:v]{ov}[final]"
     else:
-        xf_parts = []
-        for i in range(1, n):
-            a   = "[0:v]"      if i == 1 else f"[xf{i-2}]"
-            out = "[vout]"     if i == n - 1 else f"[xf{i-1}]"
-            off = i * (dur_per - fade)
-            xf_parts.append(
-                f"{a}[{i}:v]xfade=transition=fade:duration={fade:.2f}:offset={off:.2f}{out}"
-            )
-        filter_complex = ";".join(xf_parts) + f";[vout]{ov}[final]"
+        concat_in = "".join(f"[{i}:v]" for i in range(n))
+        filter_complex = f"{concat_in}concat=n={n}:v=1:a=0[vout];[vout]{ov}[final]"
 
     output = str(Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.mp4")
     cmd = [
@@ -279,10 +272,10 @@ def generate_slideshow(
         output,
     ]
     log.info("Generando slideshow %dp para %d fotos (%.0fs)...", VH, n, total)
-    r = subprocess.run(cmd, capture_output=True, timeout=180)  # 3 min máximo
+    r = subprocess.run(cmd, capture_output=True, timeout=300)
     if r.returncode != 0:
         raise RuntimeError(
-            f"FFmpeg slideshow error:\n{r.stderr.decode('utf-8', errors='replace')[-600:]}"
+            f"FFmpeg slideshow error:\n{r.stderr.decode('utf-8', errors='replace')[-800:]}"
         )
     return output
 
