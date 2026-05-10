@@ -146,23 +146,24 @@ def _esc(text: str) -> str:
     )
 
 
+_XFADE_DUR = 0.5   # duración del crossfade (segundos)
+
+
 def _overlay_vf(nombre: str, telefono: str, specs: dict, dur: float,
                 n_photos: int = 1, dur_per: float = DUR_PER) -> str:
     """
-    Overlays sobre el video:
-    - Barra inferior: nombre y teléfono del agente (fijos, centrados)
-    - Superior izquierdo: datos del inmueble rotando cada foto
+    Franja inferior estilo cristal ahumado:
+    - Izquierda: datos del inmueble rotando cada foto
+    - Derecha:   nombre y WhatsApp del agente (siempre fijos)
     """
     font = _font()
     fp   = f":fontfile='{font}'" if font else ""
     fv   = []
 
-    # ── Barra inferior con datos del agente (idéntica a la versión que funcionaba) ──
-    fv.append("drawbox=y=ih-70:color=black@0.72:width=iw:height=70:t=fill")
-    fv.append(f"drawtext=text='{_esc(nombre)}':fontsize=26{fp}:fontcolor=white:x=(w-tw)/2:y=h-55")
-    fv.append(f"drawtext=text='{_esc(telefono)}':fontsize=19{fp}:fontcolor=#25D366:x=(w-tw)/2:y=h-28")
+    # Franja cristal (60 % opacidad, ancho completo)
+    fv.append("drawbox=y=ih-80:color=black@0.60:width=iw:height=80:t=fill")
 
-    # ── Datos del inmueble rotando (superior izquierdo, cambia cada foto) ──────────
+    # Datos del inmueble — izquierda, rotan
     data_items = []
     if specs.get("metros"):
         data_items.append(f"{specs['metros']} m2")
@@ -177,13 +178,22 @@ def _overlay_vf(nombre: str, telefono: str, specs: dict, dur: float,
         if not data_items:
             break
         item = data_items[i % len(data_items)]
-        t0   = i * dur_per
-        t1   = (i + 1) * dur_per
+        t0 = i * dur_per
+        t1 = (i + 1) * dur_per
         fv.append(
-            f"drawtext=text='{_esc(item)}':fontsize=30{fp}:fontcolor=white"
-            f":x=25:y=30:box=1:boxcolor=black@0.55:boxborderw=12"
-            f":enable='between(t,{t0:.1f},{t1:.1f})'"
+            f"drawtext=text='{_esc(item)}':fontsize=28{fp}:fontcolor=white"
+            f":x=30:y=ih-52:enable='between(t,{t0:.1f},{t1:.1f})'"
         )
+
+    # Agente — derecha, siempre visible
+    fv.append(
+        f"drawtext=text='{_esc(nombre)}':fontsize=18{fp}"
+        f":fontcolor=white:x=iw-tw-25:y=ih-60"
+    )
+    fv.append(
+        f"drawtext=text='{_esc(telefono)}':fontsize=16{fp}"
+        f":fontcolor=#25D366:x=iw-tw-25:y=ih-34"
+    )
 
     return ",".join(fv)
 
@@ -192,14 +202,25 @@ def _overlay_vf(nombre: str, telefono: str, specs: dict, dur: float,
 
 def _make_clip(img_path: str, idx: int, dur: float) -> str:
     """
-    Convierte una imagen JPEG a un clip MP4 de duración exacta con efecto Ken Burns.
-    Usar clips MP4 como entrada del xfade es mucho más estable que -loop 1 en filter_complex.
+    JPEG → clip MP4 con Ken Burns (panning suave usando crop dinámico).
+    El filtro crop evalúa x/y por frame usando 't' (segundos), sin zoompan lento.
     """
     out = str(Path(tempfile.mkdtemp()) / f"clip_{idx}.mp4")
-    # Center crop: escala para llenar 1280x720 manteniendo proporciones, recorta centrado
+    SW, SH = int(VW * 1.10), int(VH * 1.10)   # 10 % más grande (1408×792)
+    dx, dy = SW - VW, SH - VH                  # espacio disponible: 128px, 72px
+
+    # 4 direcciones de pan, ciclan por foto
+    pans = [
+        f"x='(t/{dur:.2f})*{dx}':y='{dy//2}'",        # L → R
+        f"x='(1-t/{dur:.2f})*{dx}':y='{dy//2}'",      # R → L
+        f"x='{dx//2}':y='(t/{dur:.2f})*{dy}'",        # T → B
+        f"x='{dx//2}':y='(1-t/{dur:.2f})*{dy}'",      # B → T
+    ]
+
     vf = (
-        f"scale={VW}:{VH}:force_original_aspect_ratio=increase,"
-        f"crop={VW}:{VH}"
+        f"scale={SW}:{SH}:force_original_aspect_ratio=increase,"
+        f"crop={SW}:{SH},"
+        f"crop={VW}:{VH}:{pans[idx % 4]}"
     )
     cmd = [
         _ffmpeg_bin(), "-y",
@@ -223,6 +244,18 @@ def _make_clip(img_path: str, idx: int, dur: float) -> str:
     return out
 
 
+def _build_cmd(ffmpeg: str, inputs: list, fc: str, output: str) -> list:
+    return [
+        ffmpeg, "-y", *inputs,
+        "-filter_complex", fc,
+        "-map", "[final]",
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+        "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
+        output,
+    ]
+
+
 def generate_slideshow(
     photo_sources: List[str],
     nombre: str,
@@ -231,7 +264,7 @@ def generate_slideshow(
     dur_per: float = DUR_PER,
     fade: float = FADE,
 ) -> str:
-    """Crea slideshow 720p Ken Burns + crossfade + overlays. Devuelve ruta MP4."""
+    """Slideshow 720p: Ken Burns + crossfade (xfade) con fallback a concat."""
     if not ffmpeg_available():
         raise RuntimeError("FFmpeg no está instalado en este servidor.")
 
@@ -246,49 +279,62 @@ def generate_slideshow(
     if not locals_:
         raise ValueError("No se pudo descargar ninguna foto.")
 
-    n     = len(locals_)
-    total = n * dur_per  # concat: sin overlap entre clips
+    n = len(locals_)
 
-    # Paso 1: Cada imagen → clip MP4 individual (Ken Burns, PTS limpio)
+    # Paso 1: Cada imagen → clip MP4 con Ken Burns panning
     clips = []
     for i, lp in enumerate(locals_):
-        clip = _make_clip(lp, i, dur_per)
-        clips.append(clip)
+        clips.append(_make_clip(lp, i, dur_per))
         log.info("Clip %d/%d generado", i + 1, n)
 
-    # Paso 2: Inputs
     inputs = []
     for clip in clips:
         inputs += ["-i", clip]
 
-    # Paso 3: filter_complex con concat (robusto, sin bugs de PTS que tiene xfade)
-    ov = _overlay_vf(nombre, telefono, specs, total, n_photos=n, dur_per=dur_per)
-
-    if n == 1:
-        filter_complex = f"[0:v]{ov}[final]"
-    else:
-        concat_in = "".join(f"[{i}:v]" for i in range(n))
-        filter_complex = f"{concat_in}concat=n={n}:v=1:a=0[vout];[vout]{ov}[final]"
+    # Overlay (franja cristal inferior con datos + agente)
+    ov = _overlay_vf(nombre, telefono, specs,
+                     n * dur_per, n_photos=n, dur_per=dur_per)
 
     output = str(Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.mp4")
-    cmd = [
-        _ffmpeg_bin(), "-y",
-        *inputs,
-        "-filter_complex", filter_complex,
-        "-map", "[final]",
-        "-c:v", "libx264",
-        "-preset", "veryfast",
-        "-crf", "23",
-        "-pix_fmt", "yuv420p",
-        "-movflags", "+faststart",
-        output,
-    ]
-    log.info("Generando slideshow %dp para %d fotos (%.0fs)...", VH, n, total)
-    r = subprocess.run(cmd, capture_output=True, timeout=300)
+    ff = _ffmpeg_bin()
+
+    # ── Intento 1: xfade (crossfade suave entre fotos) ───────────────────────────
+    if n == 1:
+        fc = f"[0:v]{ov},setpts=PTS-STARTPTS[final]"
+    else:
+        xf = []
+        for i in range(1, n):
+            a   = "[0:v]"    if i == 1    else f"[xf{i-2}]"
+            out = "[vout]"   if i == n-1  else f"[xf{i-1}]"
+            off = i * (dur_per - _XFADE_DUR)
+            xf.append(
+                f"{a}[{i}:v]xfade=transition=fade"
+                f":duration={_XFADE_DUR:.2f}:offset={off:.2f}{out}"
+            )
+        fc = ";".join(xf) + f";[vout]{ov},setpts=PTS-STARTPTS[final]"
+
+    log.info("Intentando xfade (%d fotos)...", n)
+    r = subprocess.run(_build_cmd(ff, inputs, fc, output),
+                       capture_output=True, timeout=300)
+
+    # ── Fallback: concat si xfade falla ──────────────────────────────────────────
     if r.returncode != 0:
-        raise RuntimeError(
-            f"FFmpeg slideshow error:\n{r.stderr.decode('utf-8', errors='replace')[-800:]}"
-        )
+        log.warning("xfade falló, usando concat como fallback.")
+        if n == 1:
+            fc_concat = f"[0:v]{ov}[final]"
+        else:
+            ci = "".join(f"[{i}:v]" for i in range(n))
+            fc_concat = f"{ci}concat=n={n}:v=1:a=0[vout];[vout]{ov}[final]"
+
+        r2 = subprocess.run(_build_cmd(ff, inputs, fc_concat, output),
+                            capture_output=True, timeout=300)
+        if r2.returncode != 0:
+            raise RuntimeError(
+                f"FFmpeg slideshow error:\n"
+                f"{r2.stderr.decode('utf-8', errors='replace')[-800:]}"
+            )
+
+    log.info("Slideshow generado: %s", output)
     return output
 
 
