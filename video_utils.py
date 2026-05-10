@@ -132,12 +132,14 @@ def _esc(text: str) -> str:
 def _overlay_vf(nombre: str, telefono: str, specs: dict, dur: float,
                 n_photos: int = 1, dur_per: float = DUR_PER) -> str:
     """
-    Overlay premium para 1080×1350:
-      - Precio arriba derecha (dorado #FFD700)
-      - Franja inferior: ciudad/dirección (izq) · specs/teléfono (der)
+    Overlay premium 1080×1350.
 
-    CRÍTICO: drawtext usa 'w' y 'h' — NUNCA 'iw'/'ih' (causan y=-52 → error -22).
-    drawbox SÍ puede usar 'iw'/'ih'.
+    REGLA ABSOLUTA de FFmpeg:
+      drawtext  → 'w', 'h', 'tw'  (NUNCA iw/ih → producen 0 → error -22)
+      drawbox   → 'iw', 'ih'      (válido)
+      Posiciones absolutas (enteros) no usan variables → siempre seguras.
+
+    Datos del inmueble rotan en sincronía con las fotos via enable='between(t,...)'.
     """
     font = _font()
     fp   = f":fontfile='{font}'" if font else ""
@@ -147,59 +149,62 @@ def _overlay_vf(nombre: str, telefono: str, specs: dict, dur: float,
     ciudad    = _esc(specs.get("ciudad", ""))
     direccion = _esc(specs.get("direccion", ""))
 
-    # ── Precio arriba derecha (dorado) ────────────────────────────────────────
+    # ── Precio arriba derecha (dorado) — usa 'w' y 'tw', válidos en drawtext ──
     if precio:
         fv.append(
             f"drawtext=text='{precio}':fontsize=30{fp}"
-            f":fontcolor=#FFD700"
-            f":x=w-tw-20:y=24"                  # 'w' y 'tw' válidos en drawtext
+            f":fontcolor=#FFD700:x=w-tw-20:y=24"
             f":box=1:boxcolor=black@0.50:boxborderw=10"
         )
 
-    # ── Franja inferior (drawbox: iw/ih válidos aquí) ─────────────────────────
+    # ── Franja inferior — drawbox usa iw/ih (correcto) ───────────────────────
     STRIP_H = 150
-    SY      = VH - STRIP_H          # 1200 (posición absoluta, sin variables)
-    fv.append(
-        f"drawbox=y={SY}:color=black@0.65:width=iw:height={STRIP_H}:t=fill"
-    )
+    SY      = VH - STRIP_H    # 1200 — entero absoluto, sin variable FFmpeg
+    fv.append(f"drawbox=y={SY}:color=black@0.65:width=iw:height={STRIP_H}:t=fill")
 
-    # ── Columna izquierda — drawtext usa posiciones absolutas + 'w'/'h' ───────
+    # ── Izquierda: ciudad · dirección · agente — posiciones absolutas ─────────
     if ciudad:
         fv.append(
             f"drawtext=text='{ciudad}':fontsize=30{fp}"
-            f":fontcolor=white:x=20:y={SY + 15}"   # y absoluto → sin variables
+            f":fontcolor=white:x=20:y={SY + 15}"
         )
     if direccion:
         fv.append(
             f"drawtext=text='{direccion}':fontsize=20{fp}"
-            f":fontcolor=white@0.80:x=20:y={SY + 55}"
+            f":fontcolor=white@0.80:x=20:y={SY + 57}"
         )
     fv.append(
         f"drawtext=text='{_esc(nombre)}':fontsize=18{fp}"
         f":fontcolor=white@0.70:x=20:y={SY + 100}"
     )
 
-    # ── Columna derecha — specs en fila + teléfono dorado ────────────────────
-    spec_parts = []
+    # ── Derecha: specs rotativas (enable sincronizado con las fotos) ───────────
+    data_items = []
     if specs.get("metros"):
-        spec_parts.append(f"{specs['metros']}m2")
+        data_items.append(f"{specs['metros']}m2")
     if specs.get("habitaciones"):
-        spec_parts.append(f"{specs['habitaciones']}Hab")
+        data_items.append(f"{specs['habitaciones']} Hab")
     if specs.get("banos"):
-        spec_parts.append(f"{specs['banos']}Ban")
+        data_items.append(f"{specs['banos']} Banos")
     if specs.get("estacionamientos"):
-        spec_parts.append(f"{specs['estacionamientos']}Parq")
+        data_items.append(f"{specs['estacionamientos']} Parq")
 
-    if spec_parts:
-        spec_str = " - ".join(spec_parts)
+    # Cada spec visible solo durante su foto (enable usa 't' — válido en drawtext)
+    for i in range(n_photos):
+        if not data_items:
+            break
+        item = data_items[i % len(data_items)]
+        t0, t1 = i * dur_per, (i + 1) * dur_per
         fv.append(
-            f"drawtext=text='{_esc(spec_str)}':fontsize=22{fp}"
-            f":fontcolor=white:x=w-tw-20:y={SY + 18}"   # 'w' válido en drawtext
+            f"drawtext=text='{_esc(item)}':fontsize=26{fp}"
+            f":fontcolor=white:x=w-tw-20:y={SY + 22}"
+            f":enable='between(t,{t0:.1f},{t1:.1f})'"
         )
 
+    # Teléfono dorado — fijo, siempre visible
     fv.append(
         f"drawtext=text='{_esc(telefono)}':fontsize=26{fp}"
-        f":fontcolor=#FFD700:x=w-tw-20:y={SY + 92}"
+        f":fontcolor=#FFD700:x=w-tw-20:y={SY + 90}"
     )
 
     return ",".join(fv)
@@ -263,15 +268,11 @@ def _make_clip(img_path: str, idx: int, dur: float) -> str:
         "-loop", "1", "-i", img_path,
         "-filter_complex", fc,
         "-map", "[out]",
-        "-map_metadata", "-1",        # elimina ICC Profile y side-data problemáticos
+        "-map_metadata", "-1",   # elimina ICC Profile que confunde al encoder
         "-t", str(dur),
         "-r", str(FPS),
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18",
-        "-pix_fmt", "yuv420p",
-        "-colorspace", "bt709",
-        "-color_primaries", "bt709",
-        "-color_trc", "bt709",
-        "-color_range", "tv",
+        "-pix_fmt", "yuv420p",   # NO color space flags: evita bt709/unknown mismatch
         out,
     ]
     r = subprocess.run(cmd, capture_output=True, timeout=180)
@@ -321,43 +322,59 @@ def generate_slideshow(
     for i, lp in enumerate(locals_):
         clips.append(_make_clip(lp, i, dur_per))
 
-    # Paso 3: ensamblar con concat + overlay
+    # ── Paso 3a: Concat clips → video crudo SIN overlay ─────────────────────────
+    # Separar concat del overlay elimina el conflicto de color metadata (bt709/unknown)
+    # que causa frame=0 cuando ambos están en el mismo filter_complex.
     inputs: List[str] = []
     for clip in clips:
         inputs += ["-i", clip]
 
-    ov = _overlay_vf(nombre, telefono, specs,
-                     n * dur_per, n_photos=n, dur_per=dur_per)
+    raw = str(Path(tempfile.mkdtemp()) / f"raw_{uuid.uuid4()}.mp4")
 
-    # format=yuv420p en cada entrada limpia el ICC Profile y normaliza color metadata
-    # antes de que concat y el overlay los procesen → elimina el frame=0 error
     if n == 1:
-        fc = f"[0:v]format=yuv420p,{ov}[final]"
+        # Un solo clip: copiar sin re-encodear
+        r1 = subprocess.run(
+            [_ffmpeg_bin(), "-y", "-i", clips[0], "-c", "copy", raw],
+            capture_output=True, timeout=60
+        )
     else:
+        # Concat simple — format=yuv420p normaliza cada clip antes de unirlos
         norm = "".join(f"[{i}:v]format=yuv420p[n{i}];" for i in range(n))
         ci   = "".join(f"[n{i}]" for i in range(n))
-        fc   = f"{norm}{ci}concat=n={n}:v=1:a=0[vout];[vout]{ov}[final]"
+        fc1  = f"{norm}{ci}concat=n={n}:v=1:a=0[v]"
+        r1 = subprocess.run(
+            [_ffmpeg_bin(), "-y", *inputs,
+             "-filter_complex", fc1, "-map", "[v]",
+             "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18",
+             "-pix_fmt", "yuv420p",
+             raw],
+            capture_output=True, timeout=300
+        )
 
-    output = str(Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.mp4")
-    cmd = [
-        _ffmpeg_bin(), "-y",
-        *inputs,
-        "-filter_complex", fc,
-        "-map", "[final]",
-        "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
-        "-pix_fmt", "yuv420p",
-        "-colorspace", "bt709",
-        "-color_primaries", "bt709",
-        "-color_trc", "bt709",
-        "-color_range", "tv",
-        "-movflags", "+faststart",
-        output,
-    ]
-    log.info("Ensamblando slideshow %d fotos → %s", n, output)
-    r = subprocess.run(cmd, capture_output=True, timeout=300)
-    if r.returncode != 0:
+    if r1.returncode != 0:
         raise RuntimeError(
-            f"FFmpeg slideshow error:\n{r.stderr.decode('utf-8', errors='replace')[-800:]}"
+            f"FFmpeg concat error:\n{r1.stderr.decode('utf-8', errors='replace')[-800:]}"
+        )
+
+    # ── Paso 3b: Overlay premium sobre el video crudo con -vf (más robusto) ────
+    # -vf es más simple que -filter_complex para un input único → menos puntos de falla
+    ov = _overlay_vf(nombre, telefono, specs,
+                     n * dur_per, n_photos=n, dur_per=dur_per)
+    output = str(Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.mp4")
+
+    r2 = subprocess.run(
+        [_ffmpeg_bin(), "-y", "-i", raw,
+         "-vf", ov,
+         "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+         "-pix_fmt", "yuv420p",
+         "-movflags", "+faststart",
+         output],
+        capture_output=True, timeout=300
+    )
+
+    if r2.returncode != 0:
+        raise RuntimeError(
+            f"FFmpeg overlay error:\n{r2.stderr.decode('utf-8', errors='replace')[-800:]}"
         )
     return output
 
