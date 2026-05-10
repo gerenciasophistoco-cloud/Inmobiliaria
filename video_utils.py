@@ -205,7 +205,7 @@ def generate_slideshow(
 
     inputs = []
     for lp in locals_:
-        inputs += ["-loop", "1", "-t", str(dur_per + 1), "-i", lp]
+        inputs += ["-framerate", str(FPS), "-loop", "1", "-t", str(dur_per + 1), "-i", lp]
 
     kb_parts = [f"[{i}:v]{_kb_segment(i, dur_per)}[v{i}]" for i in range(n)]
     xf_chain, out_pad = _xfade_graph(n, dur_per, fade)
