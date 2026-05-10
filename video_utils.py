@@ -49,7 +49,10 @@ def _to_jpeg(src_path: str) -> str:
     out = str(Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.jpg")
     try:
         r = subprocess.run(
-            [_ffmpeg_bin(), "-y", "-i", src_path, "-frames:v", "1", "-q:v", "2", out],
+            [_ffmpeg_bin(), "-y", "-i", src_path,
+             "-frames:v", "1", "-q:v", "2",
+             "-map_metadata", "-1",   # elimina ICC Profile del contenedor JPEG
+             out],
             capture_output=True, timeout=30
         )
         if r.returncode == 0 and os.path.getsize(out) > 500:
@@ -152,13 +155,17 @@ def _make_clip(jpeg_path: str, idx: int, dur: float = DUR_PER) -> str:
         "-map", "[out]",
         "-t", str(dur),
         "-r", str(FPS),
-        "-map_metadata", "-1",          # elimina ICC Profile
+        "-map_metadata", "-1",
         "-c:v", "libx264",
         "-profile:v", "high",
         "-level:v", "4.2",
         "-preset", "ultrafast",
         "-crf", "18",
         "-pix_fmt", "yuv420p",
+        # filter_units elimina NAL type 6 (SEI) que contiene el ICC Profile
+        # del bitstream h264. Sin esto, el concat demuxer falla con frame=0
+        # porque h264_mp4toannexb no puede procesar el SEI corrupto.
+        "-bsf:v", "filter_units=remove_types=6",
         out,
     ]
     r = subprocess.run(cmd, capture_output=True, timeout=120)
