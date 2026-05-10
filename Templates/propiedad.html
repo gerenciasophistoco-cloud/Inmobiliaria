@@ -242,8 +242,8 @@
       <div id="mainVideoSection" class="space-y-3">
         <h3 class="font-headline-md text-headline-md">Video del inmueble</h3>
         {% if video_url %}
-        <div class="rounded-2xl overflow-hidden aspect-video w-full">
-          <video controls preload="metadata" class="w-full h-auto rounded-2xl"
+        <div class="rounded-2xl overflow-hidden w-full max-w-xs mx-auto" style="aspect-ratio:4/5">
+          <video controls preload="metadata" class="w-full h-full object-cover rounded-2xl"
                  poster="{{ fotos[0] if fotos else '' }}">
             <source src="{{ video_url }}" type="video/mp4"/>
           </video>

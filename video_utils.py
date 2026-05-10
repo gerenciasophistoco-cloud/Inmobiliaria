@@ -1,8 +1,14 @@
 """
-Generación de video con FFmpeg.
-Plan A: usuario sube video propio → agregarle overlays.
-Plan B: generar slideshow Ken Burns + crossfade desde las fotos.
-Sube el resultado a Cloudinary y devuelve la URL.
+Generación de video con FFmpeg — Formato 4:5 Premium (1080×1350).
+Arquitectura indestructible:
+  Paso 1: _to_jpeg   → normaliza imagen a JPEG limpio (maneja WebP, AVIF, etc.)
+  Paso 2: _make_clip → JPEG → clip MP4 1080×1350 con blurred background + fade
+  Paso 3: slideshow  → concat clips + overlay premium → video final
+
+REGLA CRÍTICA de FFmpeg (causa del error -22):
+  drawtext  → usa 'w' y 'h'  (NUNCA iw/ih)
+  drawbox   → usa 'iw' y 'ih' (válido)
+  crop/scale→ usa 'iw' y 'ih' (válido)
 """
 import json
 import logging
@@ -17,30 +23,18 @@ from typing import List, Optional
 
 log = logging.getLogger(__name__)
 
-# 720p — óptimo para web: carga rápida, buena calidad
-VW, VH = 1280, 720
-FPS     = 30
-DUR_PER = 3.0   # segundos por foto (el usuario pidió 3s)
-FADE    = 0.6   # duración del crossfade entre fotos
-
-# Patrones Ken Burns (crop+pan, mucho más rápido que zoompan)
-# (scale_w, scale_h, x_expr, y_expr) — crop final siempre VW×VH
-_MOVES = [
-    (VW + 160, VH + 90,  "160*t/{d}",        "(90)/2"),            # ← →
-    (VW + 160, VH + 90,  "160*(1-t/{d})",     "(90)/2"),            # → ←
-    (VW,       VH + 90,  "0",                 "90*t/{d}"),           # ↓
-    (VW,       VH + 90,  "0",                 "90*(1-t/{d})"),       # ↑
-]
+# ── Formato 4:5 — estándar de lujo para redes sociales ──────────────────────
+VW, VH  = 1080, 1350   # 4:5 vertical premium
+FPS     = 25
+DUR_PER = 3.0          # segundos por foto
+_FADE   = 0.8          # fade-in y fade-out por clip
 
 
-# ─── Utilidades ───────────────────────────────────────────────────────────────
+# ── Utilidades básicas ────────────────────────────────────────────────────────
 
 def ffmpeg_available() -> bool:
-    """True si ffmpeg está instalado y accesible."""
-    # Primero buscar en PATH
     if shutil.which("ffmpeg"):
         return True
-    # Rutas absolutas comunes en Linux (Railway/Docker)
     for p in ["/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/bin/ffmpeg"]:
         if os.path.exists(p):
             return True
@@ -48,7 +42,6 @@ def ffmpeg_available() -> bool:
 
 
 def _ffmpeg_bin() -> str:
-    """Retorna la ruta al binario de FFmpeg."""
     w = shutil.which("ffmpeg")
     if w:
         return w
@@ -59,14 +52,9 @@ def _ffmpeg_bin() -> str:
 
 
 def _to_jpeg(src_path: str) -> str:
-    """
-    Convierte cualquier imagen a JPEG limpio usando FFmpeg como primer intento.
-    FFmpeg lee WebP correctamente (ignora EXIF inválido) y produce JPEG sin problemas.
-    Pillow como fallback por si acaso.
-    """
+    """Convierte cualquier imagen a JPEG limpio (maneja WebP/AVIF con EXIF corrupto)."""
     out = str(Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.jpg")
-
-    # Intento 1: FFmpeg (más robusto con WebP/EXIF inválido de Cloudinary)
+    # Intento 1: FFmpeg (robusto, ignora EXIF inválido)
     try:
         r = subprocess.run(
             [_ffmpeg_bin(), "-y", "-i", src_path,
@@ -77,7 +65,6 @@ def _to_jpeg(src_path: str) -> str:
             return out
     except Exception:
         pass
-
     # Intento 2: Pillow
     try:
         from PIL import Image
@@ -86,12 +73,11 @@ def _to_jpeg(src_path: str) -> str:
             return out
     except Exception:
         pass
-
-    return src_path  # último recurso: original
+    return src_path
 
 
 def _download(src: str, timeout: int = 20) -> str:
-    """Descarga URL → JPEG temporal. Ruta local → convierte a JPEG si es necesario."""
+    """Descarga URL → JPEG temporal. Ruta local → convierte a JPEG."""
     if src.startswith("http://") or src.startswith("https://"):
         ext = Path(src.split("?")[0]).suffix or ".jpg"
         raw = Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}{ext}"
@@ -99,7 +85,6 @@ def _download(src: str, timeout: int = 20) -> str:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             with open(str(raw), "wb") as f:
                 f.write(resp.read())
-        # Convertir a JPEG puro: evita problemas de FFmpeg con WebP/EXIF de Cloudinary
         return _to_jpeg(str(raw))
     if src.startswith("/uploads/") or src.startswith("/tmp/"):
         candidate = Path(__file__).parent / src.lstrip("/")
@@ -109,27 +94,23 @@ def _download(src: str, timeout: int = 20) -> str:
 
 
 def _font() -> str:
-    """Retorna una fuente disponible en el sistema."""
-    candidates = [
-        # Linux (Railway/Docker con fonts-dejavu-core)
+    """Retorna ruta a fuente bold disponible en el sistema."""
+    for p in [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
         "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
-        # Windows (desarrollo local)
         "C:/Windows/Fonts/arialbd.ttf",
         "C:/Windows/Fonts/arial.ttf",
-    ]
-    for p in candidates:
+    ]:
         if os.path.exists(p):
             return p
-    # Intentar con fc-list (Linux)
     try:
-        out = subprocess.run(
+        lines = subprocess.run(
             ["fc-list", ":style=Bold", "--format=%{file}\n"],
             capture_output=True, text=True, timeout=3
         ).stdout.strip().splitlines()
-        for line in out:
+        for line in lines:
             if line.strip() and os.path.exists(line.strip()):
                 return line.strip()
     except Exception:
@@ -138,98 +119,150 @@ def _font() -> str:
 
 
 def _esc(text: str) -> str:
-    """Escapa caracteres especiales para filtros drawtext de FFmpeg."""
-    return (text
+    """Escapa texto para filtros drawtext de FFmpeg."""
+    return (str(text)
         .replace("\\", "\\\\").replace("'", "\\'")
         .replace(":", "\\:").replace(",", "\\,")
         .replace("[", "\\[").replace("]", "\\]")
     )
 
 
-_XFADE_DUR = 0.5   # duración del crossfade (segundos)
-
+# ── Overlay premium ───────────────────────────────────────────────────────────
 
 def _overlay_vf(nombre: str, telefono: str, specs: dict, dur: float,
                 n_photos: int = 1, dur_per: float = DUR_PER) -> str:
     """
-    Franja inferior estilo cristal ahumado:
-    - Izquierda: datos del inmueble rotando cada foto
-    - Derecha:   nombre y WhatsApp del agente (siempre fijos)
+    Overlay premium para 1080×1350:
+      - Precio arriba derecha (dorado #FFD700)
+      - Franja inferior: ciudad/dirección (izq) · specs/teléfono (der)
+
+    CRÍTICO: drawtext usa 'w' y 'h' — NUNCA 'iw'/'ih' (causan y=-52 → error -22).
+    drawbox SÍ puede usar 'iw'/'ih'.
     """
     font = _font()
     fp   = f":fontfile='{font}'" if font else ""
     fv   = []
 
-    # Franja cristal (60% opacidad, ancho completo)
-    # drawbox SÍ acepta iw/ih; drawtext solo acepta w/h
-    fv.append("drawbox=y=ih-80:color=black@0.60:width=iw:height=80:t=fill")
+    precio    = _esc(specs.get("precio", ""))
+    ciudad    = _esc(specs.get("ciudad", ""))
+    direccion = _esc(specs.get("direccion", ""))
 
-    # Datos del inmueble — izquierda, rotan cada foto
-    data_items = []
-    if specs.get("metros"):
-        data_items.append(f"{specs['metros']} m2")
-    if specs.get("habitaciones"):
-        data_items.append(f"{specs['habitaciones']} Hab.")
-    if specs.get("banos"):
-        data_items.append(f"{specs['banos']} Banos")
-    if specs.get("estacionamientos"):
-        data_items.append(f"{specs['estacionamientos']} Parq.")
-
-    for i in range(n_photos):
-        if not data_items:
-            break
-        item = data_items[i % len(data_items)]
-        t0 = i * dur_per
-        t1 = (i + 1) * dur_per
-        # y=h-52 usa 'h' (válido en drawtext), NO 'ih'
+    # ── Precio arriba derecha (dorado) ────────────────────────────────────────
+    if precio:
         fv.append(
-            f"drawtext=text='{_esc(item)}':fontsize=28{fp}:fontcolor=white"
-            f":x=30:y=h-52:enable='between(t,{t0:.1f},{t1:.1f})'"
+            f"drawtext=text='{precio}':fontsize=30{fp}"
+            f":fontcolor=#FFD700"
+            f":x=w-tw-20:y=24"                  # 'w' y 'tw' válidos en drawtext
+            f":box=1:boxcolor=black@0.50:boxborderw=10"
         )
 
-    # Agente — derecha, fijo. Usa 'w' y 'h', NO 'iw'/'ih'
+    # ── Franja inferior (drawbox: iw/ih válidos aquí) ─────────────────────────
+    STRIP_H = 150
+    SY      = VH - STRIP_H          # 1200 (posición absoluta, sin variables)
+    fv.append(
+        f"drawbox=y={SY}:color=black@0.65:width=iw:height={STRIP_H}:t=fill"
+    )
+
+    # ── Columna izquierda — drawtext usa posiciones absolutas + 'w'/'h' ───────
+    if ciudad:
+        fv.append(
+            f"drawtext=text='{ciudad}':fontsize=30{fp}"
+            f":fontcolor=white:x=20:y={SY + 15}"   # y absoluto → sin variables
+        )
+    if direccion:
+        fv.append(
+            f"drawtext=text='{direccion}':fontsize=20{fp}"
+            f":fontcolor=white@0.80:x=20:y={SY + 55}"
+        )
     fv.append(
         f"drawtext=text='{_esc(nombre)}':fontsize=18{fp}"
-        f":fontcolor=white:x=w-tw-25:y=h-60"
+        f":fontcolor=white@0.70:x=20:y={SY + 100}"
     )
+
+    # ── Columna derecha — specs en fila + teléfono dorado ────────────────────
+    spec_parts = []
+    if specs.get("metros"):
+        spec_parts.append(f"{specs['metros']}m2")
+    if specs.get("habitaciones"):
+        spec_parts.append(f"{specs['habitaciones']}Hab")
+    if specs.get("banos"):
+        spec_parts.append(f"{specs['banos']}Ban")
+    if specs.get("estacionamientos"):
+        spec_parts.append(f"{specs['estacionamientos']}Parq")
+
+    if spec_parts:
+        spec_str = " - ".join(spec_parts)
+        fv.append(
+            f"drawtext=text='{_esc(spec_str)}':fontsize=22{fp}"
+            f":fontcolor=white:x=w-tw-20:y={SY + 18}"   # 'w' válido en drawtext
+        )
+
     fv.append(
-        f"drawtext=text='{_esc(telefono)}':fontsize=16{fp}"
-        f":fontcolor=#25D366:x=w-tw-25:y=h-34"
+        f"drawtext=text='{_esc(telefono)}':fontsize=26{fp}"
+        f":fontcolor=#FFD700:x=w-tw-20:y={SY + 92}"
     )
 
     return ",".join(fv)
 
 
-# ─── Slideshow (Plan B) ───────────────────────────────────────────────────────
-
-_FADE_DUR = 0.4   # duración del fade-in / fade-out por clip (segundos)
-
+# ── Generación de clips normalizados ─────────────────────────────────────────
 
 def _make_clip(img_path: str, idx: int, dur: float) -> str:
     """
-    JPEG → clip MP4 con:
-    - Ken Burns: esquina diferente por clip (percepción de movimiento)
-    - fade=in los primeros 0.4s y fade=out los últimos 0.4s
-    → concat produce transición suave (fade a negro) entre fotos
-    """
-    out = str(Path(tempfile.mkdtemp()) / f"clip_{idx}.mp4")
-    SW, SH = int(VW * 1.10), int(VH * 1.10)
-    xs = [0, SW - VW, 0,       SW - VW]
-    ys = [0, 0,       SH - VH, SH - VH]
-    x, y = xs[idx % 4], ys[idx % 4]
+    JPEG → clip MP4 normalizado (1080×1350, 25fps, yuv420p, bt709).
 
-    fade_out_start = dur - _FADE_DUR
-    vf = (
-        f"scale={SW}:{SH}:force_original_aspect_ratio=increase,"
-        f"crop={SW}:{SH},"
-        f"crop={VW}:{VH}:x={x}:y={y},"
-        f"fade=t=in:st=0:d={_FADE_DUR},"
-        f"fade=t=out:st={fade_out_start:.2f}:d={_FADE_DUR}"
+    Técnica Blurred Background:
+      [bg] = imagen escalada para llenar 1080×1350 + recortada + blur fuerte
+      [fg] = imagen escalada para encajar (sin recorte) → centrada sobre [bg]
+      Ken Burns: composite escala 5% extra y recorta desde esquina diferente por clip.
+      Fade: in 0.8s · out 0.8s
+
+    Todo en un solo filter_complex para garantizar dimensiones exactas.
+    """
+    out       = str(Path(tempfile.mkdtemp()) / f"clip_{idx}.mp4")
+    KB_W      = int(VW * 1.05)   # 1134 — oversized para Ken Burns
+    KB_H      = int(VH * 1.05)   # 1417
+    # Offset de esquina por clip (percepción de zoom/movimiento)
+    cx = [0, KB_W - VW, 0,        KB_W - VW][idx % 4]  # [0, 54, 0, 54]
+    cy = [0, 0,         KB_H - VH, KB_H - VH][idx % 4]  # [0, 0, 67, 67]
+
+    fade_dur       = min(_FADE, dur / 3.0)
+    fade_out_start = round(dur - fade_dur, 2)
+
+    fc = (
+        # Fuente única → 2 caminos
+        "[0:v]split=2[bg_raw][fg_raw];"
+
+        # Camino bg: rellena + recorta + blur
+        f"[bg_raw]"
+        f"scale={VW}:{VH}:force_original_aspect_ratio=increase,"
+        f"crop={VW}:{VH},"
+        f"boxblur=30:5"
+        f"[bg];"
+
+        # Camino fg: encaja (sin recorte, sin padding negro visible)
+        f"[fg_raw]"
+        f"scale={VW}:{VH}:force_original_aspect_ratio=decrease"
+        f"[fg];"
+
+        # Composite: fg centrado sobre bg desenfocado
+        f"[bg][fg]overlay=(W-w)/2:(H-h)/2"
+        f"[comp];"
+
+        # Ken Burns: escala 5% + recorta esquina + fade
+        f"[comp]"
+        f"scale={KB_W}:{KB_H},"
+        f"crop={VW}:{VH}:x={cx}:y={cy},"
+        f"fade=t=in:st=0:d={fade_dur:.2f},"
+        f"fade=t=out:st={fade_out_start:.2f}:d={fade_dur:.2f}"
+        f"[out]"
     )
+
     cmd = [
         _ffmpeg_bin(), "-y",
         "-loop", "1", "-i", img_path,
-        "-vf", vf,
+        "-filter_complex", fc,
+        "-map", "[out]",
         "-t", str(dur),
         "-r", str(FPS),
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18",
@@ -240,13 +273,16 @@ def _make_clip(img_path: str, idx: int, dur: float) -> str:
         "-color_trc", "bt709",
         out,
     ]
-    r = subprocess.run(cmd, capture_output=True, timeout=120)
+    r = subprocess.run(cmd, capture_output=True, timeout=180)
     if r.returncode != 0:
         raise RuntimeError(
-            f"Error clip {idx}:\n{r.stderr.decode('utf-8', errors='replace')[-400:]}"
+            f"Error clip {idx}:\n{r.stderr.decode('utf-8', errors='replace')[-500:]}"
         )
+    log.info("Clip %d OK → %s", idx, out)
     return out
 
+
+# ── Slideshow principal (Plan B) ──────────────────────────────────────────────
 
 def generate_slideshow(
     photo_sources: List[str],
@@ -254,9 +290,15 @@ def generate_slideshow(
     telefono: str,
     specs: dict,
     dur_per: float = DUR_PER,
-    fade: float = FADE,
+    fade: float = _FADE,
 ) -> str:
-    """Slideshow 720p: Ken Burns por esquinas + concat robusto + overlay cristal."""
+    """
+    Slideshow 4:5 indestructible:
+      1. Descarga y normaliza cada foto a JPEG
+      2. Convierte cada JPEG a clip MP4 normalizado (1080×1350, bt709, yuv420p)
+      3. Concat clips (probado y estable) + overlay premium
+      4. Codifica salida final con +faststart
+    """
     if not ffmpeg_available():
         raise RuntimeError("FFmpeg no está instalado en este servidor.")
 
@@ -264,22 +306,22 @@ def generate_slideshow(
     for src in photo_sources[:6]:
         try:
             locals_.append(_download(src))
-            log.info("Foto %d/%d descargada", len(locals_), min(len(photo_sources), 6))
+            log.info("Foto %d/%d OK", len(locals_), min(len(photo_sources), 6))
         except Exception as e:
-            log.warning("Foto no disponible %s: %s", src, e)
+            log.warning("Foto omitida %s: %s", src, e)
 
     if not locals_:
         raise ValueError("No se pudo descargar ninguna foto.")
 
     n = len(locals_)
 
-    # Paso 1: Cada imagen → clip MP4 con Ken Burns
-    clips = []
+    # Paso 2: normalizar cada imagen a clip MP4
+    clips: List[str] = []
     for i, lp in enumerate(locals_):
         clips.append(_make_clip(lp, i, dur_per))
-        log.info("Clip %d/%d generado", i + 1, n)
 
-    inputs = []
+    # Paso 3: ensamblar con concat + overlay
+    inputs: List[str] = []
     for clip in clips:
         inputs += ["-i", clip]
 
@@ -303,7 +345,7 @@ def generate_slideshow(
         "-movflags", "+faststart",
         output,
     ]
-    log.info("Generando slideshow %dp para %d fotos...", VH, n)
+    log.info("Ensamblando slideshow %d fotos → %s", n, output)
     r = subprocess.run(cmd, capture_output=True, timeout=300)
     if r.returncode != 0:
         raise RuntimeError(
@@ -312,7 +354,7 @@ def generate_slideshow(
     return output
 
 
-# ─── Overlays sobre video existente (Plan A) ─────────────────────────────────
+# ── Overlays sobre video propio (Plan A) ─────────────────────────────────────
 
 def add_overlays(
     video_source: str,
@@ -320,7 +362,7 @@ def add_overlays(
     telefono: str,
     specs: dict,
 ) -> str:
-    """Añade overlays a video del usuario. Devuelve ruta MP4 resultante."""
+    """Plan A: reencuadra video del usuario a 4:5 con blurred bg + overlay premium."""
     if not ffmpeg_available():
         raise RuntimeError("FFmpeg no está instalado en este servidor.")
 
@@ -340,17 +382,27 @@ def add_overlays(
     except Exception:
         pass
 
-    n_cycles = max(1, int(dur / DUR_PER))
-    ov  = _overlay_vf(nombre, telefono, specs, dur, n_photos=n_cycles, dur_per=DUR_PER)
-    vf  = (f"scale={VW}:{VH}:force_original_aspect_ratio=decrease,"
-           f"pad={VW}:{VH}:(ow-iw)/2:(oh-ih)/2,{ov}")
+    ov = _overlay_vf(nombre, telefono, specs, dur)
+
+    # Blurred background para el video del usuario
+    fc = (
+        "[0:v]split=2[bg_raw][fg_raw];"
+        f"[bg_raw]scale={VW}:{VH}:force_original_aspect_ratio=increase,"
+        f"crop={VW}:{VH},boxblur=30:5[bg];"
+        f"[fg_raw]scale={VW}:{VH}:force_original_aspect_ratio=decrease[fg];"
+        f"[bg][fg]overlay=(W-w)/2:(H-h)/2,"
+        f"{ov}[out]"
+    )
 
     output = str(Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.mp4")
     cmd = [
         _ffmpeg_bin(), "-y", "-i", local_in,
-        "-vf", vf,
+        "-filter_complex", fc,
+        "-map", "[out]",
+        "-map", "0:a?",
         "-c:v", "libx264", "-preset", "fast", "-crf", "23",
         "-c:a", "aac", "-b:a", "128k",
+        "-pix_fmt", "yuv420p",
         "-movflags", "+faststart",
         output,
     ]
@@ -362,7 +414,7 @@ def add_overlays(
     return output
 
 
-# ─── Upload a Cloudinary ──────────────────────────────────────────────────────
+# ── Subida a Cloudinary ───────────────────────────────────────────────────────
 
 def upload_video(video_path: str) -> Optional[str]:
     """Sube video a Cloudinary. Devuelve URL pública o None si no hay Cloudinary."""
