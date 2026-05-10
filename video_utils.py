@@ -263,14 +263,15 @@ def _make_clip(img_path: str, idx: int, dur: float) -> str:
         "-loop", "1", "-i", img_path,
         "-filter_complex", fc,
         "-map", "[out]",
+        "-map_metadata", "-1",        # elimina ICC Profile y side-data problemáticos
         "-t", str(dur),
         "-r", str(FPS),
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18",
         "-pix_fmt", "yuv420p",
-        "-color_range", "tv",
         "-colorspace", "bt709",
         "-color_primaries", "bt709",
         "-color_trc", "bt709",
+        "-color_range", "tv",
         out,
     ]
     r = subprocess.run(cmd, capture_output=True, timeout=180)
@@ -328,11 +329,14 @@ def generate_slideshow(
     ov = _overlay_vf(nombre, telefono, specs,
                      n * dur_per, n_photos=n, dur_per=dur_per)
 
+    # format=yuv420p en cada entrada limpia el ICC Profile y normaliza color metadata
+    # antes de que concat y el overlay los procesen → elimina el frame=0 error
     if n == 1:
-        fc = f"[0:v]{ov}[final]"
+        fc = f"[0:v]format=yuv420p,{ov}[final]"
     else:
-        ci = "".join(f"[{i}:v]" for i in range(n))
-        fc = f"{ci}concat=n={n}:v=1:a=0[vout];[vout]{ov}[final]"
+        norm = "".join(f"[{i}:v]format=yuv420p[n{i}];" for i in range(n))
+        ci   = "".join(f"[n{i}]" for i in range(n))
+        fc   = f"{norm}{ci}concat=n={n}:v=1:a=0[vout];[vout]{ov}[final]"
 
     output = str(Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.mp4")
     cmd = [
@@ -342,6 +346,10 @@ def generate_slideshow(
         "-map", "[final]",
         "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
         "-pix_fmt", "yuv420p",
+        "-colorspace", "bt709",
+        "-color_primaries", "bt709",
+        "-color_trc", "bt709",
+        "-color_range", "tv",
         "-movflags", "+faststart",
         output,
     ]
