@@ -268,11 +268,12 @@ def _make_clip(img_path: str, idx: int, dur: float) -> str:
         "-loop", "1", "-i", img_path,
         "-filter_complex", fc,
         "-map", "[out]",
-        "-map_metadata", "-1",   # elimina ICC Profile que confunde al encoder
+        "-map_metadata", "-1",    # strip ICC Profile
         "-t", str(dur),
         "-r", str(FPS),
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18",
-        "-pix_fmt", "yuv420p",   # NO color space flags: evita bt709/unknown mismatch
+        "-pix_fmt", "yuv420p",
+        "-color_range", "tv",     # fuerza TV range: evita pc/bt470bg que causa frame=0
         out,
     ]
     r = subprocess.run(cmd, capture_output=True, timeout=180)
@@ -331,23 +332,33 @@ def generate_slideshow(
 
     raw = str(Path(tempfile.mkdtemp()) / f"raw_{uuid.uuid4()}.mp4")
 
+    # Normalización común: format=yuv420p + color_range tv → elimina pc/bt470bg
+    ENCODE_ARGS = [
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18",
+        "-pix_fmt", "yuv420p", "-color_range", "tv",
+    ]
+
     if n == 1:
-        # Un solo clip: copiar sin re-encodear
+        # Re-encodear (no copiar): strip ICC Profile + forzar TV range
         r1 = subprocess.run(
-            [_ffmpeg_bin(), "-y", "-i", clips[0], "-c", "copy", raw],
-            capture_output=True, timeout=60
+            [_ffmpeg_bin(), "-y", "-i", clips[0],
+             "-vf", "scale=1080:1350,format=yuv420p",
+             "-map_metadata", "-1",
+             *ENCODE_ARGS, raw],
+            capture_output=True, timeout=120
         )
     else:
-        # Concat simple — format=yuv420p normaliza cada clip antes de unirlos
-        norm = "".join(f"[{i}:v]format=yuv420p[n{i}];" for i in range(n))
-        ci   = "".join(f"[n{i}]" for i in range(n))
-        fc1  = f"{norm}{ci}concat=n={n}:v=1:a=0[v]"
+        # Concat: normalizar cada entrada antes de unirlas
+        norm = "".join(
+            f"[{i}:v]scale={VW}:{VH},format=yuv420p[n{i}];" for i in range(n)
+        )
+        ci  = "".join(f"[n{i}]" for i in range(n))
+        fc1 = f"{norm}{ci}concat=n={n}:v=1:a=0[v]"
         r1 = subprocess.run(
             [_ffmpeg_bin(), "-y", *inputs,
              "-filter_complex", fc1, "-map", "[v]",
-             "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18",
-             "-pix_fmt", "yuv420p",
-             raw],
+             "-map_metadata", "-1",
+             *ENCODE_ARGS, raw],
             capture_output=True, timeout=300
         )
 
@@ -356,17 +367,17 @@ def generate_slideshow(
             f"FFmpeg concat error:\n{r1.stderr.decode('utf-8', errors='replace')[-800:]}"
         )
 
-    # ── Paso 3b: Overlay premium sobre el video crudo con -vf (más robusto) ────
-    # -vf es más simple que -filter_complex para un input único → menos puntos de falla
+    # ── Paso 3b: Overlay con -vf sobre video ya normalizado ───────────────────
     ov = _overlay_vf(nombre, telefono, specs,
                      n * dur_per, n_photos=n, dur_per=dur_per)
     output = str(Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.mp4")
 
+    # format=yuv420p al inicio del chain garantiza input limpio al overlay
     r2 = subprocess.run(
         [_ffmpeg_bin(), "-y", "-i", raw,
-         "-vf", ov,
+         "-vf", f"scale={VW}:{VH},format=yuv420p,{ov}",
          "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
-         "-pix_fmt", "yuv420p",
+         "-pix_fmt", "yuv420p", "-color_range", "tv",
          "-movflags", "+faststart",
          output],
         capture_output=True, timeout=300
