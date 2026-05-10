@@ -423,6 +423,7 @@ Datos:
             "habitaciones":      habitaciones or "",
             "banos":             banos or "",
             "metros_construidos": metros_construidos or "",
+            "estacionamientos":  estacionamientos or "",
             "video_url_propio":  None,
         }
         threading.Thread(
@@ -599,9 +600,10 @@ def _video_task(task_id: str, data: dict, prop_id: Optional[str],
         nombre   = data.get("nombre_agente", "")
         telefono = data.get("telefono_agente", "") or data.get("telefono", "")
         specs    = {
-            "metros":       data.get("metros_construidos") or data.get("metros", ""),
-            "habitaciones": data.get("habitaciones", ""),
-            "banos":        data.get("banos", ""),
+            "metros":          data.get("metros_construidos") or data.get("metros", ""),
+            "habitaciones":    data.get("habitaciones", ""),
+            "banos":           data.get("banos", ""),
+            "estacionamientos": data.get("estacionamientos", ""),
         }
         fotos            = [f for f in data.get("fotos", []) if f][:6]
         video_url_propio = data.get("video_url_propio")

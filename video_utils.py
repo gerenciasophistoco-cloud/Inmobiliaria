@@ -146,30 +146,60 @@ def _esc(text: str) -> str:
     )
 
 
-def _overlay_vf(nombre: str, telefono: str, specs: dict, dur: float) -> str:
-    """Retorna la cadena de filtros vf para overlays de texto."""
+def _overlay_vf(nombre: str, telefono: str, specs: dict, dur: float,
+                n_photos: int = 1, dur_per: float = DUR_PER) -> str:
+    """
+    Overlays de lujo sincronizados con las fotos:
+    - Inferior izquierdo: datos del inmueble rotando cada foto (con acento dorado)
+    - Inferior derecho:   nombre y teléfono del agente, siempre visibles
+    """
     font = _font()
     fp   = f":fontfile='{font}'" if font else ""
+    fv   = []
 
-    parts_spec = [s for s in [
-        f"{specs.get('metros','')} m²"        if specs.get("metros")       else "",
-        f"{specs.get('habitaciones','')} hab." if specs.get("habitaciones") else "",
-        f"{specs.get('banos','')} baños"       if specs.get("banos")        else "",
-    ] if s]
-    spec_str = " · ".join(parts_spec)
-    show     = min(4.0, dur - 0.5)
-
-    fv = [
-        "drawbox=y=ih-70:color=black@0.72:width=iw:height=70:t=fill",
-        f"drawtext=text='{_esc(nombre)}':fontsize=26{fp}:fontcolor=white:x=(w-tw)/2:y=h-55",
-        f"drawtext=text='{_esc(telefono)}':fontsize=19{fp}:fontcolor=#25D366:x=(w-tw)/2:y=h-28",
+    # ── Ciclo de datos (label + valor, rotan cada foto) ──────────────────────────
+    LABELS = ["ÁREA CONSTRUIDA", "HABITACIONES", "BAÑOS", "PARQUEADEROS"]
+    VALUES = [
+        f"{specs.get('metros','')} m²"               if specs.get("metros")         else "",
+        f"{specs.get('habitaciones','')}"             if specs.get("habitaciones")   else "",
+        f"{specs.get('banos','')}"                    if specs.get("banos")          else "",
+        f"{specs.get('estacionamientos','')}"         if specs.get("estacionamientos") else "",
     ]
-    if spec_str and dur > 1:
-        fv.append(
-            f"drawtext=text='{_esc(spec_str)}':fontsize=26{fp}:fontcolor=white"
-            f":x=30:y=30:box=1:boxcolor=black@0.55:boxborderw=8"
-            f":enable='between(t,0.3,{show:.1f})'"
-        )
+    # Sólo pares que tienen valor
+    data_pairs = [(L, V) for L, V in zip(LABELS, VALUES) if V.strip()]
+
+    if data_pairs:
+        # Recuadro negro semitransparente (inferior izquierdo)
+        fv.append("drawbox=x=15:y=ih-112:w=300:h=92:color=black@0.55:t=fill")
+        # Línea dorada decorativa en el borde superior del recuadro
+        fv.append("drawbox=x=15:y=ih-114:w=300:h=3:color=#d4af37@0.90:t=fill")
+
+        for i in range(n_photos):
+            label, value = data_pairs[i % len(data_pairs)]
+            t0 = i * dur_per
+            t1 = (i + 1) * dur_per
+            en = f":enable='between(t,{t0:.2f},{t1:.2f})'"
+            # Label pequeño (dorado)
+            fv.append(
+                f"drawtext=text='{_esc(label)}'"
+                f":x=25:y=ih-100:fontsize=13{fp}:fontcolor=#d4af37@0.95{en}"
+            )
+            # Valor grande (blanco, negrita visual por tamaño)
+            fv.append(
+                f"drawtext=text='{_esc(value)}'"
+                f":x=25:y=ih-80:fontsize=36{fp}:fontcolor=white{en}"
+            )
+
+    # ── Agente fijo (inferior derecho, siempre visible) ──────────────────────────
+    fv += [
+        f"drawtext=text='{_esc(nombre)}'"
+        f":x=iw-tw-18:y=ih-55"
+        f":fontsize=18{fp}:fontcolor=white@0.88",
+        f"drawtext=text='{_esc(telefono)}'"
+        f":x=iw-tw-18:y=ih-30"
+        f":fontsize=16{fp}:fontcolor=#25D366@0.92",
+    ]
+
     return ",".join(fv)
 
 
@@ -247,7 +277,7 @@ def generate_slideshow(
         inputs += ["-i", clip]
 
     # Paso 3: filter_complex con concat (robusto, sin bugs de PTS que tiene xfade)
-    ov = _overlay_vf(nombre, telefono, specs, total)
+    ov = _overlay_vf(nombre, telefono, specs, total, n_photos=n, dur_per=dur_per)
 
     if n == 1:
         filter_complex = f"[0:v]{ov}[final]"
@@ -305,7 +335,8 @@ def add_overlays(
     except Exception:
         pass
 
-    ov  = _overlay_vf(nombre, telefono, specs, dur)
+    n_cycles = max(1, int(dur / DUR_PER))
+    ov  = _overlay_vf(nombre, telefono, specs, dur, n_photos=n_cycles, dur_per=DUR_PER)
     vf  = (f"scale={VW}:{VH}:force_original_aspect_ratio=decrease,"
            f"pad={VW}:{VH}:(ow-iw)/2:(oh-ih)/2,{ov}")
 
