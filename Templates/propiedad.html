@@ -296,7 +296,7 @@
             }
             if (d.video_url_error) {
               const msg = document.getElementById('mainVideoMsg');
-              if (msg) msg.textContent = '⚠️ Error: ' + d.video_url_error.substring(0, 300);
+              if (msg) msg.textContent = '⚠️ Error: ' + d.video_url_error.slice(-400);
             } else if (d.video_ready && !d.video_url) {
               hideVideoSection();
             }
@@ -332,7 +332,7 @@
             if (d.video_url_error) {
               clearInterval(poll);
               const msg = document.getElementById('mainVideoMsg');
-              if (msg) msg.textContent = '⚠️ Error: ' + d.video_url_error.substring(0, 300);
+              if (msg) msg.textContent = '⚠️ Error: ' + d.video_url_error.slice(-400);
               return;
             }
 

@@ -197,6 +197,10 @@ def _make_clip(img_path: str, idx: int, dur: float) -> str:
         "-r", str(FPS),
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18",
         "-pix_fmt", "yuv420p",
+        "-color_range", "tv",
+        "-colorspace", "bt709",
+        "-color_primaries", "bt709",
+        "-color_trc", "bt709",
         out,
     ]
     r = subprocess.run(cmd, capture_output=True, timeout=120)
