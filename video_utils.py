@@ -1,8 +1,12 @@
 """
-Generación de video — Pipeline ultra-simple.
-1. Cada imagen → clip 1080x1350 con fondo desenfocado + fade
-2. Clips → concat con transición fade
-3. Sin overlays de texto (fase 1)
+video_utils.py — Pipeline mínimo y estable.
+Sin textos, sin transiciones. Solo fotos → 4:5 con fondo desenfocado.
+
+Causa raíz del frame=0 (resuelto aquí):
+  Las fotos de Cloudinary vienen en WebP con ICC Profile corrupto.
+  Ese ICC Profile sobrevive a -map_metadata y se incrusta en el
+  bitstream h264 como SEI (NAL type 6), corrompiendo el concat.
+  Fix: -bsf:v filter_units=remove_types=6 en cada clip.
 """
 import json
 import logging
@@ -17,13 +21,12 @@ from typing import List, Optional
 
 log = logging.getLogger(__name__)
 
-VW, VH  = 1080, 1350
+VW, VH  = 1080, 1350   # 4:5
 FPS     = 25
 DUR_PER = 3.0
-FADE    = 0.5          # fade in/out por clip (segundos)
 
 
-# ── Utilidades básicas ────────────────────────────────────────────────────────
+# ─── utilidades ───────────────────────────────────────────────────────────────
 
 def ffmpeg_available() -> bool:
     if shutil.which("ffmpeg"):
@@ -44,233 +47,194 @@ def _ffmpeg_bin() -> str:
     return "ffmpeg"
 
 
-def _to_jpeg(src_path: str) -> str:
-    """Convierte cualquier imagen (WebP, AVIF, PNG) a JPEG limpio."""
+def _to_jpeg(src: str) -> str:
+    """
+    Descarga o lee src y lo convierte a JPEG sin ICC Profile.
+    -map_metadata -1 elimina el ICC Profile del CONTENEDOR del JPEG.
+    El JPEG resultante no tendrá APP2 marker, así que los frames
+    decodificados no tendrán ICC Profile como side-data.
+    """
     out = str(Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.jpg")
-    try:
-        r = subprocess.run(
-            [_ffmpeg_bin(), "-y", "-i", src_path,
-             "-frames:v", "1", "-q:v", "2",
-             "-map_metadata", "-1",   # elimina ICC Profile del contenedor JPEG
-             out],
-            capture_output=True, timeout=30
-        )
-        if r.returncode == 0 and os.path.getsize(out) > 500:
-            return out
-    except Exception:
-        pass
-    try:
-        from PIL import Image
-        Image.open(src_path).convert("RGB").save(out, "JPEG", quality=92)
-        if os.path.getsize(out) > 500:
-            return out
-    except Exception:
-        pass
-    return src_path
 
-
-def _download(src: str, timeout: int = 20) -> str:
+    # si es URL, descarga primero
+    raw = src
     if src.startswith(("http://", "https://")):
-        ext = Path(src.split("?")[0]).suffix or ".jpg"
-        raw = Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}{ext}"
+        raw = str(Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.img")
         req = urllib.request.Request(src, headers={"User-Agent": "ListaPro/1.0"})
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            with open(str(raw), "wb") as f:
-                f.write(resp.read())
-        return _to_jpeg(str(raw))
-    if src.startswith(("/uploads/", "/tmp/")):
+        with urllib.request.urlopen(req, timeout=20) as r:
+            with open(raw, "wb") as f:
+                f.write(r.read())
+    elif src.startswith(("/uploads/", "/tmp/")):
         candidate = Path(__file__).parent / src.lstrip("/")
         if candidate.exists():
-            return _to_jpeg(str(candidate))
-    return src
+            raw = str(candidate)
 
-
-def _font() -> str:
-    for p in [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-        "C:/Windows/Fonts/arialbd.ttf",
-        "C:/Windows/Fonts/arial.ttf",
-    ]:
-        if os.path.exists(p):
-            return p
-    return ""
-
-
-def _esc(text: str) -> str:
-    return (str(text)
-        .replace("\\", "\\\\").replace("'", "\\'")
-        .replace(":", "\\:").replace(",", "\\,")
-        .replace("[", "\\[").replace("]", "\\]")
+    # convierte a JPEG limpio (sin ICC Profile)
+    r = subprocess.run(
+        [_ffmpeg_bin(), "-y", "-i", raw,
+         "-frames:v", "1", "-q:v", "2",
+         "-map_metadata", "-1",   # ← elimina ICC Profile del JPEG
+         out],
+        capture_output=True, timeout=30
     )
+    if r.returncode == 0 and os.path.exists(out) and os.path.getsize(out) > 0:
+        return out
+
+    # fallback: Pillow
+    try:
+        from PIL import Image
+        Image.open(raw).convert("RGB").save(out, "JPEG", quality=90)
+        return out
+    except Exception:
+        pass
+
+    return raw   # último recurso
 
 
-# ── Paso 1: cada imagen → clip MP4 ───────────────────────────────────────────
-
-def _make_clip(jpeg_path: str, idx: int, dur: float = DUR_PER) -> str:
+def _make_clip(jpeg: str, idx: int, dur: float = DUR_PER) -> str:
     """
-    JPEG → clip MP4 1080x1350 con fondo desenfocado.
+    JPEG limpio → clip MP4 1080×1350.
 
-    Técnica blurred background:
-      [bg] = imagen escalada para LLENAR 1080x1350 + recortada + boxblur
-      [fg] = imagen escalada para CABER dentro de 1080x1350 (sin recortar)
-      overlay centra [fg] sobre [bg]
+    Técnica Blurred Background:
+      [bg]  = imagen escalada para LLENAR el canvas + boxblur
+      [fg]  = imagen escalada para CABER (sin recortar)
+      overlay centra [fg] sobre [bg] desenfocado
 
-    Fade in 0.5s al inicio, fade out 0.5s al final.
-    Sin color space flags: -map_metadata -1 elimina ICC Profile.
+    Clave anti-ICC: -bsf:v filter_units=remove_types=6
+      Elimina los NAL units tipo 6 (SEI) del bitstream h264.
+      El ICC Profile vive en el SEI; sin él, el concat funciona.
     """
-    out          = str(Path(tempfile.mkdtemp()) / f"clip_{idx}.mp4")
-    fade_out_st  = round(dur - FADE, 2)
+    out = str(Path(tempfile.mkdtemp()) / f"clip_{idx}.mp4")
 
+    # Blurred background filter_complex
     fc = (
-        # Dividir fuente en dos streams
         "[0:v]split=2[bg_src][fg_src];"
-
-        # Background: llena el frame y desenfoca
-        f"[bg_src]"
-        f"scale={VW}:{VH}:force_original_aspect_ratio=increase,"
-        f"crop={VW}:{VH},"
-        f"boxblur=25:4"
-        f"[bg];"
-
-        # Foreground: cabe dentro del frame sin recortar (puede tener barras negras)
-        f"[fg_src]"
-        f"scale={VW}:{VH}:force_original_aspect_ratio=decrease"
-        f"[fg];"
-
-        # Composite: fg centrado sobre bg
-        f"[bg][fg]overlay=(W-w)/2:(H-h)/2,"
-
-        # Fade in y fade out
-        f"fade=t=in:st=0:d={FADE:.2f},"
-        f"fade=t=out:st={fade_out_st:.2f}:d={FADE:.2f}"
-        f"[out]"
+        f"[bg_src]scale={VW}:{VH}:force_original_aspect_ratio=increase,"
+        f"crop={VW}:{VH},boxblur=20:2[bg];"
+        f"[fg_src]scale={VW}:{VH}:force_original_aspect_ratio=decrease[fg];"
+        "[bg][fg]overlay=(W-w)/2:(H-h)/2[out]"
     )
 
     cmd = [
         _ffmpeg_bin(), "-y",
-        "-loop", "1", "-i", jpeg_path,
+        "-loop", "1", "-i", jpeg,
         "-filter_complex", fc,
         "-map", "[out]",
         "-t", str(dur),
         "-r", str(FPS),
         "-map_metadata", "-1",
         "-c:v", "libx264",
-        "-profile:v", "high",
-        "-level:v", "4.2",
-        "-preset", "ultrafast",
-        "-crf", "18",
+        "-profile:v", "high", "-level:v", "4.2",
+        "-preset", "ultrafast", "-crf", "18",
         "-pix_fmt", "yuv420p",
-        # filter_units elimina NAL type 6 (SEI) que contiene el ICC Profile
-        # del bitstream h264. Sin esto, el concat demuxer falla con frame=0
-        # porque h264_mp4toannexb no puede procesar el SEI corrupto.
-        "-bsf:v", "filter_units=remove_types=6",
+        "-bsf:v", "filter_units=remove_types=6",  # ← elimina SEI/ICC del h264
         out,
     ]
     r = subprocess.run(cmd, capture_output=True, timeout=120)
     if r.returncode != 0:
-        raise RuntimeError(
-            f"Clip {idx} error:\n{r.stderr.decode('utf-8', errors='replace')[-600:]}"
-        )
-    log.info("Clip %d generado OK", idx)
+        msg = r.stderr.decode("utf-8", errors="replace")[-600:]
+        raise RuntimeError(f"Error clip {idx}:\n{msg}")
+
+    # verificar que el clip no esté vacío
+    size = os.path.getsize(out)
+    if size < 1000:
+        raise RuntimeError(f"Clip {idx} vacío ({size} bytes)")
+
+    log.info("Clip %d OK (%d bytes)", idx, size)
     return out
 
 
-# ── Paso 2: concat clips con fade ────────────────────────────────────────────
-
 def generate_slideshow(
     photo_sources: List[str],
-    nombre: str,
-    telefono: str,
-    specs: dict,
+    nombre: str = "",
+    telefono: str = "",
+    specs: dict = None,
     dur_per: float = DUR_PER,
-    fade: float = FADE,
+    fade: float = 0,
 ) -> str:
     """
-    Pipeline mínimo:
-      1. Descarga y convierte fotos a JPEG
-      2. Crea un clip por foto (_make_clip)
-      3. Une los clips con concat demuxer (sin overlay de texto)
-      4. Retorna el MP4 final
+    Pipeline:
+      1. Cada foto → JPEG limpio (sin ICC Profile)
+      2. Cada JPEG  → clip MP4 con fondo desenfocado (sin ICC en bitstream)
+      3. Clips      → concat con -c copy (+faststart)
 
-    Los fades baked en cada clip crean la transición fade-to-black entre fotos.
+    -c copy evita re-encodear, elimina posibles errores de codec,
+    y no necesita h264_mp4toannexb porque es MP4→MP4.
     """
     if not ffmpeg_available():
-        raise RuntimeError("FFmpeg no disponible en este servidor.")
+        raise RuntimeError("FFmpeg no está instalado en este servidor.")
 
-    # 1. Descargar y convertir fotos
+    specs = specs or {}
+
+    # 1. Fotos → JPEG sin ICC Profile
     jpegs: List[str] = []
     for src in photo_sources[:6]:
         try:
-            jpegs.append(_download(src))
-            log.info("Foto %d/%d OK", len(jpegs), min(len(photo_sources), 6))
+            jpegs.append(_to_jpeg(src))
+            log.info("Foto %d/%d convertida", len(jpegs), min(len(photo_sources), 6))
         except Exception as e:
-            log.warning("Foto omitida %s: %s", src, e)
+            log.warning("Foto omitida (%s): %s", src, e)
 
     if not jpegs:
         raise ValueError("No se pudo obtener ninguna foto.")
 
-    n = len(jpegs)
-
-    # 2. Crear un clip por foto
+    # 2. JPEG → clips
     clips: List[str] = []
     for i, jp in enumerate(jpegs):
         clips.append(_make_clip(jp, i, dur_per))
 
-    # 3. Unir clips con concat demuxer
-    concat_txt = str(Path(tempfile.mkdtemp()) / "playlist.txt")
-    with open(concat_txt, "w") as f:
+    # 3. Clips → video final con concat -c copy
+    playlist = str(Path(tempfile.mkdtemp()) / "playlist.txt")
+    with open(playlist, "w") as f:
         for clip in clips:
             f.write(f"file '{clip}'\n")
 
     output = str(Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.mp4")
-
     cmd = [
         _ffmpeg_bin(), "-y",
-        "-f", "concat", "-safe", "0", "-i", concat_txt,
-        "-map_metadata", "-1",
-        "-c:v", "libx264",
-        "-profile:v", "high",
-        "-level:v", "4.2",
-        "-preset", "veryfast",
-        "-crf", "23",
-        "-pix_fmt", "yuv420p",
-        "-movflags", "+faststart",
+        "-f", "concat", "-safe", "0", "-i", playlist,
+        "-c", "copy",               # sin re-encodear
+        "-movflags", "+faststart",  # carga instantánea en browser
         output,
     ]
-
-    log.info("Ensamblando %d clips → %s", n, output)
     r = subprocess.run(cmd, capture_output=True, timeout=300)
     if r.returncode != 0:
-        raise RuntimeError(
-            f"FFmpeg concat error:\n{r.stderr.decode('utf-8', errors='replace')[-800:]}"
-        )
+        msg = r.stderr.decode("utf-8", errors="replace")[-800:]
+        raise RuntimeError(f"Concat error:\n{msg}")
+
+    size = os.path.getsize(output)
+    if size < 1000:
+        raise RuntimeError(f"Video final vacío ({size} bytes)")
+
+    log.info("Slideshow OK: %d fotos, %d bytes → %s", len(clips), size, output)
     return output
 
 
-# ── Plan A: overlays sobre video del usuario ─────────────────────────────────
+# ─── Plan A: video del usuario ────────────────────────────────────────────────
 
-def add_overlays(
-    video_source: str,
-    nombre: str,
-    telefono: str,
-    specs: dict,
-) -> str:
-    """Reencuadra el video del usuario a 1080x1350 con blurred background."""
+def add_overlays(video_source: str, nombre: str, telefono: str, specs: dict) -> str:
     if not ffmpeg_available():
         raise RuntimeError("FFmpeg no disponible.")
 
-    local_in = _download(video_source)
+    local_in = _to_jpeg(video_source) if video_source.endswith((".jpg", ".jpeg", ".png", ".webp")) else video_source
+
+    # Si no es imagen, descargar como video
+    if video_source.startswith(("http://", "https://")):
+        raw = str(Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.mp4")
+        req = urllib.request.Request(video_source, headers={"User-Agent": "ListaPro/1.0"})
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            with open(raw, "wb") as f:
+                f.write(resp.read())
+        local_in = raw
+
     dur = 30.0
     try:
         probe = subprocess.run(
-            [_ffmpeg_bin().replace("ffmpeg", "ffprobe"),
-             "-v", "quiet", "-print_format", "json", "-show_streams", local_in],
+            [_ffmpeg_bin().replace("ffmpeg", "ffprobe"), "-v", "quiet",
+             "-print_format", "json", "-show_streams", local_in],
             capture_output=True, text=True, timeout=30,
         )
-        info = json.loads(probe.stdout)
-        for s in info.get("streams", []):
+        for s in json.loads(probe.stdout).get("streams", []):
             if s.get("codec_type") == "video":
                 dur = float(s.get("duration", 30.0))
                 break
@@ -280,34 +244,30 @@ def add_overlays(
     fc = (
         "[0:v]split=2[bg_src][fg_src];"
         f"[bg_src]scale={VW}:{VH}:force_original_aspect_ratio=increase,"
-        f"crop={VW}:{VH},boxblur=25:4[bg];"
+        f"crop={VW}:{VH},boxblur=20:2[bg];"
         f"[fg_src]scale={VW}:{VH}:force_original_aspect_ratio=decrease[fg];"
         "[bg][fg]overlay=(W-w)/2:(H-h)/2[out]"
     )
 
     output = str(Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.mp4")
-    cmd = [
-        _ffmpeg_bin(), "-y", "-i", local_in,
-        "-filter_complex", fc,
-        "-map", "[out]",
-        "-map", "0:a?",
-        "-map_metadata", "-1",
-        "-c:v", "libx264", "-profile:v", "high", "-level:v", "4.2",
-        "-preset", "fast", "-crf", "23",
-        "-c:a", "aac", "-b:a", "128k",
-        "-pix_fmt", "yuv420p",
-        "-movflags", "+faststart",
-        output,
-    ]
-    r = subprocess.run(cmd, capture_output=True, timeout=300)
+    r = subprocess.run(
+        [_ffmpeg_bin(), "-y", "-i", local_in,
+         "-filter_complex", fc, "-map", "[out]", "-map", "0:a?",
+         "-map_metadata", "-1",
+         "-c:v", "libx264", "-profile:v", "high", "-level:v", "4.2",
+         "-preset", "fast", "-crf", "23",
+         "-c:a", "aac", "-b:a", "128k",
+         "-pix_fmt", "yuv420p",
+         "-bsf:v", "filter_units=remove_types=6",
+         "-movflags", "+faststart", output],
+        capture_output=True, timeout=300
+    )
     if r.returncode != 0:
-        raise RuntimeError(
-            f"FFmpeg overlay error:\n{r.stderr.decode('utf-8', errors='replace')[-600:]}"
-        )
+        raise RuntimeError(r.stderr.decode("utf-8", errors="replace")[-600:])
     return output
 
 
-# ── Cloudinary ────────────────────────────────────────────────────────────────
+# ─── Cloudinary ───────────────────────────────────────────────────────────────
 
 def upload_video(video_path: str) -> Optional[str]:
     if not os.getenv("CLOUDINARY_URL"):
@@ -321,5 +281,5 @@ def upload_video(video_path: str) -> Optional[str]:
         )
         return result["secure_url"]
     except Exception as e:
-        log.error("Error Cloudinary: %s", e)
+        log.error("Cloudinary: %s", e)
         return None

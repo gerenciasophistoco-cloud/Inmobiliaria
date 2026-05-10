@@ -176,6 +176,47 @@ async def root():
 
 
 # ── Ruta de prueba con datos de ejemplo ──────────────────────────────────────
+@app.get("/test-video")
+async def test_video_generation():
+    """
+    Endpoint de prueba interna del motor de video.
+    Llama a /test-video en Railway para verificar sin llenar el formulario.
+    Usa 3 fotos reales de Unsplash (JPEG sin ICC Profile problemático).
+    """
+    import video_utils
+    import traceback
+
+    TEST_PHOTOS = [
+        "https://images.unsplash.com/photo-1560448204-603b3fc33ddc?w=800",
+        "https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?w=800",
+        "https://images.unsplash.com/photo-1484154218962-a197022b5858?w=800",
+    ]
+
+    if not video_utils.ffmpeg_available():
+        return JSONResponse({"ok": False, "error": "FFmpeg no disponible en este servidor"})
+
+    try:
+        output = video_utils.generate_slideshow(
+            photo_sources=TEST_PHOTOS,
+            nombre="Test Agente",
+            telefono="300 000 0000",
+            specs={},
+            dur_per=3.0,
+        )
+        size_kb = os.path.getsize(output) // 1024
+        return JSONResponse({
+            "ok": True,
+            "mensaje": f"Video generado correctamente ({size_kb} KB)",
+            "path": output,
+        })
+    except Exception as e:
+        return JSONResponse({
+            "ok": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()[-1000:],
+        })
+
+
 @app.get("/test")
 async def test_propiedad(request: Request):
     datos_ejemplo = {
