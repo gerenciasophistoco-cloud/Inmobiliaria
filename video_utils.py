@@ -58,21 +58,32 @@ def _ffmpeg_bin() -> str:
     return "ffmpeg"
 
 
+def _to_jpeg(src_path: str) -> str:
+    """Convierte cualquier imagen (WebP, PNG, etc.) a JPEG para compatibilidad con FFmpeg."""
+    try:
+        from PIL import Image
+        out = Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.jpg"
+        Image.open(src_path).convert("RGB").save(str(out), "JPEG", quality=92)
+        return str(out)
+    except Exception:
+        return src_path
+
+
 def _download(src: str, timeout: int = 20) -> str:
-    """Descarga URL → archivo temporal con timeout. Ruta local → devuelve tal cual."""
+    """Descarga URL → JPEG temporal. Ruta local → convierte a JPEG si es necesario."""
     if src.startswith("http://") or src.startswith("https://"):
         ext = Path(src.split("?")[0]).suffix or ".jpg"
-        dst = Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}{ext}"
-        # Timeout explícito — evita que el hilo se cuelgue indefinidamente
+        raw = Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}{ext}"
         req = urllib.request.Request(src, headers={"User-Agent": "ListaPro/1.0"})
         with urllib.request.urlopen(req, timeout=timeout) as resp:
-            with open(str(dst), "wb") as f:
+            with open(str(raw), "wb") as f:
                 f.write(resp.read())
-        return str(dst)
+        # Convertir a JPEG puro: evita problemas de FFmpeg con WebP/EXIF de Cloudinary
+        return _to_jpeg(str(raw))
     if src.startswith("/uploads/") or src.startswith("/tmp/"):
         candidate = Path(__file__).parent / src.lstrip("/")
         if candidate.exists():
-            return str(candidate)
+            return _to_jpeg(str(candidate))
     return src
 
 
