@@ -480,53 +480,157 @@
     </section>
 
 
-    <!-- Otros inmuebles -->
+    <!-- ══ CARRUSEL: OTROS INMUEBLES ══ -->
     {% if otras_propiedades %}
-    <section>
-      <div class="flex justify-between items-center mb-6">
+    <section class="pb-2">
+      <div class="flex justify-between items-center mb-5">
         <h3 class="font-headline-md text-headline-md">Otros inmuebles que te pueden interesar</h3>
-        <button class="text-primary font-label-caps text-label-caps flex items-center gap-1">
-          Ver todos <span class="material-symbols-outlined text-sm">chevron_right</span>
-        </button>
+        <div class="flex gap-2">
+          <button id="carouselPrev"
+                  class="w-9 h-9 rounded-full bg-surface-container border border-outline-variant/30
+                         flex items-center justify-center hover:bg-surface-container-high
+                         transition-all duration-150 active:scale-95"
+                  aria-label="Anterior">
+            <span class="material-symbols-outlined text-[20px] text-on-surface-variant">chevron_left</span>
+          </button>
+          <button id="carouselNext"
+                  class="w-9 h-9 rounded-full bg-surface-container border border-outline-variant/30
+                         flex items-center justify-center hover:bg-surface-container-high
+                         transition-all duration-150 active:scale-95"
+                  aria-label="Siguiente">
+            <span class="material-symbols-outlined text-[20px] text-on-surface-variant">chevron_right</span>
+          </button>
+        </div>
       </div>
-      <div class="flex gap-4 overflow-x-auto hide-scrollbar pb-4 snap-x">
+
+      <!-- Track -->
+      <div id="propCarousel"
+           class="flex gap-4 overflow-x-auto pb-3 snap-x snap-mandatory scroll-smooth"
+           style="scrollbar-width:none; -ms-overflow-style:none;">
+
         {% for prop in otras_propiedades %}
-        <div class="min-w-[280px] snap-start bg-white rounded-2xl overflow-hidden
-                    shadow-[0px_4px_20px_rgba(0,0,0,0.05)] border border-outline-variant/10 flex-shrink-0">
-          <div class="h-48 relative">
-            <img class="w-full h-full object-cover" src="{{ prop.foto }}" alt="{{ prop.nombre }}"/>
-            {% if prop.badge %}
-            <div class="absolute top-3 left-3 bg-white/90 backdrop-blur-md px-2 py-1
-                        rounded text-[10px] font-bold text-primary">
-              {{ prop.badge }}
+        <a href="/propiedad/{{ prop.id }}"
+           class="snap-start flex-shrink-0 flex flex-col bg-white rounded-2xl overflow-hidden
+                  border border-outline-variant/10 no-underline
+                  hover:-translate-y-0.5 transition-transform duration-150"
+           style="min-width: clamp(200px, 72vw, 260px); box-shadow:0 4px 20px rgba(0,0,0,0.06);"
+           data-carousel-card>
+
+          <!-- Imagen 4:5 -->
+          <div style="position:relative; width:100%; padding-top:125%; overflow:hidden; flex-shrink:0;">
+            <img src="{{ prop.foto }}" alt="{{ prop.nombre }}"
+                 style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;display:block;"/>
+            {% if prop.operacion %}
+            <div style="position:absolute;top:10px;left:10px;background:rgba(0,0,0,0.55);
+                        backdrop-filter:blur(6px);color:#fff;font-size:10px;font-weight:700;
+                        padding:2px 8px;border-radius:6px;letter-spacing:0.04em;">
+              {{ prop.operacion }}
             </div>
             {% endif %}
           </div>
-          <div class="p-4 space-y-2">
-            <h4 class="font-title-sm text-on-surface">{{ prop.nombre }}</h4>
-            <p class="text-primary font-price-display">{{ prop.precio }}</p>
-            <div class="flex gap-3 text-on-surface-variant text-[11px] font-medium">
+
+          <!-- Info -->
+          <div class="p-4 flex flex-col gap-2 flex-1">
+            {% if prop.ciudad %}
+            <p class="font-label-caps text-[10px] text-on-surface-variant/60 uppercase tracking-widest">
+              {{ prop.ciudad }}
+            </p>
+            {% endif %}
+            <h4 class="font-title-sm text-[14px] text-on-surface leading-snug line-clamp-2">
+              {{ prop.nombre }}
+            </h4>
+            <p style="color:#c9a227;" class="font-price-display text-[17px] font-bold">
+              {{ prop.precio }}
+            </p>
+
+            <!-- Iconos: área · hab · baños · garaje -->
+            <div class="flex flex-wrap gap-x-3 gap-y-1 mt-auto pt-2
+                        border-t border-outline-variant/15 text-[11px]
+                        text-on-surface-variant font-medium">
               {% if prop.metros %}
               <span class="flex items-center gap-1">
-                <span class="material-symbols-outlined text-[14px]">square_foot</span> {{ prop.metros }}m²
+                <span class="material-symbols-outlined text-[13px]">square_foot</span>{{ prop.metros }}m²
               </span>
               {% endif %}
               {% if prop.habitaciones %}
               <span class="flex items-center gap-1">
-                <span class="material-symbols-outlined text-[14px]">bed</span> {{ prop.habitaciones }}
+                <span class="material-symbols-outlined text-[13px]">bed</span>{{ prop.habitaciones }}
               </span>
               {% endif %}
               {% if prop.banos %}
               <span class="flex items-center gap-1">
-                <span class="material-symbols-outlined text-[14px]">bathtub</span> {{ prop.banos }}
+                <span class="material-symbols-outlined text-[13px]">bathtub</span>{{ prop.banos }}
+              </span>
+              {% endif %}
+              {% if prop.estacionamientos %}
+              <span class="flex items-center gap-1">
+                <span class="material-symbols-outlined text-[13px]">directions_car</span>{{ prop.estacionamientos }}
               </span>
               {% endif %}
             </div>
+
+            <!-- Agente -->
+            <div class="flex items-center gap-2 pt-2 border-t border-outline-variant/10">
+              {% set a_foto = prop.foto_agente or foto_agente_url %}
+              {% set a_nombre = prop.nombre_agente or nombre_agente %}
+              {% if a_foto %}
+              <img src="{{ a_foto }}" alt="{{ a_nombre }}"
+                   style="width:26px;height:26px;border-radius:50%;object-fit:cover;flex-shrink:0;"/>
+              {% else %}
+              <div style="width:26px;height:26px;border-radius:50%;background:#eae7e7;
+                          display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <span class="material-symbols-outlined text-[13px] text-outline">person</span>
+              </div>
+              {% endif %}
+              <span class="text-[11px] text-on-surface-variant font-medium truncate">{{ a_nombre }}</span>
+            </div>
           </div>
-        </div>
+        </a>
         {% endfor %}
-      </div>
+
+      </div><!-- /track -->
     </section>
+
+    <script>
+    (function () {
+      const track  = document.getElementById('propCarousel');
+      const btnP   = document.getElementById('carouselPrev');
+      const btnN   = document.getElementById('carouselNext');
+      if (!track || !btnP || !btnN) return;
+
+      // En desktop (≥1024 px) mostrar 4 tarjetas por fila
+      function setCardWidths() {
+        const cards = track.querySelectorAll('[data-carousel-card]');
+        const isDesktop = window.innerWidth >= 1024;
+        const gapTotal = (cards.length - 1) * 16;
+        const w = isDesktop
+          ? Math.floor((track.clientWidth - gapTotal) / 4) + 'px'
+          : 'clamp(200px, 72vw, 260px)';
+        cards.forEach(c => c.style.minWidth = w);
+      }
+      setCardWidths();
+      window.addEventListener('resize', setCardWidths);
+
+      function cardWidth() {
+        const c = track.querySelector('[data-carousel-card]');
+        return c ? c.offsetWidth + 16 : 276; // card + gap
+      }
+
+      btnP.addEventListener('click', () => track.scrollBy({ left: -cardWidth(), behavior: 'smooth' }));
+      btnN.addEventListener('click', () => track.scrollBy({ left:  cardWidth(), behavior: 'smooth' }));
+
+      function refreshArrows() {
+        const atStart = track.scrollLeft <= 4;
+        const atEnd   = track.scrollLeft >= track.scrollWidth - track.clientWidth - 4;
+        btnP.style.opacity = atStart ? '0.35' : '1';
+        btnN.style.opacity = atEnd   ? '0.35' : '1';
+        btnP.style.pointerEvents = atStart ? 'none' : '';
+        btnN.style.pointerEvents = atEnd   ? 'none' : '';
+      }
+      track.addEventListener('scroll', refreshArrows, { passive: true });
+      refreshArrows();
+    })();
+    </script>
     {% endif %}
 
     <!-- Footer branding -->
@@ -542,40 +646,56 @@
   </main>
 
   <!-- ══ BARRA FIJA DE CONTACTO ══ -->
-  <div class="fixed bottom-0 left-0 right-0 z-50
-              bg-inverse-surface/95 backdrop-blur-md border-t border-white/10">
-    <div class="max-w-7xl w-full mx-auto px-5 py-3 flex items-center justify-between">
-      <div class="flex items-center gap-3">
+  <div style="position:fixed; bottom:0; left:0; right:0; z-index:50;
+              background:rgba(10,10,10,0.72);
+              backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
+              border-top:1px solid rgba(255,255,255,0.08);">
+    <div class="max-w-7xl w-full mx-auto px-5 py-3 flex items-center justify-between gap-4">
+
+      <!-- Izquierda: foto + texto -->
+      <div class="flex items-center gap-3 min-w-0">
         {% if foto_agente_url %}
-        <img class="w-12 h-12 rounded-full object-cover border-2 border-primary-fixed"
+        <img style="width:44px;height:44px;border-radius:50%;object-fit:cover;
+                    border:2px solid rgba(201,162,39,0.7);flex-shrink:0;"
              src="{{ foto_agente_url }}" alt="{{ nombre_agente }}"/>
         {% else %}
-        <div class="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
+        <div style="width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,0.12);
+                    display:flex;align-items:center;justify-content:center;flex-shrink:0;">
           <span class="material-symbols-outlined text-white">person</span>
         </div>
         {% endif %}
-        <div>
-          <p class="font-title-sm text-sm text-white leading-none mb-1">
+        <div class="min-w-0">
+          <p style="color:#fff;font-size:13px;font-weight:600;line-height:1.2;
+                    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
             ¿Te interesa este inmueble?
           </p>
-          <p class="text-[10px] text-white/60">Contáctame para más información</p>
+          <p style="color:rgba(255,255,255,0.5);font-size:10px;margin-top:2px;">
+            Contáctame, respondo rápido
+          </p>
         </div>
       </div>
-      <div class="flex gap-2">
+
+      <!-- Derecha: botones -->
+      <div class="flex gap-2 flex-shrink-0">
         <a href="{{ whatsapp_link }}" target="_blank"
-           class="bg-[#25D366] text-white px-4 py-2.5 rounded-xl flex items-center gap-2
-                  hover:opacity-90 transition-opacity active:scale-95 duration-150">
+           style="background:#25D366;color:#fff;padding:10px 18px;border-radius:12px;
+                  display:flex;align-items:center;gap:6px;text-decoration:none;
+                  font-size:12px;font-weight:700;letter-spacing:0.04em;
+                  transition:opacity .15s;active:opacity:.85;">
           <span class="material-symbols-outlined text-sm"
                 style="font-variation-settings:'FILL' 1;">chat</span>
-          <span class="font-label-caps text-[11px]">WhatsApp</span>
+          <span class="hidden sm:inline">WhatsApp</span>
         </a>
         <a href="tel:{{ telefono_agente }}"
-           class="bg-primary-container text-on-primary-container px-4 py-2.5 rounded-xl
-                  flex items-center gap-2 hover:opacity-90 transition-opacity active:scale-95 duration-150">
+           style="background:#c9a227;color:#fff;padding:10px 18px;border-radius:12px;
+                  display:flex;align-items:center;gap:6px;text-decoration:none;
+                  font-size:12px;font-weight:700;letter-spacing:0.04em;
+                  transition:opacity .15s;">
           <span class="material-symbols-outlined text-sm">call</span>
-          <span class="font-label-caps text-[11px]">Llamar</span>
+          <span class="hidden sm:inline">Llamar</span>
         </a>
       </div>
+
     </div>
   </div>
 

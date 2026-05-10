@@ -558,8 +558,12 @@ async def ver_propiedad(property_id: str, request: Request):
     data = db.get_property(property_id)
     if not data:
         raise HTTPException(status_code=404, detail="Propiedad no encontrada.")
-    # Propiedades relacionadas para la sección "Otros inmuebles"
-    otras = db.get_recent_properties(limit=3, exclude_id=property_id)
+    # Propiedades relacionadas — primero del mismo agente, si no hay, recientes
+    telefono = data.get("telefono_agente", "")
+    if telefono:
+        otras = db.get_agent_properties(telefono, exclude_id=property_id, limit=8)
+    else:
+        otras = db.get_recent_properties(limit=6, exclude_id=property_id)
     return templates.TemplateResponse("propiedad.html", {
         "request":          request,
         "property_id":      property_id,

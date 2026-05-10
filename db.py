@@ -75,19 +75,56 @@ def _format_card(prop_id: str, data: dict) -> dict:
     """Convierte datos crudos de una propiedad al formato que usa la tarjeta en el template."""
     fotos = data.get("fotos") or []
     return {
-        "id":           prop_id,
-        "nombre":       f"{data.get('tipo_propiedad', 'Propiedad')} en {data.get('ciudad', '')}",
-        "precio":       data.get("precio", ""),
-        "metros":       data.get("metros") or data.get("metros_construidos", ""),
-        "habitaciones": data.get("habitaciones", ""),
-        "banos":        data.get("banos", ""),
-        "foto":         fotos[0] if fotos else "",
-        "badge":        None,
+        "id":               prop_id,
+        "nombre":           f"{data.get('tipo_propiedad', 'Propiedad')} en {data.get('ciudad', '')}",
+        "ciudad":           data.get("ciudad", ""),
+        "operacion":        data.get("operacion", ""),
+        "precio":           data.get("precio", ""),
+        "metros":           data.get("metros") or data.get("metros_construidos", ""),
+        "habitaciones":     data.get("habitaciones", ""),
+        "banos":            data.get("banos", ""),
+        "estacionamientos": data.get("estacionamientos", ""),
+        "foto":             fotos[0] if fotos else "",
+        "foto_agente":      data.get("foto_agente_url") or data.get("foto_agente", ""),
+        "nombre_agente":    data.get("nombre_agente", ""),
     }
 
 
-def get_recent_properties(limit: int = 3, exclude_id: str = "") -> list:
-    """Retorna las últimas propiedades guardadas (para 'Otros inmuebles')."""
+def get_agent_properties(telefono_agente: str, exclude_id: str = "", limit: int = 8) -> list:
+    """Retorna propiedades del mismo agente (identificado por teléfono)."""
+    client = _get_client()
+    if client is None:
+        others = [
+            _format_card(k, v)
+            for k, v in _memory_store.items()
+            if k != exclude_id
+            and v.get("fotos")
+            and v.get("telefono_agente") == telefono_agente
+        ]
+        return others[-limit:]
+
+    try:
+        result = (
+            client.table("propiedades")
+            .select("id, datos")
+            .eq("datos->>telefono_agente", telefono_agente)
+            .neq("id", exclude_id)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        return [
+            _format_card(row["id"], row["datos"])
+            for row in (result.data or [])
+            if row.get("datos") and row["datos"].get("fotos")
+        ]
+    except Exception as e:
+        log.error("Error buscando propiedades del agente: %s", e)
+        return []
+
+
+def get_recent_properties(limit: int = 6, exclude_id: str = "") -> list:
+    """Retorna las últimas propiedades (fallback cuando no hay teléfono de agente)."""
     client = _get_client()
     if client is None:
         others = [
