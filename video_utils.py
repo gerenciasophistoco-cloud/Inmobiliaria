@@ -24,6 +24,7 @@ log = logging.getLogger(__name__)
 VW, VH  = 1080, 1350   # 4:5
 FPS     = 25
 DUR_PER = 3.0
+FADE_DUR = 0.4          # segundos de fade-in y fade-out por clip
 
 
 # ─── utilidades ───────────────────────────────────────────────────────────────
@@ -106,13 +107,19 @@ def _make_clip(jpeg: str, idx: int, dur: float = DUR_PER) -> str:
     """
     out = str(Path(tempfile.mkdtemp()) / f"clip_{idx}.mp4")
 
-    # Blurred background filter_complex
+    # Fade: el clip arranca en negro, se mantiene, y termina en negro.
+    # fade_out_st = momento en que empieza el desvanecimiento de salida.
+    fade_out_st = max(0.0, dur - FADE_DUR)
+
+    # Blurred background + fade in/out horneados en el clip
     fc = (
         "[0:v]split=2[bg_src][fg_src];"
         f"[bg_src]scale={VW}:{VH}:force_original_aspect_ratio=increase,"
         f"crop={VW}:{VH},boxblur=20:2[bg];"
         f"[fg_src]scale={VW}:{VH}:force_original_aspect_ratio=decrease[fg];"
-        "[bg][fg]overlay=(W-w)/2:(H-h)/2[out]"
+        f"[bg][fg]overlay=(W-w)/2:(H-h)/2,"
+        f"fade=t=in:st=0:d={FADE_DUR},"
+        f"fade=t=out:st={fade_out_st:.3f}:d={FADE_DUR}[out]"
     )
 
     cmd = [
