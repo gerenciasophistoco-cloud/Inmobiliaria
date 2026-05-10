@@ -156,11 +156,10 @@ def _overlay_vf(nombre: str, telefono: str, specs: dict, dur: float) -> str:
 
 def _kb_segment(i: int, dur: float) -> str:
     """
-    Ken Burns simplificado: escala a un 10% más grande y recorta
-    desde una esquina diferente por foto. Sin eval=frame → muy rápido.
+    Ken Burns: escala al 110%, recorta desde esquina diferente por foto.
+    Sin trim — la duración la controla -t en el input.
     """
     SW, SH = int(VW * 1.10), int(VH * 1.10)   # 1408 × 792
-    # Cada foto recorta desde una posición diferente
     x_offsets = [0,        SW - VW,  0,        SW - VW]
     y_offsets = [0,        0,        SH - VH,  SH - VH]
     x = x_offsets[i % 4]
@@ -169,8 +168,7 @@ def _kb_segment(i: int, dur: float) -> str:
         f"scale={SW}:{SH}:force_original_aspect_ratio=increase,"
         f"crop={SW}:{SH},"
         f"crop={VW}:{VH}:x={x}:y={y},"
-        f"fps={FPS},"
-        f"trim=duration={dur},setpts=PTS-STARTPTS"
+        f"setpts=PTS-STARTPTS"
     )
 
 
@@ -215,9 +213,10 @@ def generate_slideshow(
     n     = len(locals_)
     total = n * dur_per - (n - 1) * fade if n > 1 else dur_per
 
+    # -r fuerza 30 fps desde el input → frames con PTS limpios sin trim
     inputs = []
     for lp in locals_:
-        inputs += ["-framerate", str(FPS), "-loop", "1", "-t", str(dur_per + 1), "-i", lp]
+        inputs += ["-r", str(FPS), "-loop", "1", "-t", str(dur_per), "-i", lp]
 
     kb_parts = [f"[{i}:v]{_kb_segment(i, dur_per)}[v{i}]" for i in range(n)]
     xf_chain, out_pad = _xfade_graph(n, dur_per, fade)
@@ -231,11 +230,10 @@ def generate_slideshow(
         "-filter_complex", filter_complex,
         "-map", "[final]",
         "-c:v", "libx264",
-        "-preset", "veryfast",    # veryfast = generación en ~20s, calidad aceptable
+        "-preset", "veryfast",
         "-crf", "23",
         "-pix_fmt", "yuv420p",
-        "-t", str(total),
-        "-movflags", "+faststart", # carga instantánea en el navegador
+        "-movflags", "+faststart",
         output,
     ]
     log.info("Generando slideshow %dp para %d fotos (%.0fs)...", VH, n, total)
