@@ -202,25 +202,21 @@ def _overlay_vf(nombre: str, telefono: str, specs: dict, dur: float,
 
 def _make_clip(img_path: str, idx: int, dur: float) -> str:
     """
-    JPEG → clip MP4 con Ken Burns (panning suave usando crop dinámico).
-    El filtro crop evalúa x/y por frame usando 't' (segundos), sin zoompan lento.
+    JPEG → clip MP4.
+    Ken Burns: escala 10% más grande y recorta desde esquina diferente por clip.
+    Crop con coordenadas ENTERAS (sin expresiones dinámicas que requieren eval=frame).
     """
     out = str(Path(tempfile.mkdtemp()) / f"clip_{idx}.mp4")
-    SW, SH = int(VW * 1.10), int(VH * 1.10)   # 10 % más grande (1408×792)
-    dx, dy = SW - VW, SH - VH                  # espacio disponible: 128px, 72px
-
-    # 4 direcciones de pan, ciclan por foto
-    pans = [
-        f"x='(t/{dur:.2f})*{dx}':y='{dy//2}'",        # L → R
-        f"x='(1-t/{dur:.2f})*{dx}':y='{dy//2}'",      # R → L
-        f"x='{dx//2}':y='(t/{dur:.2f})*{dy}'",        # T → B
-        f"x='{dx//2}':y='(1-t/{dur:.2f})*{dy}'",      # B → T
-    ]
+    SW, SH = int(VW * 1.10), int(VH * 1.10)   # 1408 × 792
+    # 4 esquinas distintas → percepción de movimiento entre fotos
+    xs = [0,       SW - VW, 0,       SW - VW]
+    ys = [0,       0,       SH - VH, SH - VH]
+    x, y = xs[idx % 4], ys[idx % 4]
 
     vf = (
         f"scale={SW}:{SH}:force_original_aspect_ratio=increase,"
         f"crop={SW}:{SH},"
-        f"crop={VW}:{VH}:{pans[idx % 4]}"
+        f"crop={VW}:{VH}:x={x}:y={y}"
     )
     cmd = [
         _ffmpeg_bin(), "-y",
@@ -244,18 +240,6 @@ def _make_clip(img_path: str, idx: int, dur: float) -> str:
     return out
 
 
-def _build_cmd(ffmpeg: str, inputs: list, fc: str, output: str) -> list:
-    return [
-        ffmpeg, "-y", *inputs,
-        "-filter_complex", fc,
-        "-map", "[final]",
-        "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
-        "-pix_fmt", "yuv420p",
-        "-movflags", "+faststart",
-        output,
-    ]
-
-
 def generate_slideshow(
     photo_sources: List[str],
     nombre: str,
@@ -264,7 +248,7 @@ def generate_slideshow(
     dur_per: float = DUR_PER,
     fade: float = FADE,
 ) -> str:
-    """Slideshow 720p: Ken Burns + crossfade (xfade) con fallback a concat."""
+    """Slideshow 720p: Ken Burns por esquinas + concat robusto + overlay cristal."""
     if not ffmpeg_available():
         raise RuntimeError("FFmpeg no está instalado en este servidor.")
 
@@ -281,7 +265,7 @@ def generate_slideshow(
 
     n = len(locals_)
 
-    # Paso 1: Cada imagen → clip MP4 con Ken Burns panning
+    # Paso 1: Cada imagen → clip MP4 con Ken Burns
     clips = []
     for i, lp in enumerate(locals_):
         clips.append(_make_clip(lp, i, dur_per))
@@ -291,50 +275,32 @@ def generate_slideshow(
     for clip in clips:
         inputs += ["-i", clip]
 
-    # Overlay (franja cristal inferior con datos + agente)
     ov = _overlay_vf(nombre, telefono, specs,
                      n * dur_per, n_photos=n, dur_per=dur_per)
 
-    output = str(Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.mp4")
-    ff = _ffmpeg_bin()
-
-    # ── Intento 1: xfade (crossfade suave entre fotos) ───────────────────────────
     if n == 1:
-        fc = f"[0:v]{ov},setpts=PTS-STARTPTS[final]"
+        fc = f"[0:v]{ov}[final]"
     else:
-        xf = []
-        for i in range(1, n):
-            a   = "[0:v]"    if i == 1    else f"[xf{i-2}]"
-            out = "[vout]"   if i == n-1  else f"[xf{i-1}]"
-            off = i * (dur_per - _XFADE_DUR)
-            xf.append(
-                f"{a}[{i}:v]xfade=transition=fade"
-                f":duration={_XFADE_DUR:.2f}:offset={off:.2f}{out}"
-            )
-        fc = ";".join(xf) + f";[vout]{ov},setpts=PTS-STARTPTS[final]"
+        ci = "".join(f"[{i}:v]" for i in range(n))
+        fc = f"{ci}concat=n={n}:v=1:a=0[vout];[vout]{ov}[final]"
 
-    log.info("Intentando xfade (%d fotos)...", n)
-    r = subprocess.run(_build_cmd(ff, inputs, fc, output),
-                       capture_output=True, timeout=300)
-
-    # ── Fallback: concat si xfade falla ──────────────────────────────────────────
+    output = str(Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.mp4")
+    cmd = [
+        _ffmpeg_bin(), "-y",
+        *inputs,
+        "-filter_complex", fc,
+        "-map", "[final]",
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+        "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
+        output,
+    ]
+    log.info("Generando slideshow %dp para %d fotos...", VH, n)
+    r = subprocess.run(cmd, capture_output=True, timeout=300)
     if r.returncode != 0:
-        log.warning("xfade falló, usando concat como fallback.")
-        if n == 1:
-            fc_concat = f"[0:v]{ov}[final]"
-        else:
-            ci = "".join(f"[{i}:v]" for i in range(n))
-            fc_concat = f"{ci}concat=n={n}:v=1:a=0[vout];[vout]{ov}[final]"
-
-        r2 = subprocess.run(_build_cmd(ff, inputs, fc_concat, output),
-                            capture_output=True, timeout=300)
-        if r2.returncode != 0:
-            raise RuntimeError(
-                f"FFmpeg slideshow error:\n"
-                f"{r2.stderr.decode('utf-8', errors='replace')[-800:]}"
-            )
-
-    log.info("Slideshow generado: %s", output)
+        raise RuntimeError(
+            f"FFmpeg slideshow error:\n{r.stderr.decode('utf-8', errors='replace')[-800:]}"
+        )
     return output
 
 
