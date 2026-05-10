@@ -294,7 +294,10 @@
                  </div>`;
               return;
             }
-            if ((d.video_ready && !d.video_url) || d.video_url_error) {
+            if (d.video_url_error) {
+              const msg = document.getElementById('mainVideoMsg');
+              if (msg) msg.textContent = '⚠️ Error: ' + d.video_url_error.substring(0, 300);
+            } else if (d.video_ready && !d.video_url) {
               hideVideoSection();
             }
           } catch(e) {}
@@ -302,7 +305,7 @@
 
         let checks = 0;
         const poll = setInterval(async () => {
-          if (++checks > 20) {          // ~2.5 min máximo
+          if (++checks > 20) {
             clearInterval(poll);
             hideVideoSection();
             return;
@@ -325,8 +328,16 @@
               return;
             }
 
-            // ── Sin video (error o sin FFmpeg) ──
-            if ((d.video_ready && !d.video_url) || d.video_url_error) {
+            // ── Error: mostrar mensaje para diagnóstico ──
+            if (d.video_url_error) {
+              clearInterval(poll);
+              const msg = document.getElementById('mainVideoMsg');
+              if (msg) msg.textContent = '⚠️ Error: ' + d.video_url_error.substring(0, 300);
+              return;
+            }
+
+            // ── Sin video (FFmpeg no disponible) ──
+            if (d.video_ready && !d.video_url) {
               clearInterval(poll);
               hideVideoSection();
               return;
