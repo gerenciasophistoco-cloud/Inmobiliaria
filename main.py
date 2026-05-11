@@ -696,12 +696,10 @@ def _video_task(task_id: str, data: dict, prop_id: Optional[str],
         if cloud_url:
             video_url = cloud_url
         else:
-            # Fallback local solo en desarrollo
-            dest = Path("video_output") / f"{task_id}.mp4"
-            dest.parent.mkdir(exist_ok=True)
+            # Fallback: servir desde /uploads/ (montado como StaticFiles)
+            dest = _uploads_dir / f"video_{task_id}.mp4"
             shutil.copy2(local_out, str(dest))
-            video_url = f"/download-video/{task_id}"
-            _up(output_path=str(dest))
+            video_url = f"/uploads/{dest.name}"
 
         if prop_id:
             update = {field: video_url, f"{field}_error": None}
