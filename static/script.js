@@ -1,10 +1,10 @@
-/* ── Datos del último listado generado (para PDF/imagen) ── */
+/* ── Datos del último listado generado ── */
 let lastPDFData = null;
 let lastPropertyId = null;
-let lastVideoPropio = null;   // URL Cloudinary del video subido por el usuario (Plan A)
+let lastVideoPropio = null;
 let selectedCoverIndex = 0;
 let photoLabels = [];
-let photoFiles  = []; // Array ordenado de File objects (fuente de verdad)
+let photoFiles  = [];
 
 /* ── Elementos principales ── */
 const form          = document.getElementById('propertyForm');
@@ -221,16 +221,18 @@ function renderPhotoPreviews() {
   photoPreview.appendChild(counter);
 }
 
-/* ── Tabs de resultados ── */
-document.querySelectorAll('.tab-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const tab = btn.dataset.tab;
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
-    btn.classList.add('active');
-    document.getElementById(`tab-${tab}`).style.display = 'block';
-  });
-});
+/* ── Selector de rol: mostrar/ocultar campo de inmobiliaria ── */
+(function () {
+  const radios = document.querySelectorAll('input[name="account_type"]');
+  const campo  = document.getElementById('campoInmobiliaria');
+  if (!campo) return;
+  function update() {
+    const isAgency = document.querySelector('input[name="account_type"]:checked')?.value === 'inmobiliaria';
+    campo.style.display = isAgency ? '' : 'none';
+  }
+  radios.forEach(r => r.addEventListener('change', update));
+  update(); // estado inicial
+})();
 
 /* ── Mensajes de carga rotativos ── */
 const loadingMsgs = [
@@ -260,12 +262,11 @@ function stopLoading() {
 
 /* ── Validación del formulario ── */
 const REQUIRED = [
-  { name: 'tipo_propiedad', label: 'Tipo de propiedad' },
-  { name: 'direccion',      label: 'Dirección / Sector' },
-  { name: 'ciudad',         label: 'Ciudad' },
-  { name: 'precio',         label: 'Precio' },
-  { name: 'descripcion_agente', label: 'Notas del agente' },
-  { name: 'nombre_agente',  label: 'Nombre del agente' },
+  { name: 'tipo_propiedad',  label: 'Tipo de propiedad' },
+  { name: 'direccion',       label: 'Dirección / Sector' },
+  { name: 'ciudad',          label: 'Ciudad' },
+  { name: 'precio',          label: 'Precio' },
+  { name: 'nombre_agente',   label: 'Nombre del agente' },
   { name: 'telefono_agente', label: 'Teléfono del agente' },
 ];
 
@@ -293,6 +294,8 @@ form.addEventListener('submit', async e => {
   const formData = new FormData(form);
   formData.delete('fotos');
   photoFiles.forEach(f => formData.append('fotos', f));
+  // Vincular el video de recorrido subido al property record
+  if (lastVideoPropio) formData.set('video_recorrido_url', lastVideoPropio);
 
   try {
     const res = await fetch('/generate', { method: 'POST', body: formData });
@@ -363,13 +366,7 @@ function renderResults(data) {
   }
 
   renderDescOptions(data.descripciones || [data.descripcion], data.descripcion);
-  renderDesc2Options(data.descripciones || [data.descripcion], data.descripciones?.[1] || data.descripcion);
   document.getElementById('instagram-text').textContent = data.ig_copy;
-
-  // Activar primera pestaña
-  document.querySelectorAll('.tab-btn').forEach((b, i) => b.classList.toggle('active', i === 0));
-  document.getElementById('tab-descripcion').style.display = 'block';
-  document.getElementById('tab-instagram').style.display   = 'none';
 
   showPanel('content');
 
@@ -570,92 +567,6 @@ function downloadImage() {
   );
 }
 
-/* ── Generar Video Reel ── */
-let videoPollingTimer = null;
-
-async function generateVideo() {
-  if (!lastPDFData) return;
-
-  const btn     = document.getElementById('btnGenerateVideo');
-  const txtEl   = btn.querySelector('.btn-video-text');
-  const loadEl  = btn.querySelector('.btn-video-loading');
-  const progWrap = document.getElementById('videoProgressWrap');
-  const fill    = document.getElementById('videoProgressFill');
-  const label   = document.getElementById('videoProgressLabel');
-  const dlWrap  = document.getElementById('videoDownloadWrap');
-  const dlLink  = document.getElementById('videoDownloadLink');
-
-  btn.disabled = true;
-  txtEl.style.display  = 'none';
-  loadEl.style.display = 'inline';
-  progWrap.style.display = 'block';
-  dlWrap.style.display   = 'none';
-  fill.style.width = '2%';
-  label.textContent = 'Iniciando Remotion...';
-
-  try {
-    const payload = {
-      ...getExportPayload(),
-      property_id:      lastPropertyId || undefined,
-      video_url_propio: lastVideoPropio || undefined,
-    };
-    const res = await fetch('/generate-video', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || `Error HTTP ${res.status}`);
-    }
-    const { task_id } = await res.json();
-
-    // Polling de progreso cada 3s
-    videoPollingTimer = setInterval(async () => {
-      try {
-        const sr = await fetch(`/video-status/${task_id}`);
-        const s  = await sr.json();
-
-        fill.style.width = `${Math.max(s.progress, 2)}%`;
-        const msgMap = {
-          preparando:      '⚙️ Preparando recursos...',
-          'generando video': `🎬 Generando video... ${s.progress}%`,
-          'subiendo a la nube': '☁️ Subiendo a Cloudinary...',
-          completado:      '✅ ¡Video listo!',
-        };
-        label.textContent = msgMap[s.status_text] || `${s.status_text} ${s.progress}%`;
-
-        if (s.status === 'done') {
-          clearInterval(videoPollingTimer);
-          fill.style.width = '100%';
-          label.textContent = '✅ ¡Video disponible en el link del inmueble!';
-          dlWrap.style.display = 'block';
-          // Preferir URL de Cloudinary; fallback al endpoint local
-          dlLink.href = s.video_url || `/download-video/${task_id}`;
-          btn.disabled = false;
-          txtEl.style.display  = '';
-          loadEl.style.display = 'none';
-          showToast('🎬 Video generado y guardado en el inmueble');
-        } else if (s.status === 'error') {
-          clearInterval(videoPollingTimer);
-          throw new Error(s.error || 'Error al generar el video');
-        }
-      } catch (err) {
-        clearInterval(videoPollingTimer);
-        showToast(`❌ ${err.message}`);
-        btn.disabled = false;
-        txtEl.style.display  = '';
-        loadEl.style.display = 'none';
-      }
-    }, 3000);
-
-  } catch (err) {
-    showToast(`❌ ${err.message}`);
-    btn.disabled = false;
-    txtEl.style.display  = '';
-    loadEl.style.display = 'none';
-  }
-}
 
 /* ── Resetear formulario ── */
 function resetForm() {
@@ -664,14 +575,15 @@ function resetForm() {
   uploadPlaceholder.style.display = '';
   lastPDFData = null;
   lastPropertyId = null;
+  lastVideoPropio = null;
   selectedCoverIndex = 0;
-  if (videoPollingTimer) { clearInterval(videoPollingTimer); videoPollingTimer = null; }
   if (_readyTimer) { clearInterval(_readyTimer); _readyTimer = null; }
   const btnVer = document.getElementById('btnVerInmueble');
   if (btnVer) { btnVer.disabled = false; btnVer.querySelector('.btn-pdf-text').textContent = '🌐 Ver inmueble'; }
-  document.getElementById('videoProgressWrap').style.display  = 'none';
-  document.getElementById('videoDownloadWrap').style.display  = 'none';
   removeLogo();
+  // Reiniciar selector de rol
+  const campoInm = document.getElementById('campoInmobiliaria');
+  if (campoInm) campoInm.style.display = 'none';
   showPanel('empty');
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -734,31 +646,3 @@ function onDescEdit(value) {
   document.querySelectorAll('#descOptions .desc-option-card').forEach(c => c.classList.remove('selected'));
 }
 
-/* ── Selector de descripción Página 2 ── */
-function renderDesc2Options(opciones, defaultDesc) {
-  const container = document.getElementById('descOptions2');
-  const textarea  = document.getElementById('descripcion2-text');
-  container.innerHTML = '';
-
-  opciones.forEach((texto, i) => {
-    const card = document.createElement('div');
-    card.className = 'desc-option-card' + (i === 1 ? ' selected' : '');
-    card.innerHTML = `<div class="desc-option-label">${ENFOQUES[i] || `Opción ${i + 1}`}</div>
-                      <div class="desc-option-text">${texto}</div>`;
-    card.addEventListener('click', () => {
-      container.querySelectorAll('.desc-option-card').forEach(c => c.classList.remove('selected'));
-      card.classList.add('selected');
-      textarea.value = texto;
-      if (lastPDFData) lastPDFData.descripcion_2 = texto;
-    });
-    container.appendChild(card);
-  });
-
-  textarea.value = defaultDesc || (opciones[1] ?? opciones[0] ?? '');
-  if (lastPDFData) lastPDFData.descripcion_2 = textarea.value;
-}
-
-function onDesc2Edit(value) {
-  if (lastPDFData) lastPDFData.descripcion_2 = value;
-  document.querySelectorAll('#descOptions2 .desc-option-card').forEach(c => c.classList.remove('selected'));
-}

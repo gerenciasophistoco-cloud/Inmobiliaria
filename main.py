@@ -13,7 +13,7 @@ from typing import List, Optional
 
 from dotenv import load_dotenv
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from anthropic import AsyncAnthropic
@@ -291,11 +291,14 @@ async def generate_content(
     estrato: Optional[str] = Form(None),
     ano_construccion: Optional[str] = Form(None),
     amenidades: List[str] = Form(default=[]),
-    descripcion_agente: str = Form(...),
+    otras_caracteristicas: Optional[str] = Form(None),
+    account_type: str = Form(default="particular"),
     nombre_inmobiliaria: Optional[str] = Form(None),
     nombre_agente: str = Form(...),
     telefono_agente: str = Form(...),
     email_agente: Optional[str] = Form(None),
+    coordenadas: Optional[str] = Form(None),
+    video_recorrido_url: Optional[str] = Form(None),
     fotos: List[UploadFile] = File(default=[]),
     logo: Optional[UploadFile] = File(default=None),
     foto_agente: Optional[UploadFile] = File(default=None),
@@ -347,7 +350,7 @@ Ubicación: {direccion}, {ciudad}, Colombia
 Precio: {precio_formatted}
 Especificaciones: {", ".join(specs) if specs else "No especificadas"}
 Amenidades: {amenidades_str}
-Observaciones del agente: {descripcion_agente}
+{("Otras características: " + otras_caracteristicas) if otras_caracteristicas and otras_caracteristicas.strip() else ""}
 Contacto: {nombre_agente} | {telefono_agente}{" | " + email_agente if email_agente else ""}"""
 
     desc_prompt = f"""Eres un experto en bienes raíces en Colombia con años de experiencia redactando descripciones que venden propiedades.
@@ -425,6 +428,7 @@ Datos:
         "estrato":           estrato,
         "ano_construccion":  ano_construccion,
         "amenidades":        amenidades,
+        "otras_caracteristicas": otras_caracteristicas or "",
         "descripcion":       descripcion,
         "frase_inspiradora": frase_inspiradora,
         "fotos":             foto_paths,
@@ -434,15 +438,16 @@ Datos:
         "telefono_agente":   telefono_agente,
         "email_agente":      email_agente or "",
         "nombre_inmobiliaria": nombre_inmobiliaria or nombre_agente,
+        "account_type":      account_type,
+        "coordenadas":       coordenadas or "",
         "whatsapp_link":     _whatsapp_link(
             telefono_agente,
             f"Hola, estoy interesado en la propiedad en {direccion}, {ciudad}"
         ),
         "video_url":              None,
-        "video_recorrido_url":    None,
-        # video_ready = True significa: link disponible para compartir con el cliente
-        # Si no hay FFmpeg, se habilita de inmediato (sin video)
-        "video_ready":            False,
+        "video_recorrido_url":    video_recorrido_url or None,
+        # Si el usuario ya subió su video, el link está listo de inmediato
+        "video_ready":            bool(video_recorrido_url),
         "otras_propiedades":      None,
     })
 
@@ -558,12 +563,27 @@ async def ver_propiedad(property_id: str, request: Request):
     data = db.get_property(property_id)
     if not data:
         raise HTTPException(status_code=404, detail="Propiedad no encontrada.")
-    # Propiedades relacionadas para la sección "Otros inmuebles"
-    otras = db.get_recent_properties(limit=3, exclude_id=property_id)
+
+    account_type = data.get("account_type", "particular")
+
+    # Carrusel de otras propiedades: SOLO para cuentas 'inmobiliaria'.
+    # Los particulares no muestran nada que distraiga del inmueble principal.
+    if account_type == "inmobiliaria":
+        telefono = data.get("telefono_agente", "")
+        otras = (
+            db.get_agent_properties(telefono, exclude_id=property_id, limit=8)
+            if telefono
+            else db.get_recent_properties(limit=6, exclude_id=property_id)
+        )
+        otras = otras or None
+    else:
+        otras = None
+
     return templates.TemplateResponse("propiedad.html", {
-        "request":          request,
-        "property_id":      property_id,
-        "otras_propiedades": otras if otras else None,
+        "request":           request,
+        "property_id":       property_id,
+        "otras_propiedades": otras,
+        "account_type":      account_type,
         **data,
     })
 
@@ -644,13 +664,19 @@ def _video_task(task_id: str, data: dict, prop_id: Optional[str],
         nombre   = data.get("nombre_agente", "")
         telefono = data.get("telefono_agente", "") or data.get("telefono", "")
         specs    = {
-            "metros":           data.get("metros_construidos") or data.get("metros", ""),
-            "habitaciones":     data.get("habitaciones", ""),
-            "banos":            data.get("banos", ""),
-            "estacionamientos": data.get("estacionamientos", ""),
-            "precio":           data.get("precio", ""),
-            "ciudad":           data.get("ciudad", ""),
-            "direccion":        data.get("direccion", ""),
+            "metros":              data.get("metros_construidos") or data.get("metros", ""),
+            "habitaciones":        data.get("habitaciones", ""),
+            "banos":               data.get("banos", ""),
+            "estacionamientos":    data.get("estacionamientos", ""),
+            "precio":              data.get("precio", ""),
+            "ciudad":              data.get("ciudad", ""),
+            "direccion":           data.get("direccion", ""),
+            "tipo_propiedad":      data.get("tipo_propiedad", ""),
+            "operacion":           data.get("operacion", ""),
+            "nombre_inmobiliaria": data.get("nombre_inmobiliaria", ""),
+            "logo_path":           data.get("logo_url", "") or data.get("logo_path", ""),
+            "amenidades":          data.get("amenidades") or [],
+            "foto_agente":         data.get("foto_agente_url", "") or data.get("foto_agente", ""),
         }
         fotos            = [f for f in data.get("fotos", []) if f][:6]
         video_url_propio = data.get("video_url_propio")
@@ -702,78 +728,3 @@ def _video_task(task_id: str, data: dict, prop_id: Optional[str],
             db.update_property(prop_id, update_err)
 
 
-@app.post("/generate-video")
-async def generate_video(request: PropertyRequest):
-    """
-    Genera video según el campo 'video_url_propio':
-    - Sin video propio → slideshow automático → campo video_url
-    - Con video propio → overlays → campo video_recorrido_url
-    """
-    import threading
-    from video_utils import ffmpeg_available
-
-    if not ffmpeg_available():
-        raise HTTPException(
-            status_code=503,
-            detail="FFmpeg no disponible en este servidor. El video estará activo en Railway."
-        )
-
-    data    = request.model_dump()
-    base    = Path(__file__).parent
-    prop_id = data.pop("property_id", None)
-
-    data["fotos"] = [
-        str(base / p.lstrip("/").replace("/", os.sep)) if p.startswith("/uploads/") else p
-        for p in data.get("fotos", []) if p
-    ]
-
-    # Determinar qué campo actualizar en DB según el tipo de video
-    is_recorrido = bool(data.get("video_url_propio"))
-    field        = "video_recorrido_url" if is_recorrido else "video_url"
-
-    task_id = str(uuid.uuid4())
-    _video_tasks[task_id] = {
-        "status": "running", "progress": 0,
-        "status_text": "iniciando", "output_path": None,
-        "error": None, "video_url": None,
-        "property_id": prop_id or "",
-    }
-
-    threading.Thread(
-        target=_video_task, args=(task_id, data, prop_id, field), daemon=True
-    ).start()
-    return JSONResponse({"task_id": task_id, "field": field})
-
-
-@app.get("/video-status/{task_id}")
-async def video_status(task_id: str):
-    task = _video_tasks.get(task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Tarea no encontrada")
-    return JSONResponse({
-        "status":      task["status"],
-        "progress":    task["progress"],
-        "status_text": task.get("status_text", ""),
-        "error":       task.get("error"),
-        "video_url":   task.get("video_url"),
-    })
-
-
-@app.get("/download-video/{task_id}")
-async def download_video(task_id: str):
-    """Sirve el video local cuando Cloudinary no está configurado (solo desarrollo)."""
-    task = _video_tasks.get(task_id)
-    output = task.get("output_path") if task else None
-    if not output or not os.path.exists(output):
-        raise HTTPException(status_code=404, detail="Video no encontrado o ya expirado.")
-
-    def iter_file():
-        with open(output, "rb") as f:
-            while chunk := f.read(65536):
-                yield chunk
-
-    return StreamingResponse(
-        iter_file(),
-        media_type="video/mp4",
-        headers={"Content-Disposition": f"attachment; filename=listapro_{task_id[:8]}.mp4"},
-    )

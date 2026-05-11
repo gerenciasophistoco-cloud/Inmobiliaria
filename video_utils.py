@@ -1,12 +1,18 @@
 """
-video_utils.py — Pipeline mínimo y estable.
-Sin textos, sin transiciones. Solo fotos → 4:5 con fondo desenfocado.
+video_utils.py — Pipeline cinematográfico. Menos es más.
 
-Causa raíz del frame=0 (resuelto aquí):
-  Las fotos de Cloudinary vienen en WebP con ICC Profile corrupto.
-  Ese ICC Profile sobrevive a -map_metadata y se incrusta en el
-  bitstream h264 como SEI (NAL type 6), corrompiendo el concat.
-  Fix: -bsf:v filter_units=remove_types=6 en cada clip.
+Narrativa secuencial: cada clip muestra UN solo dato.
+  Clip 0 → Intro:        ciudad grande + dirección + precio
+  Clip 1 → Área:         un solo dato, tarjeta minimalista esquina
+  Clip 2 → Habitaciones: ídem
+  Clip 3 → Baños / GAR:  ídem
+  Clip 4 → Amenidades:   chips refinados (si existen)
+  Clip 5 → Cierre:       precio + ciudad breve
+  Outro  → tarjeta del agente con foto circular
+
+Ken Burns: zoom-in / zoom-out alterno (5 % sobre 3 s) para dinamismo.
+Overlay:   Pillow → PNG RGBA → FFmpeg overlay (pipeline codec intacto).
+Anti-ICC:  -bsf:v filter_units=remove_types=6 en cada clip.
 """
 import json
 import logging
@@ -17,16 +23,21 @@ import tempfile
 import urllib.request
 import uuid
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 log = logging.getLogger(__name__)
 
-VW, VH  = 1080, 1350   # 4:5
-FPS     = 25
-DUR_PER = 3.0
+VW, VH   = 1080, 1350
+FPS      = 25
+DUR_PER  = 3.0
+FADE_DUR = 0.5   # fade in + fade out = 1 s de transición entre clips
+
+_GOLD      = (255, 210,   0, 255)
+_WHITE     = (255, 255, 255, 255)
+_WHITE_DIM = (200, 200, 200, 170)
 
 
-# ─── utilidades ───────────────────────────────────────────────────────────────
+# ─── FFmpeg ───────────────────────────────────────────────────────────────────
 
 def ffmpeg_available() -> bool:
     if shutil.which("ffmpeg"):
@@ -48,15 +59,8 @@ def _ffmpeg_bin() -> str:
 
 
 def _to_jpeg(src: str) -> str:
-    """
-    Descarga o lee src y lo convierte a JPEG sin ICC Profile.
-    -map_metadata -1 elimina el ICC Profile del CONTENEDOR del JPEG.
-    El JPEG resultante no tendrá APP2 marker, así que los frames
-    decodificados no tendrán ICC Profile como side-data.
-    """
+    """Descarga / lee src y lo convierte a JPEG sin ICC Profile."""
     out = str(Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.jpg")
-
-    # si es URL, descarga primero
     raw = src
     if src.startswith(("http://", "https://")):
         raw = str(Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.img")
@@ -68,81 +72,681 @@ def _to_jpeg(src: str) -> str:
         candidate = Path(__file__).parent / src.lstrip("/")
         if candidate.exists():
             raw = str(candidate)
-
-    # convierte a JPEG limpio (sin ICC Profile)
     r = subprocess.run(
         [_ffmpeg_bin(), "-y", "-i", raw,
-         "-frames:v", "1", "-q:v", "2",
-         "-map_metadata", "-1",   # ← elimina ICC Profile del JPEG
-         out],
-        capture_output=True, timeout=30
+         "-frames:v", "1", "-q:v", "2", "-map_metadata", "-1", out],
+        capture_output=True, timeout=30,
     )
     if r.returncode == 0 and os.path.exists(out) and os.path.getsize(out) > 0:
         return out
-
-    # fallback: Pillow
     try:
         from PIL import Image
         Image.open(raw).convert("RGB").save(out, "JPEG", quality=90)
         return out
     except Exception:
         pass
+    return raw
 
-    return raw   # último recurso
+
+# ─── Pillow helpers ───────────────────────────────────────────────────────────
+
+def _load_font(size: int, bold: bool = False):
+    from PIL import ImageFont
+    paths = (
+        ["/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+         "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+         "/usr/share/fonts/opentype/urw-base35/NimbusSans-Bold.otf",
+         "C:\\Windows\\Fonts\\arialbd.ttf", "/Library/Fonts/Arial Bold.ttf"]
+        if bold else
+        ["/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+         "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+         "/usr/share/fonts/opentype/urw-base35/NimbusSans-Regular.otf",
+         "C:\\Windows\\Fonts\\arial.ttf", "/Library/Fonts/Arial.ttf"]
+    )
+    for p in paths:
+        if os.path.exists(p):
+            try:
+                return ImageFont.truetype(p, size)
+            except Exception:
+                continue
+    try:
+        return ImageFont.load_default(size=size)
+    except Exception:
+        return ImageFont.load_default()
 
 
-def _make_clip(jpeg: str, idx: int, dur: float = DUR_PER) -> str:
+def _vignette(width: int, height: int, a0: int, a1: int):
+    """Banda RGBA negra con degradado exponencial suave a0→a1."""
+    from PIL import Image, ImageDraw
+    img  = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    for y in range(height):
+        t = (y / max(height - 1, 1)) ** 1.8
+        a = max(0, min(255, int(a0 + (a1 - a0) * t)))
+        draw.line([(0, y), (width - 1, y)], fill=(0, 0, 0, a))
+    return img
+
+
+def _txt(draw, xy: Tuple[int, int], text: str, font, color: tuple, sh: int = 2):
+    """Texto con sombra ligera (sh=0 → sin sombra)."""
+    if sh:
+        for dx, dy in ((-sh, sh), (sh, sh), (0, sh)):
+            draw.text((xy[0] + dx, xy[1] + dy), text, font=font,
+                      fill=(0, 0, 0, 130))
+    draw.text(xy, text, font=font, fill=color)
+
+
+def _txt_center(draw, y: int, text: str, font, color: tuple, sh: int = 2):
+    """Texto centrado horizontalmente."""
+    bb = draw.textbbox((0, 0), text, font=font)
+    x  = (VW - (bb[2] - bb[0])) // 2
+    _txt(draw, (x, y), text, font, color, sh)
+
+
+def _txt_right(draw, y: int, text: str, font, color: tuple, margin: int = 46, sh: int = 2):
+    """Texto alineado a la derecha."""
+    bb = draw.textbbox((0, 0), text, font=font)
+    x  = VW - margin - (bb[2] - bb[0])
+    _txt(draw, (x, y), text, font, color, sh)
+
+
+def _fetch_img(src: str) -> Optional[str]:
+    """Descarga imagen si es URL; retorna ruta local o None."""
+    if not src:
+        return None
+    if src.startswith(("http://", "https://")):
+        dest = str(Path(tempfile.mkdtemp()) / f"img_{uuid.uuid4()}.img")
+        try:
+            req = urllib.request.Request(src, headers={"User-Agent": "ListaPro/1.0"})
+            with urllib.request.urlopen(req, timeout=12) as r:
+                with open(dest, "wb") as f:
+                    f.write(r.read())
+            return dest
+        except Exception:
+            return None
+    return src if os.path.exists(src) else None
+
+
+# ─── bloques de overlay ───────────────────────────────────────────────────────
+
+def _canvas() -> "Image.Image":
+    """Lienzo RGBA 1080×1350 vacío."""
+    from PIL import Image
+    return Image.new("RGBA", (VW, VH), (0, 0, 0, 0))
+
+
+def _header(ov, draw, specs: dict, nombre: str):
     """
-    JPEG limpio → clip MP4 1080×1350.
-
-    Técnica Blurred Background:
-      [bg]  = imagen escalada para LLENAR el canvas + boxblur
-      [fg]  = imagen escalada para CABER (sin recortar)
-      overlay centra [fg] sobre [bg] desenfocado
-
-    Clave anti-ICC: -bsf:v filter_units=remove_types=6
-      Elimina los NAL units tipo 6 (SEI) del bitstream h264.
-      El ICC Profile vive en el SEI; sin él, el concat funciona.
+    Cabecera limpia: logo + nombre inmobiliaria (izq) | tipo · operacion (der).
+    SIN precio — el precio solo aparece en slides específicos.
     """
-    out = str(Path(tempfile.mkdtemp()) / f"clip_{idx}.mp4")
+    from PIL import Image
+    M          = 46
+    nombre_inm = str(specs.get("nombre_inmobiliaria") or nombre or "")
+    tipo       = str(specs.get("tipo_propiedad") or "")
+    operacion  = str(specs.get("operacion") or "")
+    logo_src   = str(specs.get("logo_path") or specs.get("logo_url") or "")
 
-    # Blurred background filter_complex
-    fc = (
-        "[0:v]split=2[bg_src][fg_src];"
-        f"[bg_src]scale={VW}:{VH}:force_original_aspect_ratio=increase,"
-        f"crop={VW}:{VH},boxblur=20:2[bg];"
-        f"[fg_src]scale={VW}:{VH}:force_original_aspect_ratio=decrease[fg];"
-        "[bg][fg]overlay=(W-w)/2:(H-h)/2[out]"
+    logo_w = 0
+    logo_local = _fetch_img(logo_src)
+    if logo_local:
+        try:
+            logo_img = Image.open(logo_local).convert("RGBA")
+            logo_img.thumbnail((50, 50), Image.LANCZOS)
+            ov.paste(logo_img, (M, 40), logo_img)
+            logo_w = logo_img.width + 12
+        except Exception:
+            pass
+
+    if nombre_inm:
+        _txt(draw, (M + logo_w, 52),
+             f"INMOBILIARIA {nombre_inm.upper()}", _load_font(19), _WHITE, sh=2)
+
+    tipo_line = " · ".join(filter(None, [tipo.upper(), operacion.upper()]))
+    if tipo_line:
+        _txt_right(draw, 46, tipo_line, _load_font(18), _WHITE, sh=1)
+
+
+# ── Slide 0: Intro ────────────────────────────────────────────────────────────
+def _slide_intro(specs: dict, nombre: str) -> str:
+    """Ciudad grande + dirección + precio. Vignette generosa abajo."""
+    from PIL import Image, ImageDraw
+    ov = _canvas()
+
+    # Vignettes
+    top = _vignette(VW, 270, 175, 0)
+    ov.paste(top, (0, 0), top)
+    bot = _vignette(VW, 600, 0, 245)
+    ov.paste(bot, (0, VH - 600), bot)
+
+    draw = ImageDraw.Draw(ov)
+    _header(ov, draw, specs, nombre)
+    M = 46
+
+    ciudad    = (specs.get("ciudad") or "").upper().strip()
+    direccion = str(specs.get("direccion") or "")
+    precio    = str(specs.get("precio") or "")
+
+    if ciudad:
+        _txt(draw, (M, 944), ciudad, _load_font(104, bold=True), _WHITE, sh=4)
+    if direccion:
+        _txt(draw, (M, 1074), direccion[:46], _load_font(30), _WHITE_DIM, sh=2)
+    if precio:
+        _txt(draw, (M, 1148), precio, _load_font(52, bold=True), _GOLD, sh=3)
+
+    path = str(Path(tempfile.mkdtemp()) / "s_intro.png")
+    ov.save(path, "PNG")
+    return path
+
+
+# ── Slide N: Dato único (tarjeta minimalista) ─────────────────────────────────
+def _slide_dato(value: str, label: str, specs: dict, nombre: str) -> str:
+    """
+    Un solo dato en una tarjeta minimalista esquina inferior-izquierda.
+    Borde 1 px, fondo casi invisible (alpha ~28), texto limpio.
+    No tapa el centro de la foto.
+    """
+    from PIL import Image, ImageDraw
+    ov = _canvas()
+
+    # Vignette suave superior y pequeña inferior
+    top = _vignette(VW, 250, 155, 0)
+    ov.paste(top, (0, 0), top)
+    bot = _vignette(VW, 300, 0, 175)
+    ov.paste(bot, (0, VH - 300), bot)
+
+    draw = ImageDraw.Draw(ov)
+    _header(ov, draw, specs, nombre)
+
+    M = 46
+    fv = _load_font(78, bold=True)   # valor grande
+    fl = _load_font(20)              # etiqueta pequeña
+
+    vb  = draw.textbbox((0, 0), value, font=fv)
+    lb  = draw.textbbox((0, 0), label, font=fl)
+    vw, vh = vb[2] - vb[0], vb[3] - vb[1]
+    lw      = lb[2] - lb[0]
+
+    pad_x, pad_y = 24, 18
+    gap         = 10
+    card_w = max(vw, lw) + pad_x * 2
+    card_h = vh + gap + (lb[3] - lb[1]) + pad_y * 2
+
+    # Tarjeta: esquina inferior-izquierda
+    cx = M
+    cy = VH - card_h - 80
+
+    draw.rounded_rectangle(
+        [cx, cy, cx + card_w, cy + card_h],
+        radius=10,
+        fill=(0, 0, 0, 28),           # alpha ≈ 0.11 — casi invisible
+        outline=(255, 255, 255, 70),  # borde 1 px blanco tenue
+        width=1,
+    )
+    # Acento dorado: línea inferior ultra-fina
+    draw.rectangle(
+        [cx + 1, cy + card_h - 3, cx + card_w - 1, cy + card_h - 1],
+        fill=(255, 210, 0, 120),
     )
 
+    # Valor
+    _txt(draw, (cx + pad_x, cy + pad_y), value, fv, _WHITE, sh=2)
+    # Etiqueta
+    _txt(draw, (cx + pad_x, cy + pad_y + vh + gap), label, fl, _WHITE_DIM, sh=1)
+
+    path = str(Path(tempfile.mkdtemp()) / f"s_{label[:6].lower()}.png")
+    ov.save(path, "PNG")
+    return path
+
+
+# ── Slide: Amenidades ─────────────────────────────────────────────────────────
+def _slide_amenidades(specs: dict, nombre: str) -> str:
+    """Chips minimalistas de zonas comunes. Si no hay, cae al intro."""
+    from PIL import Image, ImageDraw
+    amenidades = specs.get("amenidades") or []
+    if not amenidades:
+        return _slide_intro(specs, nombre)
+
+    ov = _canvas()
+    top = _vignette(VW, 250, 155, 0)
+    ov.paste(top, (0, 0), top)
+    bot = _vignette(VW, 440, 0, 220)
+    ov.paste(bot, (0, VH - 440), bot)
+
+    draw = ImageDraw.Draw(ov)
+    _header(ov, draw, specs, nombre)
+    M = 46
+
+    # Título sección
+    ft = _load_font(22)
+    _txt(draw, (M, VH - 430), "ZONAS COMUNES", ft, _GOLD, sh=1)
+    # Línea dorada sutil
+    draw.line([(M, VH - 400), (VW - M, VH - 400)],
+              fill=(255, 210, 0, 55), width=1)
+
+    # Chips
+    fc = _load_font(21)
+    px, py = 16, 8
+    gap = 10
+    x, y = M, VH - 388
+
+    for am in amenidades[:8]:
+        bb = draw.textbbox((0, 0), am, font=fc)
+        tw, th = bb[2] - bb[0], bb[3] - bb[1]
+        cw, ch = tw + px * 2, th + py * 2
+
+        if x + cw > VW - M:
+            x  = M
+            y += ch + gap
+
+        draw.rounded_rectangle(
+            [x, y, x + cw, y + ch],
+            radius=ch // 2,
+            fill=(0, 0, 0, 35),
+            outline=(255, 255, 255, 75),
+            width=1,
+        )
+        draw.text((x + px, y + py), am, font=fc, fill=_WHITE)
+        x += cw + gap
+
+    path = str(Path(tempfile.mkdtemp()) / "s_amen.png")
+    ov.save(path, "PNG")
+    return path
+
+
+# ── Slide: Cierre (precio + ciudad pequeña) ───────────────────────────────────
+def _slide_cierre(specs: dict, nombre: str) -> str:
+    """Diapositiva de cierre elegante: precio centrado + ciudad discreta."""
+    from PIL import Image, ImageDraw
+    ov = _canvas()
+
+    top = _vignette(VW, 250, 155, 0)
+    ov.paste(top, (0, 0), top)
+    bot = _vignette(VW, 480, 0, 235)
+    ov.paste(bot, (0, VH - 480), bot)
+
+    draw = ImageDraw.Draw(ov)
+    _header(ov, draw, specs, nombre)
+
+    precio = str(specs.get("precio") or "")
+    ciudad = (specs.get("ciudad") or "").upper().strip()
+
+    if ciudad:
+        _txt_center(draw, VH - 440, ciudad, _load_font(28), _WHITE_DIM, sh=1)
+
+    # Línea dorada sutil
+    draw.line([(VW // 4, VH - 400), (3 * VW // 4, VH - 400)],
+              fill=(255, 210, 0, 90), width=1)
+
+    if precio:
+        _txt_center(draw, VH - 370, precio, _load_font(66, bold=True), _GOLD, sh=3)
+
+    path = str(Path(tempfile.mkdtemp()) / "s_cierre.png")
+    ov.save(path, "PNG")
+    return path
+
+
+# ── Fábrica de overlays ───────────────────────────────────────────────────────
+
+def _build_sequence(specs: dict) -> List[str]:
+    """Secuencia de tipos de slide según los datos disponibles."""
+    seq = ["intro"]
+    if specs.get("metros") or specs.get("metros_construidos"):
+        seq.append("area")
+    if specs.get("habitaciones"):
+        seq.append("habitaciones")
+    if specs.get("banos"):
+        seq.append("banos")
+    if specs.get("estacionamientos"):
+        seq.append("garaje")
+    if specs.get("amenidades"):
+        seq.append("amenidades")
+    seq.append("cierre")
+    return seq
+
+
+def _build_overlays(specs: dict, nombre: str, sequence: List[str]
+                    ) -> Dict[str, Optional[str]]:
+    """Pre-genera cada tipo de overlay una sola vez (cacheado por tipo)."""
+    cache: Dict[str, Optional[str]] = {}
+    for stype in set(sequence):
+        try:
+            if stype == "intro":
+                cache[stype] = _slide_intro(specs, nombre)
+            elif stype == "area":
+                v = str(specs.get("metros") or specs.get("metros_construidos") or "")
+                cache[stype] = _slide_dato(v, "M²  ·  ÁREA", specs, nombre)
+            elif stype == "habitaciones":
+                v = str(specs.get("habitaciones") or "")
+                cache[stype] = _slide_dato(v, "HABITACIONES", specs, nombre)
+            elif stype == "banos":
+                v = str(specs.get("banos") or "")
+                cache[stype] = _slide_dato(v, "BAÑOS", specs, nombre)
+            elif stype == "garaje":
+                v = str(specs.get("estacionamientos") or "")
+                cache[stype] = _slide_dato(v, "GARAJE", specs, nombre)
+            elif stype == "amenidades":
+                cache[stype] = _slide_amenidades(specs, nombre)
+            elif stype == "cierre":
+                cache[stype] = _slide_cierre(specs, nombre)
+            log.info("Overlay '%s' OK", stype)
+        except Exception as e:
+            log.warning("Overlay '%s' falló: %s", stype, e)
+            cache[stype] = None
+    return cache
+
+
+# ─── Outro ────────────────────────────────────────────────────────────────────
+
+def _create_outro(nombre: str, telefono: str, specs: dict) -> str:
+    """
+    Pantalla de cierre: fondo oscuro elegante + logo + foto circular agente
+    con anillo dorado + nombre + WhatsApp en dorado.
+    """
+    from PIL import Image, ImageDraw, ImageFilter
+
+    W, H = VW, VH
+
+    # Fondo degradado oscuro
+    tiny = Image.new("RGBA", (1, 2))
+    tiny.putpixel((0, 0), (10, 10, 16, 255))
+    tiny.putpixel((0, 1), (22, 18, 14, 255))
+    frame = tiny.resize((W, H), Image.BILINEAR).convert("RGBA")
+
+    # Glow dorado central suavísimo
+    try:
+        glow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        ImageDraw.Draw(glow).ellipse(
+            [W // 4, H // 5, 3 * W // 4, 4 * H // 5],
+            fill=(65, 48, 6, 30))
+        glow = glow.filter(ImageFilter.GaussianBlur(radius=220))
+        frame = Image.alpha_composite(frame, glow)
+    except Exception:
+        pass
+
+    draw       = ImageDraw.Draw(frame)
+    gold       = (255, 210, 0, 255)
+    nombre_inm = str(specs.get("nombre_inmobiliaria") or nombre or "")
+    logo_src   = str(specs.get("logo_path") or specs.get("logo_url") or "")
+    foto_ag    = str(specs.get("foto_agente") or "")
+    cy         = 130
+
+    # Logo
+    logo_local = _fetch_img(logo_src)
+    if logo_local:
+        try:
+            logo_img = Image.open(logo_local).convert("RGBA")
+            logo_img.thumbnail((90, 90), Image.LANCZOS)
+            lx = (W - logo_img.width) // 2
+            frame.paste(logo_img, (lx, cy), logo_img)
+            cy += logo_img.height + 24
+        except Exception:
+            pass
+
+    # Línea dorada
+    draw.rectangle([W // 3, cy, 2 * W // 3, cy + 2], fill=gold)
+    cy += 40
+
+    # Nombre inmobiliaria
+    if nombre_inm:
+        fi = _load_font(23)
+        label = f"INMOBILIARIA {nombre_inm.upper()}"
+        bb = draw.textbbox((0, 0), label, font=fi)
+        draw.text(((W - (bb[2] - bb[0])) // 2, cy), label, font=fi,
+                  fill=(175, 175, 175, 175))
+        cy += 50
+
+    cy = max(cy, 480)
+
+    # Foto circular del agente
+    foto_local = _fetch_img(foto_ag)
+    if foto_local:
+        try:
+            size = 160
+            ag   = Image.open(foto_local).convert("RGBA").resize((size, size), Image.LANCZOS)
+            mask = Image.new("L", (size, size), 0)
+            ImageDraw.Draw(mask).ellipse([0, 0, size - 1, size - 1], fill=255)
+            circle = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+            circle.paste(ag, (0, 0), mask)
+
+            # Anillo dorado
+            ring_sz = size + 8
+            ring    = Image.new("RGBA", (ring_sz, ring_sz), (0, 0, 0, 0))
+            ImageDraw.Draw(ring).ellipse(
+                [0, 0, ring_sz - 1, ring_sz - 1],
+                outline=(255, 210, 0, 190), width=3)
+            ring.paste(circle, (4, 4), circle)
+
+            lx = (W - ring_sz) // 2
+            frame.paste(ring, (lx, cy), ring)
+            cy += ring_sz + 26
+        except Exception:
+            pass
+
+    # Nombre agente
+    if nombre:
+        fn = _load_font(52, bold=True)
+        bb = draw.textbbox((0, 0), nombre, font=fn)
+        draw.text(((W - (bb[2] - bb[0])) // 2, cy), nombre, font=fn,
+                  fill=(255, 255, 255, 255))
+        cy += 74
+
+    fr = _load_font(21)
+    rol = "Asesor Inmobiliario"
+    bb  = draw.textbbox((0, 0), rol, font=fr)
+    draw.text(((W - (bb[2] - bb[0])) // 2, cy), rol, font=fr,
+              fill=(135, 135, 135, 160))
+    cy += 60
+
+    # Separador
+    draw.rectangle([(W // 2 - 22), cy, (W // 2 + 22), cy + 2], fill=gold)
+    cy += 40
+
+    # WhatsApp
+    if telefono:
+        fl2 = _load_font(20)
+        lbl = "WhatsApp · Llama ahora"
+        bb  = draw.textbbox((0, 0), lbl, font=fl2)
+        draw.text(((W - (bb[2] - bb[0])) // 2, cy), lbl, font=fl2,
+                  fill=(145, 145, 145, 155))
+        cy += 38
+        ft2 = _load_font(44, bold=True)
+        bb  = draw.textbbox((0, 0), telefono, font=ft2)
+        draw.text(((W - (bb[2] - bb[0])) // 2, cy), telefono, font=ft2, fill=gold)
+
+    # Branding
+    fb    = _load_font(15)
+    brand = "Creado con LISTAPRO"
+    bb    = draw.textbbox((0, 0), brand, font=fb)
+    draw.text(((W - (bb[2] - bb[0])) // 2, H - 60), brand, font=fb,
+              fill=(60, 60, 60, 140))
+
+    path = str(Path(tempfile.mkdtemp()) / "outro.png")
+    frame.save(path, "PNG")
+    return path
+
+
+def _outro_clip(outro_png: str, dur: float = 4.0) -> str:
+    out         = str(Path(tempfile.mkdtemp()) / "outro.mp4")
+    fade_out_st = max(0.0, dur - FADE_DUR)
     cmd = [
         _ffmpeg_bin(), "-y",
-        "-loop", "1", "-i", jpeg,
-        "-filter_complex", fc,
-        "-map", "[out]",
-        "-t", str(dur),
-        "-r", str(FPS),
-        "-map_metadata", "-1",
-        "-c:v", "libx264",
-        "-profile:v", "high", "-level:v", "4.2",
+        "-loop", "1", "-i", outro_png,
+        "-vf", (f"scale={VW}:{VH}:force_original_aspect_ratio=disable,"
+                f"fade=t=in:st=0:d={FADE_DUR},"
+                f"fade=t=out:st={fade_out_st:.3f}:d={FADE_DUR}"),
+        "-t", str(dur), "-r", str(FPS),
+        "-c:v", "libx264", "-profile:v", "high", "-level:v", "4.2",
         "-preset", "ultrafast", "-crf", "18",
         "-pix_fmt", "yuv420p",
-        "-bsf:v", "filter_units=remove_types=6",  # ← elimina SEI/ICC del h264
+        "-bsf:v", "filter_units=remove_types=6",
         out,
     ]
-    r = subprocess.run(cmd, capture_output=True, timeout=120)
+    r = subprocess.run(cmd, capture_output=True, timeout=60)
     if r.returncode != 0:
-        msg = r.stderr.decode("utf-8", errors="replace")[-600:]
-        raise RuntimeError(f"Error clip {idx}:\n{msg}")
+        raise RuntimeError(r.stderr.decode("utf-8", errors="replace")[-400:])
+    if os.path.getsize(out) < 1000:
+        raise RuntimeError("Outro clip vacío")
+    return out
 
-    # verificar que el clip no esté vacío
+
+# ─── Ken Burns ────────────────────────────────────────────────────────────────
+
+def _kb_filter(idx: int, dur: float) -> str:
+    """
+    Zoom-in / zoom-out alterno de 5 % sobre `dur` segundos.
+    Aplicado sobre [composed] (DESPUÉS del overlay de texto) para que
+    el texto quede fijo y solo la foto se mueva.
+    """
+    # scale=eval=frame soporta 't' (tiempo en segundos)
+    # floor(x/2)*2 → garantiza dimensión par (requerido por yuv420p)
+    if idx % 2 == 0:
+        # zoom-in: imagen crece del 100 % al 105 %
+        expr = f"1 + 0.05*t/{dur}"
+    else:
+        # zoom-out: imagen encoge del 105 % al 100 %
+        expr = f"max(1.0, 1.05 - 0.05*t/{dur})"
+
+    return (
+        f"scale=eval=frame:"
+        f"w='floor(iw*({expr})/2)*2':"
+        f"h='floor(ih*({expr})/2)*2',"
+        f"crop={VW}:{VH}:'max(0,(iw-{VW})/2)':'max(0,(ih-{VH})/2)'"
+    )
+
+
+# ─── clip factory ─────────────────────────────────────────────────────────────
+
+def _make_clip(jpeg: str, idx: int, overlay_path: Optional[str] = None,
+               dur: float = DUR_PER) -> str:
+    """
+    JPEG → clip MP4 1080×1350 con:
+      - Fondo desenfocado (blurred bg)
+      - Ken Burns (zoom alternado 5 %)
+      - Overlay PNG (texto / datos)
+      - Fade in / fade out
+
+    El Ken Burns se aplica sobre [composed] (foto + bg blur),
+    el overlay de texto se pega DESPUÉS del zoom → texto fijo y nítido.
+    """
+    out         = str(Path(tempfile.mkdtemp()) / f"clip_{idx}.mp4")
+    fade_out_st = max(0.0, dur - FADE_DUR)
+    kb          = _kb_filter(idx, dur)
+
+    if overlay_path:
+        fc = (
+            "[0:v]split=2[bg_src][fg_src];"
+            f"[bg_src]scale={VW}:{VH}:force_original_aspect_ratio=increase,"
+            f"crop={VW}:{VH},boxblur=20:2[bg];"
+            f"[fg_src]scale={VW}:{VH}:force_original_aspect_ratio=decrease[fg];"
+            f"[bg][fg]overlay=(W-w)/2:(H-h)/2[composed];"
+            f"[composed]{kb}[kb];"              # Ken Burns
+            f"[kb][1:v]overlay=0:0,"            # texto fijo sobre foto en movimiento
+            f"fade=t=in:st=0:d={FADE_DUR},"
+            f"fade=t=out:st={fade_out_st:.3f}:d={FADE_DUR}[out]"
+        )
+        cmd = [
+            _ffmpeg_bin(), "-y",
+            "-loop", "1", "-i", jpeg,
+            "-loop", "1", "-i", overlay_path,
+            "-filter_complex", fc,
+            "-map", "[out]",
+            "-t", str(dur), "-r", str(FPS),
+            "-map_metadata", "-1",
+            "-c:v", "libx264", "-profile:v", "high", "-level:v", "4.2",
+            "-preset", "ultrafast", "-crf", "18",
+            "-pix_fmt", "yuv420p",
+            "-bsf:v", "filter_units=remove_types=6",
+            out,
+        ]
+    else:
+        fc = (
+            "[0:v]split=2[bg_src][fg_src];"
+            f"[bg_src]scale={VW}:{VH}:force_original_aspect_ratio=increase,"
+            f"crop={VW}:{VH},boxblur=20:2[bg];"
+            f"[fg_src]scale={VW}:{VH}:force_original_aspect_ratio=decrease[fg];"
+            f"[bg][fg]overlay=(W-w)/2:(H-h)/2[composed];"
+            f"[composed]{kb},"
+            f"fade=t=in:st=0:d={FADE_DUR},"
+            f"fade=t=out:st={fade_out_st:.3f}:d={FADE_DUR}[out]"
+        )
+        cmd = [
+            _ffmpeg_bin(), "-y",
+            "-loop", "1", "-i", jpeg,
+            "-filter_complex", fc,
+            "-map", "[out]",
+            "-t", str(dur), "-r", str(FPS),
+            "-map_metadata", "-1",
+            "-c:v", "libx264", "-profile:v", "high", "-level:v", "4.2",
+            "-preset", "ultrafast", "-crf", "18",
+            "-pix_fmt", "yuv420p",
+            "-bsf:v", "filter_units=remove_types=6",
+            out,
+        ]
+
+    r = subprocess.run(cmd, capture_output=True, timeout=180)   # +60 s por Ken Burns
+    if r.returncode != 0:
+        # Fallback sin Ken Burns si el filtro falla (FFmpeg muy antiguo)
+        log.warning("Ken Burns falló clip %d, reintentando sin zoom", idx)
+        return _make_clip_simple(jpeg, idx, overlay_path, dur)
+
     size = os.path.getsize(out)
     if size < 1000:
         raise RuntimeError(f"Clip {idx} vacío ({size} bytes)")
-
     log.info("Clip %d OK (%d bytes)", idx, size)
     return out
 
+
+def _make_clip_simple(jpeg: str, idx: int, overlay_path: Optional[str],
+                      dur: float) -> str:
+    """Fallback sin Ken Burns — pipeline original probado."""
+    out         = str(Path(tempfile.mkdtemp()) / f"clip_{idx}_simple.mp4")
+    fade_out_st = max(0.0, dur - FADE_DUR)
+
+    if overlay_path:
+        fc = (
+            "[0:v]split=2[bg_src][fg_src];"
+            f"[bg_src]scale={VW}:{VH}:force_original_aspect_ratio=increase,"
+            f"crop={VW}:{VH},boxblur=20:2[bg];"
+            f"[fg_src]scale={VW}:{VH}:force_original_aspect_ratio=decrease[fg];"
+            f"[bg][fg]overlay=(W-w)/2:(H-h)/2[main];"
+            f"[main][1:v]overlay=0:0,"
+            f"fade=t=in:st=0:d={FADE_DUR},"
+            f"fade=t=out:st={fade_out_st:.3f}:d={FADE_DUR}[out]"
+        )
+        inputs = ["-loop", "1", "-i", jpeg, "-loop", "1", "-i", overlay_path]
+    else:
+        fc = (
+            "[0:v]split=2[bg_src][fg_src];"
+            f"[bg_src]scale={VW}:{VH}:force_original_aspect_ratio=increase,"
+            f"crop={VW}:{VH},boxblur=20:2[bg];"
+            f"[fg_src]scale={VW}:{VH}:force_original_aspect_ratio=decrease[fg];"
+            f"[bg][fg]overlay=(W-w)/2:(H-h)/2,"
+            f"fade=t=in:st=0:d={FADE_DUR},"
+            f"fade=t=out:st={fade_out_st:.3f}:d={FADE_DUR}[out]"
+        )
+        inputs = ["-loop", "1", "-i", jpeg]
+
+    cmd = [_ffmpeg_bin(), "-y"] + inputs + [
+        "-filter_complex", fc, "-map", "[out]",
+        "-t", str(dur), "-r", str(FPS), "-map_metadata", "-1",
+        "-c:v", "libx264", "-profile:v", "high", "-level:v", "4.2",
+        "-preset", "ultrafast", "-crf", "18",
+        "-pix_fmt", "yuv420p",
+        "-bsf:v", "filter_units=remove_types=6", out,
+    ]
+    r = subprocess.run(cmd, capture_output=True, timeout=120)
+    if r.returncode != 0:
+        raise RuntimeError(r.stderr.decode("utf-8", errors="replace")[-600:])
+    if os.path.getsize(out) < 1000:
+        raise RuntimeError(f"Clip {idx} simple vacío")
+    log.info("Clip %d (simple) OK", idx)
+    return out
+
+
+# ─── pipeline principal ───────────────────────────────────────────────────────
 
 def generate_slideshow(
     photo_sources: List[str],
@@ -153,37 +757,54 @@ def generate_slideshow(
     fade: float = 0,
 ) -> str:
     """
-    Pipeline:
-      1. Cada foto → JPEG limpio (sin ICC Profile)
-      2. Cada JPEG  → clip MP4 con fondo desenfocado (sin ICC en bitstream)
-      3. Clips      → concat con -c copy (+faststart)
-
-    -c copy evita re-encodear, elimina posibles errores de codec,
-    y no necesita h264_mp4toannexb porque es MP4→MP4.
+    Pipeline cinematográfico completo:
+      1. Fotos → JPEG limpio (sin ICC)
+      2. Secuencia de slides según datos disponibles
+      3. Overlays PNG pre-generados por tipo (Pillow, cacheados)
+      4. Clips con Ken Burns + overlay (FFmpeg)
+      5. Outro de contacto del agente
+      6. Concat -c copy + faststart
     """
     if not ffmpeg_available():
         raise RuntimeError("FFmpeg no está instalado en este servidor.")
 
     specs = specs or {}
 
-    # 1. Fotos → JPEG sin ICC Profile
+    # 1. Fotos → JPEG
     jpegs: List[str] = []
     for src in photo_sources[:6]:
         try:
             jpegs.append(_to_jpeg(src))
-            log.info("Foto %d/%d convertida", len(jpegs), min(len(photo_sources), 6))
+            log.info("Foto %d/%d OK", len(jpegs), min(len(photo_sources), 6))
         except Exception as e:
             log.warning("Foto omitida (%s): %s", src, e)
 
     if not jpegs:
         raise ValueError("No se pudo obtener ninguna foto.")
 
-    # 2. JPEG → clips
+    # 2. Secuencia de slides
+    sequence = _build_sequence(specs)
+
+    # 3. Pre-generar overlays
+    ov_cache = _build_overlays(specs, nombre, sequence)
+
+    # 4. Clips
     clips: List[str] = []
     for i, jp in enumerate(jpegs):
-        clips.append(_make_clip(jp, i, dur_per))
+        stype = sequence[i % len(sequence)]
+        ov    = ov_cache.get(stype)
+        clips.append(_make_clip(jp, i, overlay_path=ov, dur=dur_per))
 
-    # 3. Clips → video final con concat -c copy
+    # 5. Outro
+    try:
+        outro_png  = _create_outro(nombre, telefono, specs)
+        outro_clip = _outro_clip(outro_png, dur=4.0)
+        clips.append(outro_clip)
+        log.info("Outro OK")
+    except Exception as e:
+        log.warning("Outro omitido: %s", e)
+
+    # 6. Concat -c copy
     playlist = str(Path(tempfile.mkdtemp()) / "playlist.txt")
     with open(playlist, "w") as f:
         for clip in clips:
@@ -193,20 +814,18 @@ def generate_slideshow(
     cmd = [
         _ffmpeg_bin(), "-y",
         "-f", "concat", "-safe", "0", "-i", playlist,
-        "-c", "copy",               # sin re-encodear
-        "-movflags", "+faststart",  # carga instantánea en browser
+        "-c", "copy", "-movflags", "+faststart",
         output,
     ]
     r = subprocess.run(cmd, capture_output=True, timeout=300)
     if r.returncode != 0:
-        msg = r.stderr.decode("utf-8", errors="replace")[-800:]
-        raise RuntimeError(f"Concat error:\n{msg}")
+        raise RuntimeError(
+            f"Concat error:\n{r.stderr.decode('utf-8', errors='replace')[-800:]}")
 
     size = os.path.getsize(output)
     if size < 1000:
         raise RuntimeError(f"Video final vacío ({size} bytes)")
-
-    log.info("Slideshow OK: %d fotos, %d bytes → %s", len(clips), size, output)
+    log.info("Slideshow OK: %d clips, %d bytes", len(clips), size)
     return output
 
 
@@ -216,9 +835,10 @@ def add_overlays(video_source: str, nombre: str, telefono: str, specs: dict) -> 
     if not ffmpeg_available():
         raise RuntimeError("FFmpeg no disponible.")
 
-    local_in = _to_jpeg(video_source) if video_source.endswith((".jpg", ".jpeg", ".png", ".webp")) else video_source
+    local_in = (_to_jpeg(video_source)
+                if video_source.endswith((".jpg", ".jpeg", ".png", ".webp"))
+                else video_source)
 
-    # Si no es imagen, descargar como video
     if video_source.startswith(("http://", "https://")):
         raw = str(Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.mp4")
         req = urllib.request.Request(video_source, headers={"User-Agent": "ListaPro/1.0"})
@@ -248,7 +868,6 @@ def add_overlays(video_source: str, nombre: str, telefono: str, specs: dict) -> 
         f"[fg_src]scale={VW}:{VH}:force_original_aspect_ratio=decrease[fg];"
         "[bg][fg]overlay=(W-w)/2:(H-h)/2[out]"
     )
-
     output = str(Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.mp4")
     r = subprocess.run(
         [_ffmpeg_bin(), "-y", "-i", local_in,
@@ -260,7 +879,7 @@ def add_overlays(video_source: str, nombre: str, telefono: str, specs: dict) -> 
          "-pix_fmt", "yuv420p",
          "-bsf:v", "filter_units=remove_types=6",
          "-movflags", "+faststart", output],
-        capture_output=True, timeout=300
+        capture_output=True, timeout=300,
     )
     if r.returncode != 0:
         raise RuntimeError(r.stderr.decode("utf-8", errors="replace")[-600:])
