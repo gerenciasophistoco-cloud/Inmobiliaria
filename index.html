@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ListaPro — Contenido Inmobiliario con IA</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+  <header class="header">
+    <div class="header-inner">
+      <div class="logo">
+        <span class="logo-icon">🏠</span>
+        <span class="logo-text">Lista<strong>Pro</strong></span>
+      </div>
+      <p class="header-tagline">Genera contenido profesional para tus propiedades en segundos</p>
+    </div>
+  </header>
+
+  <div class="app-layout">
+
+    <!-- ═══════════════════ FORMULARIO ═══════════════════ -->
+    <div class="form-panel">
+      <form id="propertyForm" novalidate>
+
+        <!-- 0. Selector de Rol -->
+        <div class="form-card">
+          <div class="card-header">
+            <span class="card-icon">🏷️</span>
+            <h2>¿Cómo publicas este inmueble?</h2>
+          </div>
+          <div class="rol-selector">
+            <label class="rol-option" id="rolParticular">
+              <input type="radio" name="account_type" value="particular" checked>
+              <div class="rol-option-content">
+                <span class="rol-icon">🏠</span>
+                <div>
+                  <strong>Vendedor Individual</strong>
+                  <span>Página enfocada solo en este inmueble, sin distracciones.</span>
+                </div>
+              </div>
+            </label>
+            <label class="rol-option" id="rolInmobiliaria">
+              <input type="radio" name="account_type" value="inmobiliaria">
+              <div class="rol-option-content">
+                <span class="rol-icon">🏢</span>
+                <div>
+                  <strong>Inmobiliaria / Agencia</strong>
+                  <span>Catálogo con todos tus inmuebles y recomendaciones de tu portafolio.</span>
+                </div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- 1. Datos de la Propiedad -->
+        <div class="form-card">
+          <div class="card-header">
+            <span class="card-icon">🏡</span>
+            <h2>Datos de la Propiedad</h2>
+          </div>
+
+          <div class="form-row two-col">
+            <div class="field-group">
+              <label for="tipo_propiedad">Tipo de propiedad <span class="required">*</span></label>
+              <select id="tipo_propiedad" name="tipo_propiedad" required>
+                <option value="">Seleccionar...</option>
+                <option value="Casa">Casa</option>
+                <option value="Apartamento">Apartamento</option>
+                <option value="Terreno / Lote">Terreno / Lote</option>
+                <option value="Penthouse">Penthouse</option>
+                <option value="Casa campestre">Casa campestre</option>
+                <option value="Local comercial">Local comercial</option>
+              </select>
+            </div>
+            <div class="field-group">
+              <label>Operación <span class="required">*</span></label>
+              <div class="toggle-group">
+                <label class="toggle-option">
+                  <input type="radio" name="operacion" value="Venta" checked>
+                  <span>🏷️ Venta</span>
+                </label>
+                <label class="toggle-option">
+                  <input type="radio" name="operacion" value="Renta">
+                  <span>🔑 Renta</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="field-group">
+              <label for="direccion">Dirección / Sector <span class="required">*</span></label>
+              <input type="text" id="direccion" name="direccion"
+                placeholder="Ej: Cra 15 #85-42, Barrio Rosales" required>
+            </div>
+          </div>
+
+          <div class="form-row two-col">
+            <div class="field-group">
+              <label for="ciudad">Ciudad <span class="required">*</span></label>
+              <input type="text" id="ciudad" name="ciudad" placeholder="Ej: Bogotá D.C." required>
+            </div>
+            <div class="field-group">
+              <label for="precio">Precio (COP) <span class="required">*</span></label>
+              <div class="input-prefix">
+                <span>$</span>
+                <input type="text" id="precio" name="precio"
+                  placeholder="850.000.000" required inputmode="numeric"
+                  autocomplete="off">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Características -->
+        <div class="form-card">
+          <div class="card-header">
+            <span class="card-icon">📐</span>
+            <h2>Características</h2>
+          </div>
+          <div class="features-grid">
+            <div class="feature-input">
+              <label for="habitaciones">🛏️ Habitaciones</label>
+              <input type="number" id="habitaciones" name="habitaciones" min="0" max="20" placeholder="3">
+            </div>
+            <div class="feature-input">
+              <label for="banos">🚿 Baños</label>
+              <input type="number" id="banos" name="banos" min="0" max="20" placeholder="2">
+            </div>
+            <div class="feature-input">
+              <label for="metros_construidos">🏗️ M² Const.</label>
+              <input type="number" id="metros_construidos" name="metros_construidos" min="0" placeholder="180">
+            </div>
+            <div class="feature-input">
+              <label for="metros_terreno">🌿 M² Terreno</label>
+              <input type="number" id="metros_terreno" name="metros_terreno" min="0" placeholder="250">
+            </div>
+            <div class="feature-input">
+              <label for="estacionamientos">🚗 Garajes</label>
+              <input type="number" id="estacionamientos" name="estacionamientos" min="0" max="10" placeholder="2">
+            </div>
+            <div class="feature-input">
+              <label for="estrato">🏘️ Estrato</label>
+              <input type="number" id="estrato" name="estrato" min="1" max="6" placeholder="3">
+            </div>
+            <div class="feature-input">
+              <label for="ano_construccion">📅 Año Const.</label>
+              <input type="number" id="ano_construccion" name="ano_construccion" min="1900" max="2030" placeholder="2020">
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Amenidades -->
+        <div class="form-card">
+          <div class="card-header">
+            <span class="card-icon">✨</span>
+            <h2>Amenidades</h2>
+          </div>
+          <div class="amenidades-grid">
+            <label class="amenidad-check">
+              <input type="checkbox" name="amenidades" value="Piscina">
+              <span class="check-content"><span>🏊</span> Piscina</span>
+            </label>
+            <label class="amenidad-check">
+              <input type="checkbox" name="amenidades" value="Jardín">
+              <span class="check-content"><span>🌳</span> Jardín</span>
+            </label>
+            <label class="amenidad-check">
+              <input type="checkbox" name="amenidades" value="Seguridad 24h">
+              <span class="check-content"><span>🔒</span> Seguridad 24h</span>
+            </label>
+            <label class="amenidad-check">
+              <input type="checkbox" name="amenidades" value="Gimnasio">
+              <span class="check-content"><span>💪</span> Gimnasio</span>
+            </label>
+            <label class="amenidad-check">
+              <input type="checkbox" name="amenidades" value="Zonas comunes">
+              <span class="check-content"><span>🏘️</span> Zonas comunes</span>
+            </label>
+            <label class="amenidad-check">
+              <input type="checkbox" name="amenidades" value="BBQ / Asador">
+              <span class="check-content"><span>🔥</span> BBQ / Asador</span>
+            </label>
+            <label class="amenidad-check">
+              <input type="checkbox" name="amenidades" value="Cuarto de servicio">
+              <span class="check-content"><span>🚪</span> Cuarto servicio</span>
+            </label>
+            <label class="amenidad-check">
+              <input type="checkbox" name="amenidades" value="Parque infantil">
+              <span class="check-content"><span>🎠</span> Parque infantil</span>
+            </label>
+            <label class="amenidad-check">
+              <input type="checkbox" name="amenidades" value="Salón comunal">
+              <span class="check-content"><span>🏛️</span> Salón comunal</span>
+            </label>
+            <label class="amenidad-check">
+              <input type="checkbox" name="amenidades" value="Ascensor">
+              <span class="check-content"><span>🛗</span> Ascensor</span>
+            </label>
+            <label class="amenidad-check">
+              <input type="checkbox" name="amenidades" value="Terraza">
+              <span class="check-content"><span>🌅</span> Terraza</span>
+            </label>
+            <label class="amenidad-check">
+              <input type="checkbox" name="amenidades" value="Bodega">
+              <span class="check-content"><span>📦</span> Bodega</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- 4. Descripción y Fotos -->
+        <div class="form-card">
+          <div class="card-header">
+            <span class="card-icon">📝</span>
+            <h2>Descripción y Fotos</h2>
+          </div>
+
+          <div class="field-group" style="margin-bottom:1rem">
+            <label for="descripcion_agente">Notas del agente <span class="required">*</span></label>
+            <textarea id="descripcion_agente" name="descripcion_agente" rows="3"
+              placeholder="Ej: Vista espectacular al parque, recién remodelada, excelente iluminación natural, cocina integral de lujo, barrio exclusivo y tranquilo..."
+              required></textarea>
+            <span class="field-hint">Lo que más destaca de esta propiedad (2-3 oraciones)</span>
+          </div>
+
+          <div class="field-group">
+            <label>Fotos de la propiedad</label>
+            <div class="upload-area" id="uploadArea">
+              <input type="file" id="fotos" name="fotos" multiple accept="image/*" style="display:none">
+              <div class="upload-placeholder" id="uploadPlaceholder" onclick="document.getElementById('fotos').click()" style="cursor:pointer">
+                <span class="upload-icon">📷</span>
+                <p>Arrastra fotos aquí o <strong>haz clic para seleccionar</strong></p>
+                <p class="upload-hint">JPG, PNG, WEBP &nbsp;·&nbsp; Máx. 10 fotos &nbsp;·&nbsp; La primera será la portada</p>
+              </div>
+              <div class="photo-preview" id="photoPreview"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 5. Datos del Agente -->
+        <div class="form-card">
+          <div class="card-header">
+            <span class="card-icon">👤</span>
+            <h2>Datos del Agente</h2>
+          </div>
+
+          <!-- Nombre de inmobiliaria — visible solo si el rol es 'inmobiliaria' -->
+          <div class="form-row" style="margin-bottom:0.85rem" id="campoInmobiliaria" style="display:none">
+            <div class="field-group">
+              <label for="nombre_inmobiliaria">🏢 Nombre de la inmobiliaria / agencia</label>
+              <input type="text" id="nombre_inmobiliaria" name="nombre_inmobiliaria" placeholder="Ej: Inmobiliaria García & Asociados">
+            </div>
+          </div>
+
+          <div class="form-row three-col">
+            <div class="field-group">
+              <label for="nombre_agente">Nombre del agente <span class="required">*</span></label>
+              <input type="text" id="nombre_agente" name="nombre_agente" placeholder="María García" required>
+            </div>
+            <div class="field-group">
+              <label for="telefono_agente">Teléfono / WhatsApp <span class="required">*</span></label>
+              <input type="tel" id="telefono_agente" name="telefono_agente" placeholder="300 123 4567" required>
+            </div>
+            <div class="field-group">
+              <label for="email_agente">Email</label>
+              <input type="email" id="email_agente" name="email_agente" placeholder="maria@agencia.com">
+            </div>
+          </div>
+
+          <!-- Foto del agente -->
+          <div class="field-group" style="margin-top:0.85rem">
+            <label for="foto_agente">Foto del agente <span class="field-hint-inline">(opcional)</span></label>
+            <div class="logo-upload-area" id="fotoAgenteUploadArea">
+              <input type="file" id="foto_agente" name="foto_agente" accept="image/*" class="file-input">
+              <div class="logo-upload-placeholder" id="fotoAgentePlaceholder" onclick="document.getElementById('foto_agente').click()" style="cursor:pointer">
+                <span class="logo-upload-icon">🧑‍💼</span>
+                <span class="logo-upload-text">Haz clic para subir tu foto</span>
+                <span class="logo-upload-hint">PNG, JPG — aparece en la página del inmueble</span>
+              </div>
+              <div class="logo-preview-wrap" id="fotoAgentePreviewWrap" style="display:none">
+                <img id="fotoAgentePreviewImg" src="" alt="Foto agente" style="border-radius:50%;width:64px;height:64px;object-fit:cover;">
+                <button type="button" class="logo-remove-btn" onclick="removeFotoAgente()">✕</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Video propio -->
+          <div class="field-group" style="margin-top:0.85rem">
+            <label>Video del inmueble <span class="field-hint-inline">(opcional — si no subes uno, se genera automáticamente desde las fotos)</span></label>
+            <div class="logo-upload-area" id="videoUploadArea">
+              <div class="logo-upload-placeholder" id="videoPlaceholder"
+                   onclick="document.getElementById('videoInput').click()" style="cursor:pointer">
+                <span class="logo-upload-icon">🎬</span>
+                <span class="logo-upload-text">Haz clic para subir tu video</span>
+                <span class="logo-upload-hint">MP4, MOV — se añaden tus datos de contacto encima</span>
+              </div>
+              <input type="file" id="videoInput" accept="video/*" style="display:none">
+              <div class="logo-preview-wrap" id="videoPreviewWrap" style="display:none">
+                <span id="videoFileName" style="font-size:12px;color:#64748b;"></span>
+                <button type="button" class="logo-remove-btn" onclick="removeVideo()">✕</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Logo de la agencia -->
+          <div class="field-group" style="margin-top:0.85rem">
+            <label for="logo">Logo <span class="field-hint-inline">(define los colores del inmueble)</span></label>
+            <div class="logo-upload-area" id="logoUploadArea">
+              <input type="file" id="logo" name="logo" accept="image/*" class="file-input">
+              <div class="logo-upload-placeholder" id="logoPlaceholder">
+                <span class="logo-upload-icon">🏢</span>
+                <span class="logo-upload-text">Haz clic para subir el logo</span>
+                <span class="logo-upload-hint">PNG, JPG — los colores se usan en la página del inmueble</span>
+              </div>
+              <div class="logo-preview-wrap" id="logoPreviewWrap" style="display:none">
+                <img id="logoPreviewImg" src="" alt="Logo">
+                <div id="logoPaletteChips" class="logo-palette-chips"></div>
+                <button type="button" class="logo-remove-btn" onclick="removeLogo()">✕</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-generate" id="btnGenerate">
+          <span class="btn-text">✨ Generar Contenido Profesional</span>
+          <span class="btn-loading" style="display:none">
+            <span class="spinner"></span> Generando con IA...
+          </span>
+        </button>
+
+      </form>
+    </div>
+
+    <!-- ═══════════════════ RESULTADOS ═══════════════════ -->
+    <div class="results-panel" id="resultsPanel">
+
+      <!-- Estado vacío -->
+      <div class="results-empty" id="resultsEmpty">
+        <div class="empty-icon">✨</div>
+        <h3>Tu contenido aparecerá aquí</h3>
+        <p>Llena el formulario y haz clic en <strong>Generar</strong> para crear contenido profesional listo para publicar.</p>
+        <ul class="empty-features">
+          <li>📄 Descripción profesional en español</li>
+          <li>📸 Copy listo para Instagram con hashtags</li>
+          <li>🌐 Página web del inmueble con video automático</li>
+        </ul>
+      </div>
+
+      <!-- Cargando -->
+      <div class="results-loading" id="resultsLoading" style="display:none">
+        <div class="loading-animation">
+          <div class="loading-spinner"></div>
+          <p class="loading-message" id="loadingMessage">Analizando la propiedad...</p>
+          <p class="loading-sub">La IA está trabajando para ti</p>
+        </div>
+      </div>
+
+      <!-- Contenido generado -->
+      <div class="results-content" id="resultsContent" style="display:none">
+
+        <div class="result-property-header" id="resultHeader"></div>
+        <img class="result-cover-photo" id="resultCoverPhoto" src="" alt="Portada" style="display:none">
+
+        <!-- Descripción profesional -->
+        <div class="result-text-card">
+          <div class="result-text-header">
+            <span>Descripción del inmueble</span>
+            <button class="btn-copy" id="copyDescBtn" onclick="copyText('descripcion-text', 'copyDescBtn')">
+              📋 Copiar
+            </button>
+          </div>
+          <div class="desc-options" id="descOptions"></div>
+          <div class="desc-edit-label">✏️ Edita si quieres ajustar algo:</div>
+          <textarea class="desc-edit-area" id="descripcion-text" rows="4"
+            oninput="onDescEdit(this.value)"></textarea>
+        </div>
+
+        <!-- Copy Instagram -->
+        <div class="result-text-card" style="margin-top:1rem">
+          <div class="result-text-header">
+            <span>📸 Copy para Instagram</span>
+            <button class="btn-copy" id="copyIgBtn" onclick="copyText('instagram-text', 'copyIgBtn')">
+              📋 Copiar
+            </button>
+          </div>
+          <div class="result-text" id="instagram-text"></div>
+        </div>
+
+        <div class="result-actions">
+          <button class="btn-pdf" id="btnVerInmueble" onclick="openPropiedad()">
+            <span class="btn-pdf-text">🌐 Ver inmueble</span>
+          </button>
+          <button class="btn-new" onclick="resetForm()">+ Nueva</button>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <script src="/static/script.js"></script>
+</body>
+</html>
