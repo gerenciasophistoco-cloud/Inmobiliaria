@@ -592,117 +592,16 @@ def _outro_clip(outro_png: str, dur: float = 4.0) -> str:
     return out
 
 
-# ─── Ken Burns ────────────────────────────────────────────────────────────────
-
-def _kb_filter(idx: int, dur: float) -> str:
-    """
-    Zoom-in / zoom-out alterno de 5 % sobre `dur` segundos.
-    Aplicado sobre [composed] (DESPUÉS del overlay de texto) para que
-    el texto quede fijo y solo la foto se mueva.
-    """
-    # scale=eval=frame soporta 't' (tiempo en segundos)
-    # floor(x/2)*2 → garantiza dimensión par (requerido por yuv420p)
-    if idx % 2 == 0:
-        # zoom-in: imagen crece del 100 % al 105 %
-        expr = f"1 + 0.05*t/{dur}"
-    else:
-        # zoom-out: imagen encoge del 105 % al 100 %
-        expr = f"max(1.0, 1.05 - 0.05*t/{dur})"
-
-    return (
-        f"scale=eval=frame:"
-        f"w='floor(iw*({expr})/2)*2':"
-        f"h='floor(ih*({expr})/2)*2',"
-        f"crop={VW}:{VH}:'max(0,(iw-{VW})/2)':'max(0,(ih-{VH})/2)'"
-    )
-
-
 # ─── clip factory ─────────────────────────────────────────────────────────────
 
 def _make_clip(jpeg: str, idx: int, overlay_path: Optional[str] = None,
                dur: float = DUR_PER) -> str:
     """
-    JPEG → clip MP4 1080×1350 con:
-      - Fondo desenfocado (blurred bg)
-      - Ken Burns (zoom alternado 5 %)
-      - Overlay PNG (texto / datos)
-      - Fade in / fade out
-
-    El Ken Burns se aplica sobre [composed] (foto + bg blur),
-    el overlay de texto se pega DESPUÉS del zoom → texto fijo y nítido.
+    JPEG → clip MP4 1080×1350.
+    Pipeline probado: blur bg + overlay Pillow + fade in/out.
+    Sin Ken Burns (causa fallos en Railway con scale=eval=frame).
     """
     out         = str(Path(tempfile.mkdtemp()) / f"clip_{idx}.mp4")
-    fade_out_st = max(0.0, dur - FADE_DUR)
-    kb          = _kb_filter(idx, dur)
-
-    if overlay_path:
-        fc = (
-            "[0:v]split=2[bg_src][fg_src];"
-            f"[bg_src]scale={VW}:{VH}:force_original_aspect_ratio=increase,"
-            f"crop={VW}:{VH},boxblur=20:2[bg];"
-            f"[fg_src]scale={VW}:{VH}:force_original_aspect_ratio=decrease[fg];"
-            f"[bg][fg]overlay=(W-w)/2:(H-h)/2[composed];"
-            f"[composed]{kb}[kb];"              # Ken Burns
-            f"[kb][1:v]overlay=0:0,"            # texto fijo sobre foto en movimiento
-            f"fade=t=in:st=0:d={FADE_DUR},"
-            f"fade=t=out:st={fade_out_st:.3f}:d={FADE_DUR}[out]"
-        )
-        cmd = [
-            _ffmpeg_bin(), "-y",
-            "-loop", "1", "-i", jpeg,
-            "-loop", "1", "-i", overlay_path,
-            "-filter_complex", fc,
-            "-map", "[out]",
-            "-t", str(dur), "-r", str(FPS),
-            "-map_metadata", "-1",
-            "-c:v", "libx264", "-profile:v", "high", "-level:v", "4.2",
-            "-preset", "ultrafast", "-crf", "18",
-            "-pix_fmt", "yuv420p",
-            "-bsf:v", "filter_units=remove_types=6",
-            out,
-        ]
-    else:
-        fc = (
-            "[0:v]split=2[bg_src][fg_src];"
-            f"[bg_src]scale={VW}:{VH}:force_original_aspect_ratio=increase,"
-            f"crop={VW}:{VH},boxblur=20:2[bg];"
-            f"[fg_src]scale={VW}:{VH}:force_original_aspect_ratio=decrease[fg];"
-            f"[bg][fg]overlay=(W-w)/2:(H-h)/2[composed];"
-            f"[composed]{kb},"
-            f"fade=t=in:st=0:d={FADE_DUR},"
-            f"fade=t=out:st={fade_out_st:.3f}:d={FADE_DUR}[out]"
-        )
-        cmd = [
-            _ffmpeg_bin(), "-y",
-            "-loop", "1", "-i", jpeg,
-            "-filter_complex", fc,
-            "-map", "[out]",
-            "-t", str(dur), "-r", str(FPS),
-            "-map_metadata", "-1",
-            "-c:v", "libx264", "-profile:v", "high", "-level:v", "4.2",
-            "-preset", "ultrafast", "-crf", "18",
-            "-pix_fmt", "yuv420p",
-            "-bsf:v", "filter_units=remove_types=6",
-            out,
-        ]
-
-    r = subprocess.run(cmd, capture_output=True, timeout=180)   # +60 s por Ken Burns
-    if r.returncode != 0:
-        # Fallback sin Ken Burns si el filtro falla (FFmpeg muy antiguo)
-        log.warning("Ken Burns falló clip %d, reintentando sin zoom", idx)
-        return _make_clip_simple(jpeg, idx, overlay_path, dur)
-
-    size = os.path.getsize(out)
-    if size < 1000:
-        raise RuntimeError(f"Clip {idx} vacío ({size} bytes)")
-    log.info("Clip %d OK (%d bytes)", idx, size)
-    return out
-
-
-def _make_clip_simple(jpeg: str, idx: int, overlay_path: Optional[str],
-                      dur: float) -> str:
-    """Fallback sin Ken Burns — pipeline original probado."""
-    out         = str(Path(tempfile.mkdtemp()) / f"clip_{idx}_simple.mp4")
     fade_out_st = max(0.0, dur - FADE_DUR)
 
     if overlay_path:
@@ -740,9 +639,10 @@ def _make_clip_simple(jpeg: str, idx: int, overlay_path: Optional[str],
     r = subprocess.run(cmd, capture_output=True, timeout=120)
     if r.returncode != 0:
         raise RuntimeError(r.stderr.decode("utf-8", errors="replace")[-600:])
-    if os.path.getsize(out) < 1000:
-        raise RuntimeError(f"Clip {idx} simple vacío")
-    log.info("Clip %d (simple) OK", idx)
+    size = os.path.getsize(out)
+    if size < 1000:
+        raise RuntimeError(f"Clip {idx} vacío ({size} bytes)")
+    log.info("Clip %d OK (%d bytes)", idx, size)
     return out
 
 
@@ -757,11 +657,11 @@ def generate_slideshow(
     fade: float = 0,
 ) -> str:
     """
-    Pipeline cinematográfico completo:
+    Pipeline:
       1. Fotos → JPEG limpio (sin ICC)
       2. Secuencia de slides según datos disponibles
       3. Overlays PNG pre-generados por tipo (Pillow, cacheados)
-      4. Clips con Ken Burns + overlay (FFmpeg)
+      4. Clips: blur bg + overlay + fade in/out (FFmpeg, sin Ken Burns)
       5. Outro de contacto del agente
       6. Concat -c copy + faststart
     """
