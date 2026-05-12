@@ -154,6 +154,35 @@ def _txt_right(draw, y: int, text: str, font, color: tuple, margin: int = 46, sh
     _txt(draw, (x, y), text, font, color, sh)
 
 
+def _sep(draw, x: int, y: int, w: int = 220):
+    """Línea dorada horizontal separadora, delgada y elegante."""
+    draw.line([(x, y), (x + w, y)], fill=(255, 210, 0, 200), width=2)
+
+
+def _add_zone(base_path: str, zone: str) -> str:
+    """
+    Clona el overlay base y añade el nombre de zona (ej: SALA, COCINA)
+    en la esquina inferior-derecha. Rápido: solo carga PNG + dibuja texto.
+    """
+    if not base_path or not zone or not zone.strip():
+        return base_path
+    from PIL import Image, ImageDraw
+    try:
+        ov   = Image.open(base_path).convert("RGBA")
+        draw = ImageDraw.Draw(ov)
+        M    = 48
+        zt   = zone.upper().strip()
+        f    = _load_font(19)
+        bb   = draw.textbbox((0, 0), zt, font=f)
+        x    = VW - M - (bb[2] - bb[0])
+        _txt(draw, (x, VH - 82), zt, f, (255, 255, 255, 140), sh=2)
+        out  = str(Path(tempfile.mkdtemp()) / f"ov_zone_{zt[:8].lower()}.png")
+        ov.save(out, "PNG")
+        return out
+    except Exception:
+        return base_path
+
+
 def _fetch_img(src: str) -> Optional[str]:
     """Descarga imagen si es URL; retorna ruta local o None."""
     if not src:
@@ -251,52 +280,47 @@ def _slide_intro(specs: dict, nombre: str) -> str:
     return path
 
 
-# ── Slide N: Dato único (texto flotante, sin tarjeta) ─────────────────────────
+# ── Slide N: Dato único ────────────────────────────────────────────────────────
 def _slide_dato(value: str, label: str, specs: dict, nombre: str) -> str:
     """
-    Un solo dato en esquina inferior-izquierda.
-    Texto flotante sobre vignette — sin tarjeta, aire total.
-    Valor (bold, blanco) + etiqueta (light, champagne) + línea dorada fina.
+    Layout de referencia: UN dato por slide, esquina inferior-izquierda.
+
+    Estructura de abajo hacia arriba:
+      VH-82 : precio (gold, regular)
+      VH-130: línea dorada (2px)
+      VH-165: label (champagne, 22px)  ← "HABITACIONES", "M² · ÁREA"…
+      VH-275: valor (blanco bold, 88px) ← "2", "200"…
+
+    La vignette cubre el 48% inferior del frame → el texto flota con
+    máximo contraste sobre cualquier foto de fondo.
     """
     from PIL import Image, ImageDraw
-    ov = _canvas()
-
-    top = _vignette(VW, 300, 190, 0, exp=2.2)
+    ov   = _canvas()
+    top  = _vignette(VW, 300, 190, 0, exp=2.2)
     ov.paste(top, (0, 0), top)
-    bot = _vignette(VW, 420, 0, 245, exp=1.6)
-    ov.paste(bot, (0, VH - 420), bot)
+    bot  = _vignette(VW, 650, 0, 255, exp=1.6)
+    ov.paste(bot, (0, VH - 650), bot)
 
     draw = ImageDraw.Draw(ov)
     _header(ov, draw, specs, nombre)
 
-    M  = 48
-    fv = _load_font(88, bold=True)   # número grande y bold
-    fl = _load_font(22)              # etiqueta regular
-
-    vb = draw.textbbox((0, 0), value, font=fv)
-    lh = draw.textbbox((0, 0), label, font=fl)
-
-    # Posiciones desde abajo
+    M      = 48
+    fv     = _load_font(88, bold=True)
+    fl     = _load_font(22)
+    fp     = _load_font(32, bold=True)
     precio = str(specs.get("precio") or "")
-    base_y = VH - 95 if not precio else VH - 140
 
-    # Precio pequeño
+    # Anclas fijas desde abajo
+    y_price  = VH - 82
+    y_sep    = VH - 130
+    y_label  = VH - 168
+    y_val    = VH - 275    # top del número → 88px de altura → bottom en VH-187
+
     if precio:
-        fp = _load_font(32, bold=True)
-        _txt(draw, (M, VH - 90), precio, fp, _GOLD, sh=2)
-
-    # Línea dorada horizontal
-    line_w = (vb[2] - vb[0])
-    draw.line([(M, base_y - 14), (M + line_w, base_y - 14)],
-              fill=(255, 210, 0, 200), width=2)
-
-    # Etiqueta encima de la línea
-    _txt(draw, (M, base_y - 14 - (lh[3] - lh[1]) - 10),
-         label, fl, _CHAMPAGNE, sh=1)
-
-    # Valor grande
-    _txt(draw, (M, base_y - 14 - (lh[3] - lh[1]) - 12 - (vb[3] - vb[1]) - 8),
-         value, fv, _WHITE, sh=3)
+        _txt(draw, (M, y_price), precio, fp, _GOLD, sh=2)
+    _sep(draw, M, y_sep)
+    _txt(draw, (M, y_label), label, fl, _CHAMPAGNE, sh=1)
+    _txt(draw, (M, y_val),   value, fv, _WHITE,    sh=3)
 
     path = str(Path(tempfile.mkdtemp()) / f"s_{label[:6].lower()}.png")
     ov.save(path, "PNG")
@@ -329,33 +353,22 @@ def _slide_amenidad_single(amenidad: str, specs: dict, nombre: str) -> str:
 
     M = 48
 
-    f_label  = _load_font(20)              # "INCLUYE" — light
-    f_name   = _load_font(72, bold=True)   # nombre amenidad — extra bold
-    f_precio = _load_font(30, bold=True)   # precio abajo
+    f_label  = _load_font(20)
+    f_name   = _load_font(72, bold=True)
+    f_precio = _load_font(32, bold=True)
+    precio   = str(specs.get("precio") or "")
 
-    nombre_text = amenidad.upper()
-    nb = draw.textbbox((0, 0), nombre_text, font=f_name)
-    nw = nb[2] - nb[0]
-
-    # Desde abajo:  precio → sep → nombre → label
-    precio = str(specs.get("precio") or "")
-    precio_y = VH - 85
+    # Anclas fijas desde abajo (mismo sistema que _slide_dato)
+    y_price = VH - 82
+    y_sep   = VH - 130
+    y_name  = VH - 240
+    y_label = y_name - 36
 
     if precio:
-        _txt(draw, (M, precio_y), precio, f_precio, _GOLD, sh=2)
-
-    # Línea dorada debajo del nombre de la amenidad
-    sep_y = precio_y - 48
-    draw.line([(M, sep_y), (M + min(nw, VW - 2 * M), sep_y)],
-              fill=(255, 210, 0, 210), width=2)
-
-    # Nombre de la amenidad
-    name_y = sep_y - (nb[3] - nb[1]) - 10
-    _txt(draw, (M, name_y), nombre_text, f_name, _WHITE, sh=4)
-
-    # Label "INCLUYE" justo encima
-    label_y = name_y - 34
-    _txt(draw, (M, label_y), "INCLUYE", f_label, _CHAMPAGNE, sh=1)
+        _txt(draw, (M, y_price), precio, f_precio, _GOLD, sh=2)
+    _sep(draw, M, y_sep)
+    _txt(draw, (M, y_name),  amenidad.upper(), f_name,   _WHITE,     sh=4)
+    _txt(draw, (M, y_label), "INCLUYE",        f_label, _CHAMPAGNE, sh=1)
 
     path = str(Path(tempfile.mkdtemp()) / f"ov_am_{amenidad[:10].lower().replace(' ','_')}.png")
     ov.save(path, "PNG")
@@ -774,11 +787,14 @@ def generate_slideshow(
     # 3. Pre-generar overlays
     ov_cache = _build_overlays(specs, nombre, sequence)
 
-    # 4. Clips
+    # 4. Clips — añade zona de foto (Sala, Cocina…) si el usuario la nombró
+    foto_labels = specs.get("foto_labels") or []
     clips: List[str] = []
     for i, jp in enumerate(jpegs):
-        stype = sequence[i % len(sequence)]
-        ov    = ov_cache.get(stype)
+        stype    = sequence[i % len(sequence)]
+        base_ov  = ov_cache.get(stype)
+        zone     = foto_labels[i] if i < len(foto_labels) else ""
+        ov       = _add_zone(base_ov, zone) if zone else base_ov
         clips.append(_make_clip(jp, i, overlay_path=ov, dur=dur_per))
 
     # 5. Outro

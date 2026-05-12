@@ -294,6 +294,8 @@ form.addEventListener('submit', async e => {
   const formData = new FormData(form);
   formData.delete('fotos');
   photoFiles.forEach(f => formData.append('fotos', f));
+  // Labels de zonas por foto (Sala, Cocina, Fachada…) para el video
+  formData.set('foto_labels', JSON.stringify(photoLabels));
   // Vincular el video de recorrido subido al property record
   if (lastVideoPropio) formData.set('video_recorrido_url', lastVideoPropio);
 

@@ -292,6 +292,7 @@ async def generate_content(
     ano_construccion: Optional[str] = Form(None),
     amenidades: List[str] = Form(default=[]),
     otras_caracteristicas: Optional[str] = Form(None),
+    foto_labels: Optional[str] = Form(default="[]"),  # JSON: ["Sala","Cocina",…]
     account_type: str = Form(default="particular"),
     nombre_inmobiliaria: Optional[str] = Form(None),
     nombre_agente: str = Form(...),
@@ -428,6 +429,7 @@ Datos:
         "estrato":           estrato,
         "ano_construccion":  ano_construccion,
         "amenidades":        amenidades,
+        "foto_labels":       _json.loads(foto_labels or "[]"),
         "otras_caracteristicas": otras_caracteristicas or "",
         "descripcion":       descripcion,
         "frase_inspiradora": frase_inspiradora,
@@ -676,6 +678,7 @@ def _video_task(task_id: str, data: dict, prop_id: Optional[str],
             "nombre_inmobiliaria": data.get("nombre_inmobiliaria", ""),
             "logo_path":           data.get("logo_url", "") or data.get("logo_path", ""),
             "amenidades":          data.get("amenidades") or [],
+            "foto_labels":         data.get("foto_labels") or [],
             "foto_agente":         data.get("foto_agente_url", "") or data.get("foto_agente", ""),
         }
         fotos            = [f for f in data.get("fotos", []) if f][:6]
