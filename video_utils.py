@@ -27,14 +27,16 @@ from typing import Dict, List, Optional, Tuple
 
 log = logging.getLogger(__name__)
 
-VW, VH   = 1080, 1350
-FPS      = 25
-DUR_PER  = 3.0
-FADE_DUR = 0.5   # fade in + fade out = 1 s de transición entre clips
+VW, VH       = 1080, 1350
+FPS          = 25
+DUR_PER      = 3.5          # más tiempo por slide para leer los datos
+FADE_DUR     = 0.5          # fade clip in/out
+TEXT_FADE_IN = 0.6          # el texto aparece después de que la foto ya está visible
 
-_GOLD      = (255, 210,   0, 255)
+_GOLD      = (255, 210,   0, 255)   # oro vibrante
+_CHAMPAGNE = (255, 224, 130, 255)   # oro suave para subtítulos
 _WHITE     = (255, 255, 255, 255)
-_WHITE_DIM = (200, 200, 200, 170)
+_WHITE_DIM = (210, 210, 210, 175)
 
 
 # ─── FFmpeg ───────────────────────────────────────────────────────────────────
@@ -117,13 +119,13 @@ def _load_font(size: int, bold: bool = False):
         return ImageFont.load_default()
 
 
-def _vignette(width: int, height: int, a0: int, a1: int):
-    """Banda RGBA negra con degradado exponencial suave a0→a1."""
+def _vignette(width: int, height: int, a0: int, a1: int, exp: float = 2.0):
+    """Banda RGBA negra con degradado exponencial cinematográfico a0→a1."""
     from PIL import Image, ImageDraw
     img  = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     for y in range(height):
-        t = (y / max(height - 1, 1)) ** 1.8
+        t = (y / max(height - 1, 1)) ** exp
         a = max(0, min(255, int(a0 + (a1 - a0) * t)))
         draw.line([(0, y), (width - 1, y)], fill=(0, 0, 0, a))
     return img
@@ -211,97 +213,156 @@ def _header(ov, draw, specs: dict, nombre: str):
 
 # ── Slide 0: Intro ────────────────────────────────────────────────────────────
 def _slide_intro(specs: dict, nombre: str) -> str:
-    """Ciudad grande + dirección + precio. Vignette generosa abajo."""
+    """Ciudad grande + dirección + precio. Vignette cinematográfica profunda."""
     from PIL import Image, ImageDraw
     ov = _canvas()
 
-    # Vignettes
-    top = _vignette(VW, 270, 175, 0)
+    top = _vignette(VW, 320, 200, 0, exp=2.2)
     ov.paste(top, (0, 0), top)
-    bot = _vignette(VW, 600, 0, 245)
-    ov.paste(bot, (0, VH - 600), bot)
+    bot = _vignette(VW, 650, 0, 255, exp=1.8)   # negro sólido en los últimos 100px
+    ov.paste(bot, (0, VH - 650), bot)
 
     draw = ImageDraw.Draw(ov)
     _header(ov, draw, specs, nombre)
-    M = 46
+    M = 48
 
     ciudad    = (specs.get("ciudad") or "").upper().strip()
     direccion = str(specs.get("direccion") or "")
     precio    = str(specs.get("precio") or "")
 
+    # Ciudad: tipografía extra bold, enorme
     if ciudad:
-        _txt(draw, (M, 944), ciudad, _load_font(104, bold=True), _WHITE, sh=4)
+        _txt(draw, (M, 920), ciudad, _load_font(110, bold=True), _WHITE, sh=4)
+
+    # Línea oro ultra-fina bajo la ciudad
+    if ciudad and precio:
+        draw.line([(M, 1050), (M + 200, 1050)], fill=(255, 210, 0, 160), width=2)
+
+    # Dirección: tipografía regular, discreta
     if direccion:
-        _txt(draw, (M, 1074), direccion[:46], _load_font(30), _WHITE_DIM, sh=2)
+        _txt(draw, (M, 1066), direccion[:46], _load_font(28), _WHITE_DIM, sh=2)
+
+    # Precio: bold, dorado vibrante, grande
     if precio:
-        _txt(draw, (M, 1148), precio, _load_font(52, bold=True), _GOLD, sh=3)
+        _txt(draw, (M, 1148), precio, _load_font(56, bold=True), _GOLD, sh=3)
 
     path = str(Path(tempfile.mkdtemp()) / "s_intro.png")
     ov.save(path, "PNG")
     return path
 
 
-# ── Slide N: Dato único (tarjeta minimalista) ─────────────────────────────────
+# ── Slide N: Dato único (texto flotante, sin tarjeta) ─────────────────────────
 def _slide_dato(value: str, label: str, specs: dict, nombre: str) -> str:
     """
-    Un solo dato en una tarjeta minimalista esquina inferior-izquierda.
-    Borde 1 px, fondo casi invisible (alpha ~28), texto limpio.
-    No tapa el centro de la foto.
+    Un solo dato en esquina inferior-izquierda.
+    Texto flotante sobre vignette — sin tarjeta, aire total.
+    Valor (bold, blanco) + etiqueta (light, champagne) + línea dorada fina.
     """
     from PIL import Image, ImageDraw
     ov = _canvas()
 
-    # Vignette suave superior y pequeña inferior
-    top = _vignette(VW, 250, 155, 0)
+    top = _vignette(VW, 300, 190, 0, exp=2.2)
     ov.paste(top, (0, 0), top)
-    bot = _vignette(VW, 300, 0, 175)
-    ov.paste(bot, (0, VH - 300), bot)
+    bot = _vignette(VW, 420, 0, 245, exp=1.6)
+    ov.paste(bot, (0, VH - 420), bot)
 
     draw = ImageDraw.Draw(ov)
     _header(ov, draw, specs, nombre)
 
-    M = 46
-    fv = _load_font(78, bold=True)   # valor grande
-    fl = _load_font(20)              # etiqueta pequeña
+    M  = 48
+    fv = _load_font(88, bold=True)   # número grande y bold
+    fl = _load_font(22)              # etiqueta regular
 
-    vb  = draw.textbbox((0, 0), value, font=fv)
-    lb  = draw.textbbox((0, 0), label, font=fl)
-    vw, vh = vb[2] - vb[0], vb[3] - vb[1]
-    lw      = lb[2] - lb[0]
+    vb = draw.textbbox((0, 0), value, font=fv)
+    lh = draw.textbbox((0, 0), label, font=fl)
 
-    pad_x, pad_y = 24, 18
-    gap         = 10
-    card_w = max(vw, lw) + pad_x * 2
-    card_h = vh + gap + (lb[3] - lb[1]) + pad_y * 2
+    # Posiciones desde abajo
+    precio = str(specs.get("precio") or "")
+    base_y = VH - 95 if not precio else VH - 140
 
-    # Tarjeta: esquina inferior-izquierda
-    cx = M
-    cy = VH - card_h - 80
+    # Precio pequeño
+    if precio:
+        fp = _load_font(32, bold=True)
+        _txt(draw, (M, VH - 90), precio, fp, _GOLD, sh=2)
 
-    draw.rounded_rectangle(
-        [cx, cy, cx + card_w, cy + card_h],
-        radius=10,
-        fill=(0, 0, 0, 28),           # alpha ≈ 0.11 — casi invisible
-        outline=(255, 255, 255, 70),  # borde 1 px blanco tenue
-        width=1,
-    )
-    # Acento dorado: línea inferior ultra-fina
-    draw.rectangle(
-        [cx + 1, cy + card_h - 3, cx + card_w - 1, cy + card_h - 1],
-        fill=(255, 210, 0, 120),
-    )
+    # Línea dorada horizontal
+    line_w = (vb[2] - vb[0])
+    draw.line([(M, base_y - 14), (M + line_w, base_y - 14)],
+              fill=(255, 210, 0, 200), width=2)
 
-    # Valor
-    _txt(draw, (cx + pad_x, cy + pad_y), value, fv, _WHITE, sh=2)
-    # Etiqueta
-    _txt(draw, (cx + pad_x, cy + pad_y + vh + gap), label, fl, _WHITE_DIM, sh=1)
+    # Etiqueta encima de la línea
+    _txt(draw, (M, base_y - 14 - (lh[3] - lh[1]) - 10),
+         label, fl, _CHAMPAGNE, sh=1)
+
+    # Valor grande
+    _txt(draw, (M, base_y - 14 - (lh[3] - lh[1]) - 12 - (vb[3] - vb[1]) - 8),
+         value, fv, _WHITE, sh=3)
 
     path = str(Path(tempfile.mkdtemp()) / f"s_{label[:6].lower()}.png")
     ov.save(path, "PNG")
     return path
 
 
-# ── Slide: Amenidades ─────────────────────────────────────────────────────────
+# ── Slide: Amenidad individual ────────────────────────────────────────────────
+_AMENIDAD_ICONS = {
+    "Piscina": "◉", "Jardín": "◉", "Seguridad 24h": "◉",
+    "Gimnasio": "◉", "Zonas comunes": "◉", "BBQ / Asador": "◉",
+    "Cuarto de servicio": "◉", "Parque infantil": "◉",
+    "Salón comunal": "◉", "Ascensor": "◉", "Terraza": "◉", "Bodega": "◉",
+}
+
+def _slide_amenidad_single(amenidad: str, specs: dict, nombre: str) -> str:
+    """
+    Una amenidad por slide — texto flotante elegante sobre vignette profunda.
+    Label 'INCLUYE' en champagne · Nombre en bold blanco grande · línea dorada.
+    """
+    from PIL import Image, ImageDraw
+    ov = _canvas()
+
+    top = _vignette(VW, 300, 190, 0, exp=2.2)
+    ov.paste(top, (0, 0), top)
+    bot = _vignette(VW, 600, 0, 255, exp=1.7)
+    ov.paste(bot, (0, VH - 600), bot)
+
+    draw = ImageDraw.Draw(ov)
+    _header(ov, draw, specs, nombre)
+
+    M = 48
+
+    f_label  = _load_font(20)              # "INCLUYE" — light
+    f_name   = _load_font(72, bold=True)   # nombre amenidad — extra bold
+    f_precio = _load_font(30, bold=True)   # precio abajo
+
+    nombre_text = amenidad.upper()
+    nb = draw.textbbox((0, 0), nombre_text, font=f_name)
+    nw = nb[2] - nb[0]
+
+    # Desde abajo:  precio → sep → nombre → label
+    precio = str(specs.get("precio") or "")
+    precio_y = VH - 85
+
+    if precio:
+        _txt(draw, (M, precio_y), precio, f_precio, _GOLD, sh=2)
+
+    # Línea dorada debajo del nombre de la amenidad
+    sep_y = precio_y - 48
+    draw.line([(M, sep_y), (M + min(nw, VW - 2 * M), sep_y)],
+              fill=(255, 210, 0, 210), width=2)
+
+    # Nombre de la amenidad
+    name_y = sep_y - (nb[3] - nb[1]) - 10
+    _txt(draw, (M, name_y), nombre_text, f_name, _WHITE, sh=4)
+
+    # Label "INCLUYE" justo encima
+    label_y = name_y - 34
+    _txt(draw, (M, label_y), "INCLUYE", f_label, _CHAMPAGNE, sh=1)
+
+    path = str(Path(tempfile.mkdtemp()) / f"ov_am_{amenidad[:10].lower().replace(' ','_')}.png")
+    ov.save(path, "PNG")
+    return path
+
+
+# ── Slide: Amenidades (chips, fallback si hay muchas) ─────────────────────────
 def _slide_amenidades(specs: dict, nombre: str) -> str:
     """Chips minimalistas de zonas comunes. Si no hay, cae al intro."""
     from PIL import Image, ImageDraw
@@ -391,18 +452,34 @@ def _slide_cierre(specs: dict, nombre: str) -> str:
 # ── Fábrica de overlays ───────────────────────────────────────────────────────
 
 def _build_sequence(specs: dict) -> List[str]:
-    """Secuencia de tipos de slide según los datos disponibles."""
+    """
+    Narrativa intercalada: spec → amenidad → spec → amenidad → cierre.
+    Cada amenidad tiene su propio slide con prefijo 'am:'.
+    Las amenidades se distribuyen a lo largo del video, no todas juntas.
+    """
     seq = ["intro"]
+
+    specs_slides: List[str] = []
     if specs.get("metros") or specs.get("metros_construidos"):
-        seq.append("area")
+        specs_slides.append("area")
     if specs.get("habitaciones"):
-        seq.append("habitaciones")
+        specs_slides.append("habitaciones")
     if specs.get("banos"):
-        seq.append("banos")
+        specs_slides.append("banos")
     if specs.get("estacionamientos"):
-        seq.append("garaje")
-    if specs.get("amenidades"):
-        seq.append("amenidades")
+        specs_slides.append("garaje")
+
+    amenidades = list(specs.get("amenidades") or [])[:5]  # max 5 amenidades
+    am_slides  = [f"am:{a}" for a in amenidades]
+
+    # Intercalar: spec, amenidad, spec, amenidad, ...
+    i_s, i_a = 0, 0
+    while i_s < len(specs_slides) or i_a < len(am_slides):
+        if i_s < len(specs_slides):
+            seq.append(specs_slides[i_s]); i_s += 1
+        if i_a < len(am_slides):
+            seq.append(am_slides[i_a]); i_a += 1
+
     seq.append("cierre")
     return seq
 
@@ -431,6 +508,9 @@ def _build_overlays(specs: dict, nombre: str, sequence: List[str]
                 cache[stype] = _slide_amenidades(specs, nombre)
             elif stype == "cierre":
                 cache[stype] = _slide_cierre(specs, nombre)
+            elif stype.startswith("am:"):
+                amenidad_name = stype[3:]
+                cache[stype] = _slide_amenidad_single(amenidad_name, specs, nombre)
             log.info("Overlay '%s' OK", stype)
         except Exception as e:
             log.warning("Overlay '%s' falló: %s", stype, e)
@@ -610,11 +690,18 @@ def _make_clip(jpeg: str, idx: int, overlay_path: Optional[str] = None,
     fade_out_st = max(0.0, dur - FADE_DUR)
 
     if overlay_path:
+        # Secuencia cinematográfica:
+        #   0s         → FADE_DUR : foto aparece desde negro (clip transition)
+        #   FADE_DUR   → +TEXT_FADE_IN : vignette + textos se disuelven suavemente
+        #   resto      : foto + datos 100% visibles
+        #   fade_out_st → fin : clip funde a negro (transición siguiente)
         fc = (
             f"[0:v]scale={VW}:{VH}:force_original_aspect_ratio=increase,"
-            f"crop={VW}:{VH}[main];"
-            f"[main][1:v]overlay=0:0,"
-            f"fade=t=in:st=0:d={FADE_DUR},"
+            f"crop={VW}:{VH}[photo];"
+            f"[1:v]format=rgba,"
+            f"fade=t=in:st={FADE_DUR:.3f}:d={TEXT_FADE_IN:.3f}:alpha=1[ov];"
+            f"[photo][ov]overlay=0:0[main];"
+            f"[main]fade=t=in:st=0:d={FADE_DUR},"
             f"fade=t=out:st={fade_out_st:.3f}:d={FADE_DUR}[out]"
         )
         inputs = ["-loop", "1", "-i", jpeg, "-loop", "1", "-i", overlay_path]
