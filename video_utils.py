@@ -252,7 +252,7 @@ def _header(ov, draw, specs: dict, nombre: str):
 
     if nombre_inm:
         _txt(draw, (M + logo_w, 52),
-             f"INMOBILIARIA {nombre_inm.upper()}", _load_font(19), _WHITE, sh=2)
+             nombre_inm.upper(), _load_font(19), _WHITE, sh=2)
 
     tipo_line = " · ".join(filter(None, [tipo.upper(), operacion.upper()]))
     if tipo_line:
@@ -590,12 +590,11 @@ def _create_outro(nombre: str, telefono: str, specs: dict) -> str:
     draw.rectangle([W // 3, cy, 2 * W // 3, cy + 2], fill=gold)
     cy += 40
 
-    # Nombre inmobiliaria
+    # Nombre del usuario / empresa (sin prefijo "Inmobiliaria")
     if nombre_inm:
         fi = _load_font(23)
-        label = f"INMOBILIARIA {nombre_inm.upper()}"
-        bb = draw.textbbox((0, 0), label, font=fi)
-        draw.text(((W - (bb[2] - bb[0])) // 2, cy), label, font=fi,
+        bb = draw.textbbox((0, 0), nombre_inm.upper(), font=fi)
+        draw.text(((W - (bb[2] - bb[0])) // 2, cy), nombre_inm.upper(), font=fi,
                   fill=(175, 175, 175, 175))
         cy += 50
 
@@ -633,13 +632,6 @@ def _create_outro(nombre: str, telefono: str, specs: dict) -> str:
         draw.text(((W - (bb[2] - bb[0])) // 2, cy), nombre, font=fn,
                   fill=(255, 255, 255, 255))
         cy += 74
-
-    fr = _load_font(21)
-    rol = "Asesor Inmobiliario"
-    bb  = draw.textbbox((0, 0), rol, font=fr)
-    draw.text(((W - (bb[2] - bb[0])) // 2, cy), rol, font=fr,
-              fill=(135, 135, 135, 160))
-    cy += 60
 
     # Separador
     draw.rectangle([(W // 2 - 22), cy, (W // 2 + 22), cy + 2], fill=gold)
