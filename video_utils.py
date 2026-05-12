@@ -597,20 +597,22 @@ def _outro_clip(outro_png: str, dur: float = 4.0) -> str:
 def _make_clip(jpeg: str, idx: int, overlay_path: Optional[str] = None,
                dur: float = DUR_PER) -> str:
     """
-    JPEG → clip MP4 1080×1350.
-    Pipeline probado: blur bg + overlay Pillow + fade in/out.
-    Sin Ken Burns (causa fallos en Railway con scale=eval=frame).
+    JPEG → clip MP4 1080×1350 con Smart Crop centrado.
+
+    Smart Crop:
+      scale con force_original_aspect_ratio=increase escala la foto hasta
+      que CUBRE completamente el marco 4:5 (sin barras ni blur).
+      crop=1080:1350 recorta al centro lo que sobre → cero píxeles vacíos.
+
+    Con overlay: el PNG Pillow (vignette + textos) se pega encima del crop.
     """
     out         = str(Path(tempfile.mkdtemp()) / f"clip_{idx}.mp4")
     fade_out_st = max(0.0, dur - FADE_DUR)
 
     if overlay_path:
         fc = (
-            "[0:v]split=2[bg_src][fg_src];"
-            f"[bg_src]scale={VW}:{VH}:force_original_aspect_ratio=increase,"
-            f"crop={VW}:{VH},boxblur=20:2[bg];"
-            f"[fg_src]scale={VW}:{VH}:force_original_aspect_ratio=decrease[fg];"
-            f"[bg][fg]overlay=(W-w)/2:(H-h)/2[main];"
+            f"[0:v]scale={VW}:{VH}:force_original_aspect_ratio=increase,"
+            f"crop={VW}:{VH}[main];"
             f"[main][1:v]overlay=0:0,"
             f"fade=t=in:st=0:d={FADE_DUR},"
             f"fade=t=out:st={fade_out_st:.3f}:d={FADE_DUR}[out]"
@@ -618,11 +620,8 @@ def _make_clip(jpeg: str, idx: int, overlay_path: Optional[str] = None,
         inputs = ["-loop", "1", "-i", jpeg, "-loop", "1", "-i", overlay_path]
     else:
         fc = (
-            "[0:v]split=2[bg_src][fg_src];"
-            f"[bg_src]scale={VW}:{VH}:force_original_aspect_ratio=increase,"
-            f"crop={VW}:{VH},boxblur=20:2[bg];"
-            f"[fg_src]scale={VW}:{VH}:force_original_aspect_ratio=decrease[fg];"
-            f"[bg][fg]overlay=(W-w)/2:(H-h)/2,"
+            f"[0:v]scale={VW}:{VH}:force_original_aspect_ratio=increase,"
+            f"crop={VW}:{VH},"
             f"fade=t=in:st=0:d={FADE_DUR},"
             f"fade=t=out:st={fade_out_st:.3f}:d={FADE_DUR}[out]"
         )
