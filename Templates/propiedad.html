@@ -123,39 +123,39 @@
           {{ precio }}
         </div>
         <div class="flex items-end justify-between text-white">
-          <div class="flex gap-5">
+          <div class="flex gap-6">
             {% if metros %}
-            <div class="flex flex-col items-center">
-              <span class="material-symbols-outlined text-primary-fixed text-lg mb-1">square_foot</span>
-              <span class="font-label-caps text-[9px]">{{ metros }} m²</span>
+            <div class="flex flex-col items-center gap-1">
+              <span class="material-symbols-outlined text-primary-fixed" style="font-size:26px;">square_foot</span>
+              <span class="font-label-caps text-[11px]">{{ metros }} m²</span>
             </div>
             {% endif %}
             {% if habitaciones %}
-            <div class="flex flex-col items-center">
-              <span class="material-symbols-outlined text-primary-fixed text-lg mb-1">bed</span>
-              <span class="font-label-caps text-[9px]">{{ habitaciones }} Hab.</span>
+            <div class="flex flex-col items-center gap-1">
+              <span class="material-symbols-outlined text-primary-fixed" style="font-size:26px;">bed</span>
+              <span class="font-label-caps text-[11px]">{{ habitaciones }} Hab.</span>
             </div>
             {% endif %}
             {% if banos %}
-            <div class="flex flex-col items-center">
-              <span class="material-symbols-outlined text-primary-fixed text-lg mb-1">bathtub</span>
-              <span class="font-label-caps text-[9px]">{{ banos }} Baños</span>
+            <div class="flex flex-col items-center gap-1">
+              <span class="material-symbols-outlined text-primary-fixed" style="font-size:26px;">bathtub</span>
+              <span class="font-label-caps text-[11px]">{{ banos }} Baños</span>
             </div>
             {% endif %}
             {% if estacionamientos %}
-            <div class="flex flex-col items-center">
-              <span class="material-symbols-outlined text-primary-fixed text-lg mb-1">directions_car</span>
-              <span class="font-label-caps text-[9px]">{{ estacionamientos }} Parq.</span>
+            <div class="flex flex-col items-center gap-1">
+              <span class="material-symbols-outlined text-primary-fixed" style="font-size:26px;">directions_car</span>
+              <span class="font-label-caps text-[11px]">{{ estacionamientos }} Parq.</span>
             </div>
             {% endif %}
           </div>
           {% if estrato %}
           <div class="bg-black/40 backdrop-blur-md px-3 py-2 rounded-xl
                       flex items-center gap-2 border border-white/10">
-            <span class="material-symbols-outlined text-primary-fixed text-sm">apartment</span>
+            <span class="material-symbols-outlined text-primary-fixed" style="font-size:20px;">apartment</span>
             <div>
-              <p class="font-label-caps text-[10px] text-white">Estrato {{ estrato }}</p>
-              <p class="text-[9px] text-white/60">{{ ciudad }}</p>
+              <p class="font-label-caps text-[11px] text-white">Estrato {{ estrato }}</p>
+              <p class="text-[10px] text-white/60">{{ ciudad }}</p>
             </div>
           </div>
           {% endif %}
