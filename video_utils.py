@@ -257,23 +257,20 @@ def _slide_intro(specs: dict, nombre: str) -> str:
 
     ciudad    = (specs.get("ciudad") or "").upper().strip()
     direccion = str(specs.get("direccion") or "")
-    precio    = str(specs.get("precio") or "")
 
-    # Ciudad: tipografía extra bold, enorme
+    # Ciudad: tipografía extra bold, enorme — baja para dejar respiro visual
     if ciudad:
-        _txt(draw, (M, 920), ciudad, _load_font(110, bold=True), _WHITE, sh=4)
+        _txt(draw, (M, 960), ciudad, _load_font(110, bold=True), _WHITE, sh=4)
 
     # Línea oro ultra-fina bajo la ciudad
-    if ciudad and precio:
-        draw.line([(M, 1050), (M + 200, 1050)], fill=(255, 210, 0, 160), width=2)
+    if ciudad:
+        _sep(draw, M, 1096, w=200)
 
     # Dirección: tipografía regular, discreta
     if direccion:
-        _txt(draw, (M, 1066), direccion[:46], _load_font(28), _WHITE_DIM, sh=2)
+        _txt(draw, (M, 1112), direccion[:46], _load_font(28), _WHITE_DIM, sh=2)
 
-    # Precio: bold, dorado vibrante, grande
-    if precio:
-        _txt(draw, (M, 1148), precio, _load_font(56, bold=True), _GOLD, sh=3)
+    # El precio NO aparece aquí — solo en el slide de cierre (gran revelación final)
 
     path = str(Path(tempfile.mkdtemp()) / "s_intro.png")
     ov.save(path, "PNG")
@@ -304,23 +301,19 @@ def _slide_dato(value: str, label: str, specs: dict, nombre: str) -> str:
     draw = ImageDraw.Draw(ov)
     _header(ov, draw, specs, nombre)
 
-    M      = 48
-    fv     = _load_font(88, bold=True)
-    fl     = _load_font(22)
-    fp     = _load_font(32, bold=True)
-    precio = str(specs.get("precio") or "")
+    M   = 48
+    fv  = _load_font(88, bold=True)
+    fl  = _load_font(22)
 
-    # Anclas fijas desde abajo
-    y_price  = VH - 82
-    y_sep    = VH - 130
-    y_label  = VH - 168
-    y_val    = VH - 275    # top del número → 88px de altura → bottom en VH-187
+    # Anclas sin precio — todo baja para llenar el espacio liberado
+    y_sep   = VH - 92    # línea dorada cerca del borde
+    y_label = VH - 130   # label champagne
+    y_val   = VH - 240   # número grande blanco
 
-    if precio:
-        _txt(draw, (M, y_price), precio, fp, _GOLD, sh=2)
+    # El precio NO aparece en slides intermedios — solo en el cierre final
     _sep(draw, M, y_sep)
     _txt(draw, (M, y_label), label, fl, _CHAMPAGNE, sh=1)
-    _txt(draw, (M, y_val),   value, fv, _WHITE,    sh=3)
+    _txt(draw, (M, y_val),   value, fv, _WHITE,     sh=3)
 
     path = str(Path(tempfile.mkdtemp()) / f"s_{label[:6].lower()}.png")
     ov.save(path, "PNG")
@@ -353,21 +346,17 @@ def _slide_amenidad_single(amenidad: str, specs: dict, nombre: str) -> str:
 
     M = 48
 
-    f_label  = _load_font(20)
-    f_name   = _load_font(72, bold=True)
-    f_precio = _load_font(32, bold=True)
-    precio   = str(specs.get("precio") or "")
+    f_label = _load_font(20)
+    f_name  = _load_font(72, bold=True)
 
-    # Anclas fijas desde abajo (mismo sistema que _slide_dato)
-    y_price = VH - 82
-    y_sep   = VH - 130
-    y_name  = VH - 240
+    # Sin precio — todo baja hacia el borde inferior
+    y_sep   = VH - 92
+    y_name  = VH - 210
     y_label = y_name - 36
 
-    if precio:
-        _txt(draw, (M, y_price), precio, f_precio, _GOLD, sh=2)
+    # El precio NO aparece aquí — solo en el slide de cierre
     _sep(draw, M, y_sep)
-    _txt(draw, (M, y_name),  amenidad.upper(), f_name,   _WHITE,     sh=4)
+    _txt(draw, (M, y_name),  amenidad.upper(), f_name,  _WHITE,     sh=4)
     _txt(draw, (M, y_label), "INCLUYE",        f_label, _CHAMPAGNE, sh=1)
 
     path = str(Path(tempfile.mkdtemp()) / f"ov_am_{amenidad[:10].lower().replace(' ','_')}.png")
