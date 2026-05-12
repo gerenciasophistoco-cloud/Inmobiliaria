@@ -161,8 +161,8 @@ def _sep(draw, x: int, y: int, w: int = 220):
 
 def _add_zone(base_path: str, zone: str) -> str:
     """
-    Clona el overlay base y añade el nombre de zona (ej: SALA, COCINA)
-    en la esquina inferior-derecha. Rápido: solo carga PNG + dibuja texto.
+    Clona el overlay base y añade el nombre de zona (ej: SALA, COCINA) como
+    un tag/pill en la esquina inferior-derecha: fondo oscuro + texto blanco.
     """
     if not base_path or not zone or not zone.strip():
         return base_path
@@ -170,16 +170,35 @@ def _add_zone(base_path: str, zone: str) -> str:
     try:
         ov   = Image.open(base_path).convert("RGBA")
         draw = ImageDraw.Draw(ov)
-        M    = 48
-        zt   = zone.upper().strip()
-        f    = _load_font(19)
-        bb   = draw.textbbox((0, 0), zt, font=f)
-        x    = VW - M - (bb[2] - bb[0])
-        _txt(draw, (x, VH - 82), zt, f, (255, 255, 255, 140), sh=2)
-        out  = str(Path(tempfile.mkdtemp()) / f"ov_zone_{zt[:8].lower()}.png")
+
+        zt  = zone.upper().strip()[:14]   # máx 14 caracteres
+        f   = _load_font(20)
+        bb  = draw.textbbox((0, 0), zt, font=f)
+        tw, th = bb[2] - bb[0], bb[3] - bb[1]
+
+        # Pill: fondo oscuro semitransparente + borde blanco fino
+        M    = 44
+        px, py   = 16, 8
+        tag_w    = tw + px * 2
+        tag_h    = th + py * 2
+        x        = VW - M - tag_w
+        y        = VH - M - tag_h
+
+        draw.rounded_rectangle(
+            [x, y, x + tag_w, y + tag_h],
+            radius=tag_h // 2,
+            fill=(0, 0, 0, 170),           # fondo oscuro (67% opacidad)
+            outline=(255, 255, 255, 90),   # borde blanco sutil
+            width=1,
+        )
+        draw.text((x + px, y + py), zt, font=f, fill=(255, 255, 255, 235))
+
+        out = str(Path(tempfile.mkdtemp()) / f"ov_z_{zt[:6].lower()}.png")
         ov.save(out, "PNG")
+        log.info("Zona '%s' añadida al overlay", zt)
         return out
-    except Exception:
+    except Exception as e:
+        log.warning("_add_zone falló ('%s'): %s", zone, e)
         return base_path
 
 
