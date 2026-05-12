@@ -58,6 +58,29 @@
         }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* ── Video Reel: portrait en pantalla completa ── */
+        /* El video siempre mantiene 4:5 vertical, incluso en fullscreen */
+        #mainVideoSection video:fullscreen,
+        #mainVideoSection video:-webkit-full-screen,
+        #mainVideoSection video:-moz-full-screen {
+            object-fit: contain !important;
+            background: #000 !important;
+            width: auto !important;
+            height: 100% !important;
+            max-width: calc(100vh * 4 / 5) !important;
+            margin: 0 auto !important;
+        }
+        /* Si la pantalla ya está en portrait, cubrir completamente */
+        @media (orientation: portrait) {
+            #mainVideoSection video:fullscreen,
+            #mainVideoSection video:-webkit-full-screen {
+                width: 100% !important;
+                height: auto !important;
+                max-width: 100% !important;
+                object-fit: cover !important;
+            }
+        }
     </style>
 </head>
 
@@ -243,7 +266,7 @@
         <h3 class="font-headline-md text-headline-md">Video del inmueble</h3>
         {% if video_url %}
         <div style="width:100%; border-radius:12px; overflow:hidden; aspect-ratio:4/5; background:#000;">
-          <video controls preload="metadata"
+          <video controls preload="metadata" playsinline
                  style="width:100%; height:100%; object-fit:cover; display:block;"
                  poster="{{ fotos[0] if fotos else '' }}">
             <source src="{{ video_url }}" type="video/mp4"/>
@@ -288,7 +311,7 @@
               document.getElementById('mainVideoSection').innerHTML =
                 `<h3 class="font-headline-md text-headline-md">Video del inmueble</h3>
                  <div style="width:100%; border-radius:12px; overflow:hidden; aspect-ratio:4/5; background:#000;">
-                   <video controls preload="metadata"
+                   <video controls preload="metadata" playsinline
                           style="width:100%; height:100%; object-fit:cover; display:block;"
                           poster="{{ fotos[0] if fotos else '' }}">
                      <source src="${d.video_url}" type="video/mp4"/>
@@ -323,7 +346,7 @@
               document.getElementById('mainVideoSection').innerHTML =
                 `<h3 class="font-headline-md text-headline-md">Video del inmueble</h3>
                  <div style="width:100%; border-radius:12px; overflow:hidden; aspect-ratio:4/5; background:#000;">
-                   <video controls preload="metadata"
+                   <video controls preload="metadata" playsinline
                           style="width:100%; height:100%; object-fit:cover; display:block;">
                      <source src="${d.video_url}" type="video/mp4"/>
                    </video>
@@ -735,6 +758,52 @@
 
     </div>
   </div>
+
+  <script>
+  /* ── Fullscreen portrait: bloquear orientación en móviles ── */
+  (function () {
+    function lockPortrait() {
+      try { screen.orientation.lock('portrait').catch(function(){}); } catch(_) {}
+    }
+    function unlockOrientation() {
+      try { screen.orientation.unlock(); } catch(_) {}
+    }
+
+    /* Detectar cuando un video de mainVideoSection entra/sale de fullscreen */
+    function onFsChange() {
+      var el = document.fullscreenElement
+           || document.webkitFullscreenElement
+           || document.mozFullScreenElement;
+      var section = document.getElementById('mainVideoSection');
+      if (el && el.tagName === 'VIDEO' && section && section.contains(el)) {
+        lockPortrait();
+      } else {
+        unlockOrientation();
+      }
+    }
+
+    document.addEventListener('fullscreenchange',       onFsChange);
+    document.addEventListener('webkitfullscreenchange', onFsChange);
+    document.addEventListener('mozfullscreenchange',    onFsChange);
+
+    /* iOS: 'webkitbeginfullscreen' en el elemento video */
+    function attachIosLock(video) {
+      if (!video || video._fsLocked) return;
+      video._fsLocked = true;
+      video.addEventListener('webkitbeginfullscreen', lockPortrait);
+      video.addEventListener('webkitendfullscreen',   unlockOrientation);
+    }
+
+    /* Engancharse a videos ya presentes y a los que se inyecten por JS */
+    var section = document.getElementById('mainVideoSection');
+    if (section) {
+      section.querySelectorAll('video').forEach(attachIosLock);
+      new MutationObserver(function() {
+        section.querySelectorAll('video').forEach(attachIosLock);
+      }).observe(section, { childList: true, subtree: true });
+    }
+  })();
+  </script>
 
 </body>
 </html>
