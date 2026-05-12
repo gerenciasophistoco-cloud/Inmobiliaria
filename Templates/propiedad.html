@@ -7,6 +7,8 @@
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script id="tailwind-config">
         tailwind.config = {
           darkMode: "class",
@@ -490,24 +492,74 @@
         <h3 class="font-headline-md text-headline-md">Ubicación</h3>
       </div>
 
-      <!-- Mapa embebido -->
-      <div style="border-radius:16px; overflow:hidden; box-shadow:0 8px 32px rgba(0,0,0,0.10); height:340px;">
-        <iframe
-          src="https://maps.google.com/maps?q={{ map_query }}&output=embed&z=16&hl=es"
-          width="100%" height="100%" style="border:0; display:block;"
-          allowfullscreen loading="lazy"
-          referrerpolicy="no-referrer-when-downgrade">
-        </iframe>
+      <!-- Mapa Leaflet + OpenStreetMap (sin API key, funciona siempre) -->
+      <div id="propMap"
+           style="height:340px; border-radius:16px; overflow:hidden;
+                  box-shadow:0 8px 32px rgba(0,0,0,0.10); background:#e8e8e8;">
       </div>
 
-      <!-- Botón abrir en Google Maps (mobile-first) -->
-      <a href="https://maps.google.com/?q={{ map_query }}" target="_blank" rel="noopener"
+      <a id="gmapsBtn"
+         href="https://maps.google.com/?q={{ map_query }}" target="_blank" rel="noopener"
          class="inline-flex items-center gap-2 bg-surface-container-low border border-outline-variant/30
                 px-5 py-3 rounded-xl hover:bg-surface-container transition-colors duration-150
                 font-label-caps text-label-caps text-primary">
         <span class="material-symbols-outlined text-sm">open_in_new</span>
-        Abrir en Google Maps
+        Cómo llegar
       </a>
+
+      <script>
+      (function () {
+        var mapEl = document.getElementById('propMap');
+        if (!mapEl || typeof L === 'undefined') return;
+
+        var coordStr   = {{ (coordenadas or '') | tojson }};
+        var direccion  = {{ (direccion or '')   | tojson }};
+        var ciudad     = {{ (ciudad or '')      | tojson }};
+
+        function buildMap(lat, lng) {
+          var map = L.map('propMap', {
+            scrollWheelZoom: false,   // no captura el scroll de página
+            zoomControl: true,
+          }).setView([lat, lng], 16);
+
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+            maxZoom: 19,
+          }).addTo(map);
+
+          L.marker([lat, lng]).addTo(map);
+
+          // Actualizar el botón "Cómo llegar" con coordenadas exactas
+          var btn = document.getElementById('gmapsBtn');
+          if (btn) btn.href = 'https://maps.google.com/?q=' + lat + ',' + lng;
+        }
+
+        // ¿Ya son coordenadas GPS?
+        var m = coordStr.match(/^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/);
+        if (m) {
+          buildMap(parseFloat(m[1]), parseFloat(m[2]));
+        } else {
+          // Geocodificar con Nominatim (OpenStreetMap, gratuito, sin API key)
+          var query = coordStr || (direccion + ', ' + ciudad + ', Colombia');
+          fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q='
+                + encodeURIComponent(query),
+                { headers: { 'Accept-Language': 'es' } })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+              if (data && data.length > 0) {
+                buildMap(parseFloat(data[0].lat), parseFloat(data[0].lon));
+              } else {
+                mapEl.innerHTML =
+                  '<p style="padding:2rem;color:#888;text-align:center">📍 No se encontró la ubicación</p>';
+              }
+            })
+            .catch(function () {
+              mapEl.innerHTML =
+                '<p style="padding:2rem;color:#888;text-align:center">📍 Mapa no disponible</p>';
+            });
+        }
+      })();
+      </script>
     </section>
     {% endif %}
 

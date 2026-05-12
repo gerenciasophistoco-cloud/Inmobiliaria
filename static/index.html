@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ListaPro — Contenido Inmobiliario con IA</title>
   <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
 <body>
 
@@ -115,10 +117,18 @@
 
           <div class="form-row">
             <div class="field-group">
-              <label for="coordenadas">📍 Ubicación en mapa <span class="field-hint-inline">(opcional — para mostrar mapa en el micrositio)</span></label>
+              <label for="coordenadas">📍 Ubicación en mapa <span class="field-hint-inline">(opcional)</span></label>
               <input type="text" id="coordenadas" name="coordenadas"
-                placeholder="Ej: 4.6534,-74.0836  o  Cra 15 #85-42, Bogotá">
-              <span class="field-hint">Coordenadas GPS o dirección exacta para el mapa interactivo</span>
+                placeholder="Ej: 4.6534,-74.0836  o  Cra 70 # 1-72, Bogotá"
+                autocomplete="off">
+              <span class="field-hint">Escribe la dirección o pega coordenadas GPS — arrastra el pin para ajustar</span>
+
+              <!-- Mapa en vivo con Leaflet -->
+              <div id="mapPreviewWrap"
+                   style="display:none; margin-top:0.75rem; border-radius:12px;
+                          overflow:hidden; height:280px; border:1px solid #e2e8f0;">
+                <div id="mapPreview" style="width:100%; height:100%;"></div>
+              </div>
             </div>
           </div>
         </div>
@@ -409,5 +419,98 @@
   </div>
 
   <script src="/static/script.js"></script>
+
+  <script>
+  /* ── Mapa en vivo del formulario (Leaflet + OpenStreetMap) ── */
+  (function () {
+    var formMap     = null;
+    var formMarker  = null;
+    var geocodeTimer = null;
+    var lastGeocode = '';
+
+    function initFormMap() {
+      if (formMap) return;
+      formMap = L.map('mapPreview', { scrollWheelZoom: false }).setView([4.65, -74.09], 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        maxZoom: 19,
+      }).addTo(formMap);
+
+      formMarker = L.marker([4.65, -74.09], { draggable: true }).addTo(formMap);
+
+      // Cuando el usuario arrastra el pin → actualiza el campo de coordenadas
+      formMarker.on('dragend', function () {
+        var pos = formMarker.getLatLng();
+        var coords = pos.lat.toFixed(6) + ',' + pos.lng.toFixed(6);
+        document.getElementById('coordenadas').value = coords;
+        updateGmLink(pos.lat, pos.lng);
+      });
+    }
+
+    function moveMap(lat, lng) {
+      document.getElementById('mapPreviewWrap').style.display = 'block';
+      initFormMap();
+      formMap.setView([lat, lng], 16);
+      formMarker.setLatLng([lat, lng]);
+      setTimeout(function () { formMap.invalidateSize(); }, 150);
+      updateGmLink(lat, lng);
+    }
+
+    function updateGmLink(lat, lng) {
+      // noop en el form — el link está en la otra página
+    }
+
+    function geocode(query) {
+      if (!query || query.trim() === lastGeocode) return;
+      lastGeocode = query.trim();
+
+      // ¿Ya son coordenadas GPS?
+      var m = query.match(/^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/);
+      if (m) { moveMap(parseFloat(m[1]), parseFloat(m[2])); return; }
+
+      // Geocodificar con Nominatim (sin API key)
+      fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q='
+            + encodeURIComponent(query + ', Colombia'),
+            { headers: { 'Accept-Language': 'es' } })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data && data.length > 0) {
+            var lat = parseFloat(data[0].lat);
+            var lng = parseFloat(data[0].lon);
+            moveMap(lat, lng);
+            // Rellenar el campo con coords exactas para persistir en DB
+            document.getElementById('coordenadas').value = lat.toFixed(6) + ',' + lng.toFixed(6);
+          }
+        })
+        .catch(function () {});
+    }
+
+    function scheduleGeocode(value) {
+      clearTimeout(geocodeTimer);
+      if (!value.trim()) return;
+      geocodeTimer = setTimeout(function () { geocode(value); }, 900);
+    }
+
+    // Geocodificar cuando el usuario escribe en el campo de coordenadas
+    var coordInput = document.getElementById('coordenadas');
+    if (coordInput) {
+      coordInput.addEventListener('input', function () { scheduleGeocode(this.value); });
+    }
+
+    // Geocodificar automáticamente cuando cambia dirección o ciudad
+    // (si el campo de coordenadas está vacío)
+    ['direccion', 'ciudad'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('blur', function () {
+        var coord = document.getElementById('coordenadas').value.trim();
+        if (coord) return; // el usuario ya puso coords, no sobreescribir
+        var dir = document.getElementById('direccion').value.trim();
+        var ciu = document.getElementById('ciudad').value.trim();
+        if (dir && ciu) geocode(dir + ', ' + ciu);
+      });
+    });
+  })();
+  </script>
 </body>
 </html>
