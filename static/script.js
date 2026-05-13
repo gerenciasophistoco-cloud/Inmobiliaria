@@ -412,6 +412,10 @@ function renderResults(data) {
   renderDescOptions(data.descripciones || [data.descripcion], data.descripcion);
   document.getElementById('instagram-text').textContent = data.ig_copy;
 
+  // Mostrar chip de Video 2 si el usuario subió un video de recorrido
+  const v2chip = document.getElementById('video2Chip');
+  if (v2chip) v2chip.style.display = lastVideoPropio ? 'flex' : 'none';
+
   showPanel('content');
 
   // En móvil, hacer scroll a resultados
