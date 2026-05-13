@@ -241,13 +241,12 @@ function renderPhotoPreviews() {
 
     photoPreview.appendChild(wrap);
 
+    // Usar background-image evita conflictos con el CSS de position:absolute
     const reader = new FileReader();
     reader.onload = ev => {
-      const img = document.createElement('img');
-      img.src = ev.target.result;
-      img.className = 'photo-thumb';
-      img.style.pointerEvents = 'none';
-      thumbContainer.insertBefore(img, badge);
+      thumbContainer.style.backgroundImage   = `url('${ev.target.result}')`;
+      thumbContainer.style.backgroundSize    = 'cover';
+      thumbContainer.style.backgroundPosition = 'center';
     };
     reader.readAsDataURL(file);
   });
