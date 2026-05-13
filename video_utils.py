@@ -470,6 +470,167 @@ def _slide_cierre(specs: dict, nombre: str) -> str:
     return path
 
 
+# ── Slide contextual por zona ─────────────────────────────────────────────────
+
+def _slide_zona(title: str, subtitle: str, specs: dict, nombre: str) -> str:
+    """
+    Slide de zona: título grande bold (COCINA, HABITACIÓN 2 DE 3…)
+    + subtítulo en champagne (descripción del usuario o frase de marketing).
+    Sin precio. Layout limpio y narrativo.
+    """
+    from PIL import Image, ImageDraw
+    ov  = _canvas()
+    top = _vignette(VW, 300, 190, 0, exp=2.2)
+    ov.paste(top, (0, 0), top)
+    bot = _vignette(VW, 620, 0, 255, exp=1.7)
+    ov.paste(bot, (0, VH - 620), bot)
+
+    draw = ImageDraw.Draw(ov)
+    _header(ov, draw, specs, nombre)
+
+    M       = 48
+    f_title = _load_font(72, bold=True)
+    f_sub   = _load_font(24)
+
+    y_sep   = VH - 92
+    y_sub   = VH - 138
+    y_title = VH - 242
+
+    _sep(draw, M, y_sep)
+    if subtitle:
+        _txt(draw, (M, y_sub), subtitle, f_sub, _CHAMPAGNE, sh=1)
+    _txt(draw, (M, y_title), title, f_title, _WHITE, sh=3)
+
+    safe = title[:10].lower().replace(' ', '_').replace('/', '_')
+    path = str(Path(tempfile.mkdtemp()) / f"s_zona_{safe}.png")
+    ov.save(path, "PNG")
+    return path
+
+
+# ── Mapa de zonas ─────────────────────────────────────────────────────────────
+
+_ZONE_MAP: Dict[str, str] = {
+    # habitación
+    "habitación": "hab", "habitacion": "hab", "hab": "hab",
+    "cuarto": "hab", "dormitorio": "hab", "habitaciones": "hab",
+    "alcoba": "hab", "room": "hab",
+    # cocina
+    "cocina": "cocina", "kitchen": "cocina",
+    # sala / living / comedor
+    "sala": "sala", "living": "sala", "comedor": "sala",
+    "sala-comedor": "sala", "sala comedor": "sala",
+    "sala/comedor": "sala",
+    # baño
+    "baño": "bano", "bano": "bano", "baños": "bano",
+    "bathroom": "bano",
+    # fachada / exterior
+    "fachada": "fachada", "exterior": "fachada", "frente": "fachada",
+    "entrada": "fachada",
+    # amenidad
+    "amenidad": "amenidad", "amenidades": "amenidad",
+    "zona común": "amenidad", "zona comun": "amenidad",
+    "piscina": "amenidad", "gimnasio": "amenidad", "bbq": "amenidad",
+    "terraza": "amenidad", "balcón": "amenidad", "balcon": "amenidad",
+    "zona verde": "amenidad",
+    # garaje
+    "garaje": "garaje", "parqueadero": "garaje", "garage": "garaje",
+    # pasillo / utilitario
+    "pasillo": "otro", "bodega": "otro", "lavandería": "otro",
+    "lavanderia": "otro", "estudio": "otro",
+}
+
+_LUXURY_LINES: Dict[str, str] = {
+    "cocina":   "Diseño integral · Acabados premium",
+    "sala":     "Espacios pensados para vivir bien",
+    "bano":     "Acabados de lujo · Diseño contemporáneo",
+    "amenidad": "Exclusivo para residentes",
+    "garaje":   "Cupo fijo incluido",
+    "otro":     "",
+}
+
+
+def _overlay_contextual(
+    idx: int,
+    label: str,
+    description: str,
+    specs: dict,
+    nombre: str,
+    all_labels: List[str],
+) -> Optional[str]:
+    """
+    Genera el overlay específico para una foto según su etiqueta y descripción.
+    Cada foto cuenta su propia historia dentro del video narrativo.
+    """
+    zone = _ZONE_MAP.get(label.lower().strip(), "otro" if label else "")
+    description = description.strip()
+
+    if not zone and not label:
+        return None   # sin etiqueta → el pipeline usa la secuencia de specs
+
+    if zone == "fachada":
+        return _slide_intro(specs, nombre)
+
+    if zone == "hab":
+        # Contar habitaciones para "Hab. X de Y"
+        total = sum(1 for l in all_labels
+                    if _ZONE_MAP.get(l.lower().strip()) == "hab")
+        current = sum(1 for j, l in enumerate(all_labels[:idx + 1])
+                      if _ZONE_MAP.get(l.lower().strip()) == "hab")
+        if description:
+            title    = description.upper()
+            subtitle = f"Habitación {current} de {total}"
+        elif total > 1:
+            title    = f"HAB. {current} DE {total}"
+            subtitle = ""
+        else:
+            title    = "HABITACIÓN"
+            subtitle = ""
+        return _slide_zona(title, subtitle, specs, nombre)
+
+    if zone == "cocina":
+        title    = description.upper() if description else "COCINA"
+        subtitle = "" if description else _LUXURY_LINES["cocina"]
+        return _slide_zona(title, subtitle, specs, nombre)
+
+    if zone == "sala":
+        title    = description.upper() if description else label.upper()
+        subtitle = "" if description else _LUXURY_LINES["sala"]
+        return _slide_zona(title, subtitle, specs, nombre)
+
+    if zone == "bano":
+        # Contar baños
+        total   = sum(1 for l in all_labels
+                      if _ZONE_MAP.get(l.lower().strip()) == "bano")
+        current = sum(1 for j, l in enumerate(all_labels[:idx + 1])
+                      if _ZONE_MAP.get(l.lower().strip()) == "bano")
+        if description:
+            title    = description.upper()
+            subtitle = f"Baño {current} de {total}" if total > 1 else ""
+        elif total > 1:
+            title    = f"BAÑO {current} DE {total}"
+            subtitle = ""
+        else:
+            title    = "BAÑO"
+            subtitle = _LUXURY_LINES["bano"]
+        return _slide_zona(title, subtitle, specs, nombre)
+
+    if zone == "amenidad":
+        amenidad_name = description.upper() if description else label.upper()
+        return _slide_amenidad_single(amenidad_name, specs, nombre)
+
+    if zone == "garaje":
+        n = str(specs.get("estacionamientos") or "")
+        title    = description.upper() if description else "GARAJE"
+        subtitle = (f"{n} cupo{'s' if n != '1' else ''} privado{'s' if n != '1' else ''}"
+                    if n else _LUXURY_LINES["garaje"])
+        return _slide_zona(title, subtitle, specs, nombre)
+
+    # "otro" o etiqueta personalizada no reconocida
+    title    = description.upper() if description else label.upper()
+    subtitle = label if description else ""
+    return _slide_zona(title, subtitle, specs, nombre)
+
+
 # ── Fábrica de overlays ───────────────────────────────────────────────────────
 
 def _build_sequence(specs: dict) -> List[str]:
@@ -787,14 +948,27 @@ def generate_slideshow(
     # 3. Pre-generar overlays
     ov_cache = _build_overlays(specs, nombre, sequence)
 
-    # 4. Clips — añade zona de foto (Sala, Cocina…) si el usuario la nombró
-    foto_labels = specs.get("foto_labels") or []
+    # 4. Clips — overlay contextual por foto (si tiene etiqueta) o specs (fallback)
+    foto_labels       = specs.get("foto_labels")       or []
+    foto_descriptions = specs.get("foto_descriptions") or []
     clips: List[str] = []
+    seq_idx = 0   # cursor en la secuencia de specs para fotos sin etiqueta
+
     for i, jp in enumerate(jpegs):
-        stype    = sequence[i % len(sequence)]
-        base_ov  = ov_cache.get(stype)
-        zone     = foto_labels[i] if i < len(foto_labels) else ""
-        ov       = _add_zone(base_ov, zone) if zone else base_ov
+        label = (foto_labels[i].strip()       if i < len(foto_labels)       else "")
+        desc  = (foto_descriptions[i].strip() if i < len(foto_descriptions) else "")
+
+        if label:
+            # Overlay contextual: la foto "habla" por sí misma
+            ov = _overlay_contextual(i, label, desc, specs, nombre, foto_labels)
+        else:
+            # Sin etiqueta: usar secuencia de specs normal
+            stype   = sequence[seq_idx % len(sequence)]
+            seq_idx += 1
+            base_ov = ov_cache.get(stype)
+            # Añadir zona pill (descripción) si la hay
+            ov = _add_zone(base_ov, desc) if desc and base_ov else base_ov
+
         clips.append(_make_clip(jp, i, overlay_path=ov, dur=dur_per))
 
     # 5. Outro
