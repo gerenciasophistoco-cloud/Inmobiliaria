@@ -3,8 +3,9 @@ let lastPDFData = null;
 let lastPropertyId = null;
 let lastVideoPropio = null;
 let selectedCoverIndex = 0;
-let photoLabels = [];   // nombre libre del espacio (ej: "Cocina con isla")
-let photoFiles  = [];
+let photoLabels       = [];   // zona: "Cocina", "Habitación 1"…
+let photoDescriptions = [];   // detalle opcional: "Tipo americano", "Principal"…
+let photoFiles        = [];
 
 /* ── Elementos principales ── */
 const form          = document.getElementById('propertyForm');
@@ -124,7 +125,9 @@ let dragFromIdx = -1;
 function addPhotos(fileList) {
   const imgs = Array.from(fileList).filter(f => f.type.startsWith('image/'));
   const canAdd = MAX_PHOTOS - photoFiles.length;
-  imgs.slice(0, canAdd).forEach(f => { photoFiles.push(f); photoLabels.push(''); });
+  imgs.slice(0, canAdd).forEach(f => {
+    photoFiles.push(f); photoLabels.push(''); photoDescriptions.push('');
+  });
   if (imgs.length > canAdd) showToast(`⚠️ Máximo ${MAX_PHOTOS} fotos. Se ignoraron ${imgs.length - canAdd}.`);
   renderPhotoPreviews();
 }
@@ -132,6 +135,7 @@ function addPhotos(fileList) {
 function deletePhoto(index) {
   photoFiles.splice(index, 1);
   photoLabels.splice(index, 1);
+  photoDescriptions.splice(index, 1);
   if (selectedCoverIndex >= photoFiles.length) selectedCoverIndex = 0;
   else if (selectedCoverIndex > index) selectedCoverIndex--;
   renderPhotoPreviews();
@@ -141,8 +145,10 @@ function movePhoto(from, to) {
   if (to < 0 || to >= photoFiles.length) return;
   const [f] = photoFiles.splice(from, 1);
   const [l] = photoLabels.splice(from, 1);
+  const [d] = photoDescriptions.splice(from, 1);
   photoFiles.splice(to, 0, f);
   photoLabels.splice(to, 0, l);
+  photoDescriptions.splice(to, 0, d);
   if (selectedCoverIndex === from) selectedCoverIndex = to;
   else if (from < to && selectedCoverIndex > from && selectedCoverIndex <= to) selectedCoverIndex--;
   else if (from > to && selectedCoverIndex >= to && selectedCoverIndex < from) selectedCoverIndex++;
@@ -186,16 +192,29 @@ function renderPhotoPreviews() {
 
     wrap.appendChild(thumbContainer);
 
-    /* ── Input: nombre del espacio (texto libre) ── */
-    const spaceInput = document.createElement('input');
-    spaceInput.type = 'text';
-    spaceInput.className = 'photo-space-input';
-    spaceInput.placeholder = isCover ? 'Ej: Fachada principal' : 'Ej: Cocina con isla, Hab. principal…';
-    spaceInput.value = photoLabels[i] || '';
-    spaceInput.title = 'Nombre del espacio — aparece en el video';
-    spaceInput.addEventListener('click', e => e.stopPropagation());
-    spaceInput.addEventListener('input', () => { photoLabels[i] = spaceInput.value; });
-    wrap.appendChild(spaceInput);
+    /* ── Campo 1: parte de la casa ── */
+    const zoneInput = document.createElement('input');
+    zoneInput.type = 'text';
+    zoneInput.className = 'photo-space-input';
+    zoneInput.placeholder = isCover ? 'Ej: Fachada' : 'Ej: Cocina, Habitación 1, Sala…';
+    zoneInput.value = photoLabels[i] || '';
+    zoneInput.title = '¿Qué parte de la casa es esta foto?';
+    zoneInput.addEventListener('click', e => e.stopPropagation());
+    zoneInput.addEventListener('input', () => { photoLabels[i] = zoneInput.value; });
+    wrap.appendChild(zoneInput);
+
+    /* ── Campo 2: detalle adicional (opcional) ── */
+    const detailInput = document.createElement('input');
+    detailInput.type = 'text';
+    detailInput.className = 'photo-space-input';
+    detailInput.style.borderTop = 'none';
+    detailInput.style.color = '#64748b';
+    detailInput.placeholder = 'Detalle (opcional): Tipo americano, Principal…';
+    detailInput.value = photoDescriptions[i] || '';
+    detailInput.title = 'Descripción que aparecerá en el video';
+    detailInput.addEventListener('click', e => e.stopPropagation());
+    detailInput.addEventListener('input', () => { photoDescriptions[i] = detailInput.value; });
+    wrap.appendChild(detailInput);
 
     /* ── Drag & drop ── */
     wrap.addEventListener('dragstart', e => {
@@ -302,8 +321,9 @@ form.addEventListener('submit', async e => {
   const formData = new FormData(form);
   formData.delete('fotos');
   photoFiles.forEach(f => formData.append('fotos', f));
-  // Nombre del espacio de cada foto → el video usa esto para narrar
-  formData.set('foto_labels', JSON.stringify(photoLabels));
+  // Zona + detalle de cada foto → el video solo muestra lo que el usuario escribe
+  formData.set('foto_labels',       JSON.stringify(photoLabels));
+  formData.set('foto_descriptions', JSON.stringify(photoDescriptions));
   // Vincular el video de recorrido subido al property record
   if (lastVideoPropio) formData.set('video_recorrido_url', lastVideoPropio);
 
@@ -591,7 +611,7 @@ function resetForm() {
   lastPropertyId = null;
   lastVideoPropio = null;
   selectedCoverIndex = 0;
-  photoLabels = [];
+  photoLabels = []; photoDescriptions = [];
   if (_readyTimer) { clearInterval(_readyTimer); _readyTimer = null; }
   const btnVer = document.getElementById('btnVerInmueble');
   if (btnVer) { btnVer.disabled = false; btnVer.querySelector('.btn-pdf-text').textContent = '🌐 Ver inmueble'; }

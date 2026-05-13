@@ -588,14 +588,7 @@ _ZONE_MAP: Dict[str, str] = {
     "lavanderia": "otro", "estudio": "otro",
 }
 
-_LUXURY_LINES: Dict[str, str] = {
-    "cocina":   "Diseño integral · Acabados premium",
-    "sala":     "Espacios pensados para vivir bien",
-    "bano":     "Acabados de lujo · Diseño contemporáneo",
-    "amenidad": "Exclusivo para residentes",
-    "garaje":   "Cupo fijo incluido",
-    "otro":     "",
-}
+# Sin frases automáticas — el video solo muestra lo que el usuario escribe
 
 
 def _overlay_contextual(
@@ -630,52 +623,42 @@ def _overlay_contextual(
         current = sum(1 for j, l in enumerate(all_labels[:idx + 1]) if _parse_zone(l) == z)
         return current, total
 
+    # El subtítulo es SOLO lo que el usuario escribió en el campo 2 (description)
+    # Nunca se añaden frases automáticas
+    user_subtitle = description.strip()
+
     if zone == "hab":
         current, total = _count_zone("hab")
         if len(display_text) > 3:
-            # Texto rico del usuario: usarlo como título + contador como subtítulo
-            subtitle = f"Habitación {current} de {total}" if total > 1 else ""
+            # Texto rico del usuario como título (ej: "HABITACIÓN PRINCIPAL")
+            # Añadir contador solo si hay más de una habitación
+            subtitle = (f"Habitación {current} de {total}"
+                        if total > 1 and not user_subtitle else user_subtitle)
         elif total > 1:
             display_text = f"HAB. {current} DE {total}"
-            subtitle     = ""
+            subtitle     = user_subtitle
         else:
-            display_text = "HABITACIÓN"
-            subtitle     = ""
+            display_text = display_text or "HABITACIÓN"
+            subtitle     = user_subtitle
         return _slide_zona(display_text, subtitle, specs, nombre)
 
     if zone == "bano":
         current, total = _count_zone("bano")
         if len(display_text) > 4:
-            subtitle = f"Baño {current} de {total}" if total > 1 else _LUXURY_LINES["bano"]
+            subtitle = (f"Baño {current} de {total}"
+                        if total > 1 and not user_subtitle else user_subtitle)
         elif total > 1:
             display_text = f"BAÑO {current} DE {total}"
-            subtitle     = ""
+            subtitle     = user_subtitle
         else:
-            subtitle = _LUXURY_LINES["bano"]
-        return _slide_zona(display_text, subtitle, specs, nombre)
-
-    if zone == "cocina":
-        # Enriquecer con frase de marketing si el texto no tiene descripción propia
-        has_detail = len(display_text.split()) > 1
-        subtitle   = "" if has_detail else _LUXURY_LINES["cocina"]
-        return _slide_zona(display_text, subtitle, specs, nombre)
-
-    if zone == "sala":
-        has_detail = len(display_text.split()) > 1
-        subtitle   = "" if has_detail else _LUXURY_LINES["sala"]
+            subtitle = user_subtitle
         return _slide_zona(display_text, subtitle, specs, nombre)
 
     if zone == "amenidad":
         return _slide_amenidad_single(display_text, specs, nombre)
 
-    if zone == "garaje":
-        n        = str(specs.get("estacionamientos") or "")
-        subtitle = (f"{n} cupo{'s' if n != '1' else ''} privado" if n
-                    else _LUXURY_LINES["garaje"])
-        return _slide_zona(display_text, subtitle, specs, nombre)
-
-    # Zona no reconocida o "otro": mostrar el texto del usuario limpiamente
-    return _slide_zona(display_text, "", specs, nombre)
+    # Para todas las demás zonas: título = campo 1, subtítulo = campo 2 (si lo escribió)
+    return _slide_zona(display_text, user_subtitle, specs, nombre)
 
 
 # ── Fábrica de overlays ───────────────────────────────────────────────────────
