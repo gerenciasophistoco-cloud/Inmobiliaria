@@ -174,9 +174,9 @@
             <div class="field-group">
               <label for="coordenadas">📍 Ubicación en mapa <span class="field-hint-inline">(opcional)</span></label>
               <input type="text" id="coordenadas" name="coordenadas"
-                placeholder="Ej: 4.6534,-74.0836  o  Cra 70 # 1-72, Bogotá"
+                placeholder="Ej: 4.6097,-74.0817  (recomendado: pega coordenadas GPS de Google Maps)"
                 autocomplete="off">
-              <span class="field-hint">Escribe la dirección o pega coordenadas GPS — arrastra el pin para ajustar</span>
+              <span class="field-hint">Pega coordenadas GPS para máxima precisión — o escribe "Carrera 70, Bogotá" y arrastra el pin para afinar</span>
 
               <!-- Mapa en vivo con Leaflet -->
               <div id="mapPreviewWrap"
@@ -608,6 +608,19 @@
       // noop en el form — el link está en la otra página
     }
 
+    // Expande abreviaturas colombianas para mejor geocodificación
+    function expandColombian(text) {
+      return text
+        .replace(/\bCra\.?\s*/gi, 'Carrera ')
+        .replace(/\bKr\.?\s*/gi,  'Carrera ')
+        .replace(/\bCll?\.?\s*/gi,'Calle ')
+        .replace(/\bCl\.?\s*/gi,  'Calle ')
+        .replace(/\bDg\.?\s*/gi,  'Diagonal ')
+        .replace(/\bTv\.?\s*/gi,  'Transversal ')
+        .replace(/\bAv\.?\s*/gi,  'Avenida ')
+        .replace(/\s+/g, ' ').trim();
+    }
+
     function geocode(query) {
       if (!query || query.trim() === lastGeocode) return;
       lastGeocode = query.trim();
@@ -616,9 +629,16 @@
       var m = query.match(/^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/);
       if (m) { moveMap(parseFloat(m[1]), parseFloat(m[2])); return; }
 
-      // Geocodificar con Nominatim (sin API key)
-      fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q='
-            + encodeURIComponent(query + ', Colombia'),
+      // Expandir abreviaturas colombianas antes de enviar a Nominatim
+      var expanded = expandColombian(query);
+      // Añadir ciudad si no está en el texto
+      var ciu = document.getElementById('ciudad').value.trim();
+      if (ciu && !expanded.toLowerCase().includes(ciu.toLowerCase())) {
+        expanded = expanded + ', ' + ciu;
+      }
+
+      fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=co&q='
+            + encodeURIComponent(expanded),
             { headers: { 'Accept-Language': 'es' } })
         .then(function (r) { return r.json(); })
         .then(function (data) {
@@ -626,8 +646,10 @@
             var lat = parseFloat(data[0].lat);
             var lng = parseFloat(data[0].lon);
             moveMap(lat, lng);
-            // Rellenar el campo con coords exactas para persistir en DB
+            // Guardar coordenadas exactas en el campo para persistir en DB
             document.getElementById('coordenadas').value = lat.toFixed(6) + ',' + lng.toFixed(6);
+          } else {
+            showToast('📍 No se encontró la dirección. Ajusta el pin manualmente.');
           }
         })
         .catch(function () {});
@@ -639,25 +661,13 @@
       geocodeTimer = setTimeout(function () { geocode(value); }, 900);
     }
 
-    // Geocodificar cuando el usuario escribe en el campo de coordenadas
+    // Solo geocodifica cuando el usuario escribe en el campo de coordenadas.
+    // NO se auto-geocodifica desde dirección/ciudad porque Nominatim
+    // no interpreta bien el formato colombiano (Cra 70 c # 1-72).
     var coordInput = document.getElementById('coordenadas');
     if (coordInput) {
       coordInput.addEventListener('input', function () { scheduleGeocode(this.value); });
     }
-
-    // Geocodificar automáticamente cuando cambia dirección o ciudad
-    // (si el campo de coordenadas está vacío)
-    ['direccion', 'ciudad'].forEach(function (id) {
-      var el = document.getElementById(id);
-      if (!el) return;
-      el.addEventListener('blur', function () {
-        var coord = document.getElementById('coordenadas').value.trim();
-        if (coord) return; // el usuario ya puso coords, no sobreescribir
-        var dir = document.getElementById('direccion').value.trim();
-        var ciu = document.getElementById('ciudad').value.trim();
-        if (dir && ciu) geocode(dir + ', ' + ciu);
-      });
-    });
   })();
   </script>
 </body>

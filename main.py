@@ -346,13 +346,14 @@ async def generate_content(
         specs.append(f"{estacionamientos} garaje(s)")
 
     amenidades_str = ", ".join(amenidades) if amenidades else "Ninguna especificada"
+    otras_str = otras_caracteristicas.strip() if otras_caracteristicas else ""
     property_info = f"""Tipo de propiedad: {tipo_propiedad}
 Operación: {operacion}
 Ubicación: {direccion}, {ciudad}, Colombia
 Precio: {precio_formatted}
 Especificaciones: {", ".join(specs) if specs else "No especificadas"}
 Amenidades: {amenidades_str}
-{("Otras características: " + otras_caracteristicas) if otras_caracteristicas and otras_caracteristicas.strip() else ""}
+{("DETALLES CLAVE del agente (OBLIGATORIO incluirlos en las descripciones): " + otras_str) if otras_str else ""}
 Contacto: {nombre_agente} | {telefono_agente}{" | " + email_agente if email_agente else ""}"""
 
     desc_prompt = f"""Eres un experto en bienes raíces en Colombia con años de experiencia redactando descripciones que venden propiedades.
