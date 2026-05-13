@@ -3,9 +3,8 @@ let lastPDFData = null;
 let lastPropertyId = null;
 let lastVideoPropio = null;
 let selectedCoverIndex = 0;
-let photoLabels       = [];   // categoría (Fachada, Cocina, Habitación…)
-let photoDescriptions = [];   // descripción corta (Americana, Principal…)
-let photoFiles        = [];
+let photoLabels = [];   // nombre libre del espacio (ej: "Cocina con isla")
+let photoFiles  = [];
 
 /* ── Elementos principales ── */
 const form          = document.getElementById('propertyForm');
@@ -120,32 +119,12 @@ uploadArea.addEventListener('drop', e => {
 
 /* ── Gestión de fotos ── */
 const MAX_PHOTOS = 10;
-
-const PHOTO_ZONES = [
-  ['',           '— Sin zona —'],
-  ['Fachada',    '📷 Fachada'],
-  ['Sala',       '🛋 Sala'],
-  ['Cocina',     '🍳 Cocina'],
-  ['Comedor',    '🍽 Comedor'],
-  ['Habitación', '🛏 Habitación'],
-  ['Baño',       '🚿 Baño'],
-  ['Garaje',     '🚗 Garaje'],
-  ['Terraza',    '🌅 Terraza'],
-  ['Balcón',     '🌅 Balcón'],
-  ['Amenidad',   '🏊 Amenidad'],
-  ['Zona Verde', '🌿 Zona Verde'],
-  ['Pasillo',    '🚪 Pasillo'],
-  ['Otro',       '✏️ Otro'],
-];
+let dragFromIdx = -1;
 
 function addPhotos(fileList) {
   const imgs = Array.from(fileList).filter(f => f.type.startsWith('image/'));
   const canAdd = MAX_PHOTOS - photoFiles.length;
-  imgs.slice(0, canAdd).forEach(f => {
-    photoFiles.push(f);
-    photoLabels.push('');
-    photoDescriptions.push('');
-  });
+  imgs.slice(0, canAdd).forEach(f => { photoFiles.push(f); photoLabels.push(''); });
   if (imgs.length > canAdd) showToast(`⚠️ Máximo ${MAX_PHOTOS} fotos. Se ignoraron ${imgs.length - canAdd}.`);
   renderPhotoPreviews();
 }
@@ -153,7 +132,6 @@ function addPhotos(fileList) {
 function deletePhoto(index) {
   photoFiles.splice(index, 1);
   photoLabels.splice(index, 1);
-  photoDescriptions.splice(index, 1);
   if (selectedCoverIndex >= photoFiles.length) selectedCoverIndex = 0;
   else if (selectedCoverIndex > index) selectedCoverIndex--;
   renderPhotoPreviews();
@@ -163,10 +141,8 @@ function movePhoto(from, to) {
   if (to < 0 || to >= photoFiles.length) return;
   const [f] = photoFiles.splice(from, 1);
   const [l] = photoLabels.splice(from, 1);
-  const [d] = photoDescriptions.splice(from, 1);
   photoFiles.splice(to, 0, f);
   photoLabels.splice(to, 0, l);
-  photoDescriptions.splice(to, 0, d);
   if (selectedCoverIndex === from) selectedCoverIndex = to;
   else if (from < to && selectedCoverIndex > from && selectedCoverIndex <= to) selectedCoverIndex--;
   else if (from > to && selectedCoverIndex >= to && selectedCoverIndex < from) selectedCoverIndex++;
@@ -188,67 +164,68 @@ function renderPhotoPreviews() {
     const wrap = document.createElement('div');
     wrap.className = 'photo-thumb-wrap' + (isCover ? ' is-cover' : '');
     wrap.dataset.index = String(i);
+    wrap.draggable = true;
 
-    // Thumbnail
+    /* ── Thumbnail ── */
     const thumbContainer = document.createElement('div');
     thumbContainer.className = 'photo-thumb-container';
+
     const badge = document.createElement('span');
     badge.className = 'cover-badge';
     badge.textContent = 'PORTADA';
     thumbContainer.appendChild(badge);
+
+    // Botón eliminar sobre la imagen
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'photo-del-btn';
+    delBtn.textContent = '✕';
+    delBtn.title = 'Eliminar foto';
+    delBtn.addEventListener('click', e => { e.stopPropagation(); deletePhoto(i); });
+    thumbContainer.appendChild(delBtn);
+
     wrap.appendChild(thumbContainer);
 
-    // Dropdown: zona / categoría de la foto
-    const zoneSelect = document.createElement('select');
-    zoneSelect.className = 'photo-label-input';
-    zoneSelect.title = 'Zona de la propiedad';
-    zoneSelect.style.fontSize = '11px';
-    PHOTO_ZONES.forEach(([val, label]) => {
-      const opt = document.createElement('option');
-      opt.value = val; opt.textContent = label;
-      if ((photoLabels[i] || '') === val) opt.selected = true;
-      zoneSelect.appendChild(opt);
+    /* ── Input: nombre del espacio (texto libre) ── */
+    const spaceInput = document.createElement('input');
+    spaceInput.type = 'text';
+    spaceInput.className = 'photo-space-input';
+    spaceInput.placeholder = isCover ? 'Ej: Fachada principal' : 'Ej: Cocina con isla, Hab. principal…';
+    spaceInput.value = photoLabels[i] || '';
+    spaceInput.title = 'Nombre del espacio — aparece en el video';
+    spaceInput.addEventListener('click', e => e.stopPropagation());
+    spaceInput.addEventListener('input', () => { photoLabels[i] = spaceInput.value; });
+    wrap.appendChild(spaceInput);
+
+    /* ── Drag & drop ── */
+    wrap.addEventListener('dragstart', e => {
+      dragFromIdx = i;
+      e.dataTransfer.effectAllowed = 'move';
+      setTimeout(() => wrap.classList.add('dragging'), 0);
     });
-    zoneSelect.addEventListener('click', e => e.stopPropagation());
-    zoneSelect.addEventListener('change', () => { photoLabels[i] = zoneSelect.value; });
-    wrap.appendChild(zoneSelect);
-
-    // Input: descripción corta (opcional)
-    const descInput = document.createElement('input');
-    descInput.type = 'text';
-    descInput.className = 'photo-label-input';
-    descInput.placeholder = isCover ? 'Ej: Vista principal…' : 'Ej: Americana, Principal…';
-    descInput.value = photoDescriptions[i] || '';
-    descInput.title = 'Descripción corta — aparece en el video';
-    descInput.style.fontSize = '11px';
-    descInput.addEventListener('click', e => e.stopPropagation());
-    descInput.addEventListener('input', () => { photoDescriptions[i] = descInput.value; });
-    wrap.appendChild(descInput);
-
-    // Botones de control
-    const controls = document.createElement('div');
-    controls.className = 'photo-thumb-controls';
-
-    const mkBtn = (text, title, disabled, cls, onClick) => {
-      const btn = document.createElement('button');
-      btn.type = 'button'; btn.textContent = text; btn.title = title;
-      btn.className = 'photo-ctrl-btn' + (cls ? ' ' + cls : '');
-      btn.disabled = disabled;
-      btn.addEventListener('click', e => { e.stopPropagation(); onClick(); });
-      return btn;
-    };
-
-    controls.appendChild(mkBtn('▲', 'Mover arriba', i === 0, '', () => movePhoto(i, i - 1)));
-    controls.appendChild(mkBtn('▼', 'Mover abajo', i === photoFiles.length - 1, '', () => movePhoto(i, i + 1)));
-    controls.appendChild(mkBtn('✕', 'Eliminar', false, 'delete', () => deletePhoto(i)));
-    wrap.appendChild(controls);
+    wrap.addEventListener('dragend', () => {
+      wrap.classList.remove('dragging');
+      document.querySelectorAll('.photo-thumb-wrap').forEach(w => w.classList.remove('drag-over'));
+    });
+    wrap.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (dragFromIdx !== i) wrap.classList.add('drag-over');
+    });
+    wrap.addEventListener('dragleave', () => wrap.classList.remove('drag-over'));
+    wrap.addEventListener('drop', e => {
+      e.preventDefault();
+      wrap.classList.remove('drag-over');
+      if (dragFromIdx >= 0 && dragFromIdx !== i) movePhoto(dragFromIdx, i);
+      dragFromIdx = -1;
+    });
 
     photoPreview.appendChild(wrap);
 
     const reader = new FileReader();
-    reader.onload = e => {
+    reader.onload = ev => {
       const img = document.createElement('img');
-      img.src = e.target.result;
+      img.src = ev.target.result;
       img.className = 'photo-thumb';
       img.style.pointerEvents = 'none';
       thumbContainer.insertBefore(img, badge);
@@ -258,22 +235,12 @@ function renderPhotoPreviews() {
 
   const counter = document.createElement('p');
   counter.className = 'photo-count';
-  counter.innerHTML = `${photoFiles.length} foto${photoFiles.length !== 1 ? 's' : ''} &nbsp;·&nbsp; La primera es la portada &nbsp;·&nbsp; Usa ▲▼ para reordenar`;
+  counter.innerHTML =
+    `${photoFiles.length} foto${photoFiles.length !== 1 ? 's' : ''} · ` +
+    `La primera es la portada · Arrastra para reordenar`;
   photoPreview.appendChild(counter);
 }
 
-/* ── Selector de rol: mostrar/ocultar campo de inmobiliaria ── */
-(function () {
-  const radios = document.querySelectorAll('input[name="account_type"]');
-  const campo  = document.getElementById('campoInmobiliaria');
-  if (!campo) return;
-  function update() {
-    const isAgency = document.querySelector('input[name="account_type"]:checked')?.value === 'inmobiliaria';
-    campo.style.display = isAgency ? '' : 'none';
-  }
-  radios.forEach(r => r.addEventListener('change', update));
-  update(); // estado inicial
-})();
 
 /* ── Mensajes de carga rotativos ── */
 const loadingMsgs = [
@@ -335,9 +302,8 @@ form.addEventListener('submit', async e => {
   const formData = new FormData(form);
   formData.delete('fotos');
   photoFiles.forEach(f => formData.append('fotos', f));
-  // Categoría y descripción de cada foto → el video usa esto para narrar
-  formData.set('foto_labels',       JSON.stringify(photoLabels));
-  formData.set('foto_descriptions', JSON.stringify(photoDescriptions));
+  // Nombre del espacio de cada foto → el video usa esto para narrar
+  formData.set('foto_labels', JSON.stringify(photoLabels));
   // Vincular el video de recorrido subido al property record
   if (lastVideoPropio) formData.set('video_recorrido_url', lastVideoPropio);
 
@@ -625,14 +591,11 @@ function resetForm() {
   lastPropertyId = null;
   lastVideoPropio = null;
   selectedCoverIndex = 0;
-  photoLabels = []; photoDescriptions = [];
+  photoLabels = [];
   if (_readyTimer) { clearInterval(_readyTimer); _readyTimer = null; }
   const btnVer = document.getElementById('btnVerInmueble');
   if (btnVer) { btnVer.disabled = false; btnVer.querySelector('.btn-pdf-text').textContent = '🌐 Ver inmueble'; }
   removeLogo();
-  // Reiniciar selector de rol
-  const campoInm = document.getElementById('campoInmobiliaria');
-  if (campoInm) campoInm.style.display = 'none';
   showPanel('empty');
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }

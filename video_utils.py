@@ -488,9 +488,10 @@ def _slide_zona(title: str, subtitle: str, specs: dict, nombre: str) -> str:
     draw = ImageDraw.Draw(ov)
     _header(ov, draw, specs, nombre)
 
-    M       = 48
-    f_title = _load_font(72, bold=True)
-    f_sub   = _load_font(24)
+    M     = 48
+    f_sub = _load_font(24)
+    # Ajuste automático: texto largo → fuente más pequeña
+    f_title, title_display = _fit_text(draw, title, VW - 2 * M)
 
     y_sep   = VH - 92
     y_sub   = VH - 138
@@ -499,7 +500,7 @@ def _slide_zona(title: str, subtitle: str, specs: dict, nombre: str) -> str:
     _sep(draw, M, y_sep)
     if subtitle:
         _txt(draw, (M, y_sub), subtitle, f_sub, _CHAMPAGNE, sh=1)
-    _txt(draw, (M, y_title), title, f_title, _WHITE, sh=3)
+    _txt(draw, (M, y_title), title_display, f_title, _WHITE, sh=3)
 
     safe = title[:10].lower().replace(' ', '_').replace('/', '_')
     path = str(Path(tempfile.mkdtemp()) / f"s_zona_{safe}.png")
@@ -507,7 +508,55 @@ def _slide_zona(title: str, subtitle: str, specs: dict, nombre: str) -> str:
     return path
 
 
-# ── Mapa de zonas ─────────────────────────────────────────────────────────────
+# ── Detección de zona ─────────────────────────────────────────────────────────
+
+# Keywords para detectar zona en texto libre ("Cocina con isla" → "cocina")
+_ZONE_KEYWORDS: Dict[str, List[str]] = {
+    "hab":      ["habitación", "habitacion", "hab ", "hab.", "cuarto", "dormitorio",
+                 "alcoba", "suite", "recámara", "recamara"],
+    "cocina":   ["cocina"],
+    "sala":     ["sala", "living", "comedor", "salón ", "salon "],
+    "bano":     ["baño", "bano"],
+    "fachada":  ["fachada", "exterior", "frente", "entrada", "vista exterior", "fachada"],
+    "garaje":   ["garaje", "parqueadero", "garage"],
+    "amenidad": ["terraza", "balcón", "balcon", "patio", "piscina", "gimnasio",
+                 "gym", "bbq", "asador", "zona ", "área com", "jardin", "jardín"],
+}
+
+def _parse_zone(text: str) -> str:
+    """Detecta la zona de texto libre ('Habitación Principal con Balcón' → 'hab')."""
+    t = text.lower().strip()
+    # 1. Coincidencia exacta con el mapa antiguo (dropdown)
+    exact = _ZONE_MAP.get(t, "")
+    if exact:
+        return exact
+    # 2. Búsqueda de palabras clave en texto libre
+    for zone, keywords in _ZONE_KEYWORDS.items():
+        if any(kw in t for kw in keywords):
+            return zone
+    return "otro" if text.strip() else ""
+
+
+def _fit_text(draw, text: str, max_w: int,
+              max_size: int = 72, min_size: int = 34, bold: bool = True):
+    """Reduce el tamaño de fuente hasta que el texto quepa en max_w píxeles."""
+    for size in range(max_size, min_size - 1, -4):
+        f = _load_font(size, bold=bold)
+        bb = draw.textbbox((0, 0), text, font=f)
+        if (bb[2] - bb[0]) <= max_w:
+            return f, text
+    # Último recurso: truncar con '…'
+    f = _load_font(min_size, bold=bold)
+    t = text
+    while len(t) > 4:
+        t = t[:-1]
+        bb = draw.textbbox((0, 0), t + '…', font=f)
+        if (bb[2] - bb[0]) <= max_w:
+            return f, t + '…'
+    return f, text
+
+
+# ── Mapa de zonas (exacto, herencia del dropdown) ─────────────────────────────
 
 _ZONE_MAP: Dict[str, str] = {
     # habitación
@@ -558,77 +607,75 @@ def _overlay_contextual(
     all_labels: List[str],
 ) -> Optional[str]:
     """
-    Genera el overlay específico para una foto según su etiqueta y descripción.
-    Cada foto cuenta su propia historia dentro del video narrativo.
+    Genera el overlay para una foto a partir de su texto libre.
+    label  = texto que el usuario escribió ("Cocina con isla", "Hab. principal con balcón")
+    description = siempre "" en el nuevo formulario (campo unificado)
+    Detecta la zona por palabras clave y formatea el título con elegancia cinematográfica.
     """
-    zone = _ZONE_MAP.get(label.lower().strip(), "otro" if label else "")
-    description = description.strip()
+    if not label and not description:
+        return None   # sin texto → usar secuencia de specs
 
-    if not zone and not label:
-        return None   # sin etiqueta → el pipeline usa la secuencia de specs
+    # Texto principal: usar label; si es muy corto, complementar con description
+    display_text = label.strip() or description.strip()
+
+    # Detectar zona usando ambos sistemas (exacto + keywords en texto libre)
+    zone = _parse_zone(display_text)
 
     if zone == "fachada":
         return _slide_intro(specs, nombre)
 
+    def _count_zone(z: str) -> tuple:
+        """(current_count, total_count) de una zona en all_labels."""
+        total   = sum(1 for l in all_labels if _parse_zone(l) == z)
+        current = sum(1 for j, l in enumerate(all_labels[:idx + 1]) if _parse_zone(l) == z)
+        return current, total
+
     if zone == "hab":
-        # Contar habitaciones para "Hab. X de Y"
-        total = sum(1 for l in all_labels
-                    if _ZONE_MAP.get(l.lower().strip()) == "hab")
-        current = sum(1 for j, l in enumerate(all_labels[:idx + 1])
-                      if _ZONE_MAP.get(l.lower().strip()) == "hab")
-        if description:
-            title    = description.upper()
-            subtitle = f"Habitación {current} de {total}"
+        current, total = _count_zone("hab")
+        if len(display_text) > 3:
+            # Texto rico del usuario: usarlo como título + contador como subtítulo
+            subtitle = f"Habitación {current} de {total}" if total > 1 else ""
         elif total > 1:
-            title    = f"HAB. {current} DE {total}"
-            subtitle = ""
+            display_text = f"HAB. {current} DE {total}"
+            subtitle     = ""
         else:
-            title    = "HABITACIÓN"
-            subtitle = ""
-        return _slide_zona(title, subtitle, specs, nombre)
-
-    if zone == "cocina":
-        title    = description.upper() if description else "COCINA"
-        subtitle = "" if description else _LUXURY_LINES["cocina"]
-        return _slide_zona(title, subtitle, specs, nombre)
-
-    if zone == "sala":
-        title    = description.upper() if description else label.upper()
-        subtitle = "" if description else _LUXURY_LINES["sala"]
-        return _slide_zona(title, subtitle, specs, nombre)
+            display_text = "HABITACIÓN"
+            subtitle     = ""
+        return _slide_zona(display_text, subtitle, specs, nombre)
 
     if zone == "bano":
-        # Contar baños
-        total   = sum(1 for l in all_labels
-                      if _ZONE_MAP.get(l.lower().strip()) == "bano")
-        current = sum(1 for j, l in enumerate(all_labels[:idx + 1])
-                      if _ZONE_MAP.get(l.lower().strip()) == "bano")
-        if description:
-            title    = description.upper()
-            subtitle = f"Baño {current} de {total}" if total > 1 else ""
+        current, total = _count_zone("bano")
+        if len(display_text) > 4:
+            subtitle = f"Baño {current} de {total}" if total > 1 else _LUXURY_LINES["bano"]
         elif total > 1:
-            title    = f"BAÑO {current} DE {total}"
-            subtitle = ""
+            display_text = f"BAÑO {current} DE {total}"
+            subtitle     = ""
         else:
-            title    = "BAÑO"
             subtitle = _LUXURY_LINES["bano"]
-        return _slide_zona(title, subtitle, specs, nombre)
+        return _slide_zona(display_text, subtitle, specs, nombre)
+
+    if zone == "cocina":
+        # Enriquecer con frase de marketing si el texto no tiene descripción propia
+        has_detail = len(display_text.split()) > 1
+        subtitle   = "" if has_detail else _LUXURY_LINES["cocina"]
+        return _slide_zona(display_text, subtitle, specs, nombre)
+
+    if zone == "sala":
+        has_detail = len(display_text.split()) > 1
+        subtitle   = "" if has_detail else _LUXURY_LINES["sala"]
+        return _slide_zona(display_text, subtitle, specs, nombre)
 
     if zone == "amenidad":
-        amenidad_name = description.upper() if description else label.upper()
-        return _slide_amenidad_single(amenidad_name, specs, nombre)
+        return _slide_amenidad_single(display_text, specs, nombre)
 
     if zone == "garaje":
-        n = str(specs.get("estacionamientos") or "")
-        title    = description.upper() if description else "GARAJE"
-        subtitle = (f"{n} cupo{'s' if n != '1' else ''} privado{'s' if n != '1' else ''}"
-                    if n else _LUXURY_LINES["garaje"])
-        return _slide_zona(title, subtitle, specs, nombre)
+        n        = str(specs.get("estacionamientos") or "")
+        subtitle = (f"{n} cupo{'s' if n != '1' else ''} privado" if n
+                    else _LUXURY_LINES["garaje"])
+        return _slide_zona(display_text, subtitle, specs, nombre)
 
-    # "otro" o etiqueta personalizada no reconocida
-    title    = description.upper() if description else label.upper()
-    subtitle = label if description else ""
-    return _slide_zona(title, subtitle, specs, nombre)
+    # Zona no reconocida o "otro": mostrar el texto del usuario limpiamente
+    return _slide_zona(display_text, "", specs, nombre)
 
 
 # ── Fábrica de overlays ───────────────────────────────────────────────────────
