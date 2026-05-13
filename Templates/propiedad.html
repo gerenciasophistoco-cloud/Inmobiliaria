@@ -313,7 +313,9 @@
             if (d.video_url_error) {
               const msg = document.getElementById('mainVideoMsg');
               if (msg) msg.textContent = '⚠️ Error: ' + d.video_url_error.slice(-400);
-            } else if (d.video_ready && !d.video_url) {
+            } else if (d.video_ready && !d.video_url && !d.generating) {
+              // Solo ocultar si NO está generando (FFmpeg no disponible)
+              // Si el usuario subió un recorrido, video_ready=true pero sí hay generación en curso
               hideVideoSection();
             }
           } catch(e) {}
@@ -355,8 +357,9 @@
               return;
             }
 
-            // ── Sin video (FFmpeg no disponible) ──
-            if (d.video_ready && !d.video_url) {
+            // ── Sin video (FFmpeg no disponible o tarea completada sin video) ──
+            // No ocultar si todavía está generando (puede coexistir con recorrido subido)
+            if (d.video_ready && !d.video_url && !d.generating) {
               clearInterval(poll);
               hideVideoSection();
               return;
