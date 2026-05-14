@@ -281,7 +281,6 @@
         const propId = "{{ property_id | default('') }}";
         if (!propId) return;
 
-        // Oculta la sección entera de video y colapsa la grilla a 1 columna
         function hideVideoSection() {
           const vSec = document.getElementById('mainVideoSection');
           if (!vSec) return;
@@ -290,90 +289,72 @@
           if (grid) grid.style.display = 'block';
         }
 
-        // Primer chequeo inmediato (sin esperar 8 s) para no mostrar el placeholder si no es necesario
-        (async function checkNow() {
+        function showVideo(url) {
+          const sec = document.getElementById('mainVideoSection');
+          if (!sec) return;
+          /* No reemplazar si ya hay un <video> — el usuario puede estar viéndolo */
+          if (sec.querySelector('video')) return;
+          sec.innerHTML =
+            `<h3 class="font-headline-md text-headline-md">Video del inmueble</h3>
+             <div style="position:relative;width:100%;padding-top:125%;
+                         border-radius:12px;overflow:hidden;background:#000;">
+               <video controls preload="auto" playsinline
+                      style="position:absolute;inset:0;width:100%;height:100%;
+                             object-fit:cover;display:block;">
+                 <source src="${url}" type="video/mp4"/>
+               </video>
+             </div>`;
+        }
+
+        let poll = null;
+        let polling = true;
+
+        async function checkStatus() {
+          if (!polling) return;
           try {
             const r = await fetch('/propiedad-video-status/' + propId);
             if (!r.ok) return;
             const d = await r.json();
+
+            /* ── Video listo: mostrar y detener el poll para siempre ── */
             if (d.video_url) {
-              document.getElementById('mainVideoSection').innerHTML =
-                `<h3 class="font-headline-md text-headline-md">Video del inmueble</h3>
-                 <div style="position:relative; width:100%; padding-top:125%;
-                            border-radius:12px; overflow:hidden; background:#000;">
-                   <video controls preload="metadata" playsinline
-                          style="position:absolute; inset:0; width:100%; height:100%;
-                                 object-fit:cover; display:block;"
-                          poster="{{ fotos[0] if fotos else '' }}">
-                     <source src="${d.video_url}" type="video/mp4"/>
-                   </video>
-                 </div>`;
+              polling = false;
+              if (poll) { clearInterval(poll); poll = null; }
+              showVideo(d.video_url);
               return;
             }
+
+            /* ── Error ── */
             if (d.video_url_error) {
+              polling = false;
+              if (poll) { clearInterval(poll); poll = null; }
               const msg = document.getElementById('mainVideoMsg');
-              if (msg) msg.textContent = '⚠️ Error: ' + d.video_url_error.slice(-400);
-            } else if (d.video_ready && !d.video_url && !d.generating) {
-              // Solo ocultar si NO está generando (FFmpeg no disponible)
-              // Si el usuario subió un recorrido, video_ready=true pero sí hay generación en curso
-              hideVideoSection();
-            }
-          } catch(e) {}
-        })();
-
-        let checks = 0;
-        const poll = setInterval(async () => {
-          if (++checks > 20) {
-            clearInterval(poll);
-            hideVideoSection();
-            return;
-          }
-          try {
-            const r = await fetch('/propiedad-video-status/' + propId);
-            if (!r.ok) return;
-            const d = await r.json();
-
-            // ── Video listo ──
-            if (d.video_url && !document.querySelector('#mainVideoSection video')) {
-              clearInterval(poll);
-              document.getElementById('mainVideoSection').innerHTML =
-                `<h3 class="font-headline-md text-headline-md">Video del inmueble</h3>
-                 <div style="position:relative; width:100%; padding-top:125%;
-                            border-radius:12px; overflow:hidden; background:#000;">
-                   <video controls preload="metadata" playsinline
-                          style="position:absolute; inset:0; width:100%; height:100%;
-                                 object-fit:cover; display:block;">
-                     <source src="${d.video_url}" type="video/mp4"/>
-                   </video>
-                 </div>`;
+              if (msg) msg.textContent = '⚠️ Error generando video';
               return;
             }
 
-            // ── Error: mostrar mensaje para diagnóstico ──
-            if (d.video_url_error) {
-              clearInterval(poll);
-              const msg = document.getElementById('mainVideoMsg');
-              if (msg) msg.textContent = '⚠️ Error: ' + d.video_url_error.slice(-400);
-              return;
-            }
-
-            // ── Sin video (FFmpeg no disponible o tarea completada sin video) ──
-            // No ocultar si todavía está generando (puede coexistir con recorrido subido)
+            /* ── Completado sin video (FFmpeg no disponible) ── */
             if (d.video_ready && !d.video_url && !d.generating) {
-              clearInterval(poll);
+              polling = false;
+              if (poll) { clearInterval(poll); poll = null; }
               hideVideoSection();
               return;
             }
 
-            // ── Todavía generando ──
+            /* ── Todavía generando ── */
             const msg = document.getElementById('mainVideoMsg');
             if (msg) msg.textContent = d.generating
               ? '🎬 Generando video... puede tardar 1-3 min'
               : '⏳ Preparando video...';
 
-            // recorrido video: gestionado como sección estática en el template
           } catch(e) {}
-        }, 8000);
+        }
+
+        /* Primer chequeo inmediato */
+        checkStatus();
+
+        /* Poll cada 8 s — sin límite de intentos; se detiene cuando llega el video */
+        poll = setInterval(checkStatus, 8000);
       })();
       </script>
 

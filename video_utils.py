@@ -1026,7 +1026,9 @@ def generate_slideshow(
     cmd = [
         _ffmpeg_bin(), "-y",
         "-f", "concat", "-safe", "0", "-i", playlist,
-        "-c", "copy", "-movflags", "+faststart",
+        "-c", "copy",
+        "-movflags", "+faststart",
+        "-fflags", "+genpts",   # regenera timestamps para que el seek funcione
         output,
     ]
     r = subprocess.run(cmd, capture_output=True, timeout=300)
