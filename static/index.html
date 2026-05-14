@@ -139,14 +139,6 @@
             </div>
           </div>
 
-          <div class="form-row">
-            <div class="field-group">
-              <label for="direccion">Dirección / Sector <span class="required">*</span></label>
-              <input type="text" id="direccion" name="direccion"
-                placeholder="Ej: Cra 15 #85-42, Barrio Rosales" required>
-            </div>
-          </div>
-
           <div class="form-row two-col">
             <div class="field-group">
               <label for="ciudad">Ciudad <span class="required">*</span></label>
@@ -160,6 +152,14 @@
                   placeholder="850.000.000" required inputmode="numeric"
                   autocomplete="off">
               </div>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="field-group">
+              <label for="direccion">Dirección / Sector <span class="required">*</span></label>
+              <input type="text" id="direccion" name="direccion"
+                placeholder="Ej: Cra 15 #85-42, Barrio Rosales" required>
             </div>
           </div>
 
@@ -565,31 +565,34 @@
 
   /* ── Mapa con autocomplete tipo Google Maps (Photon + Leaflet) ── */
   (function () {
-    var formMap    = null;
-    var formMarker = null;
-    var dropdown   = null;
+    var formMap     = null;
+    var formMarker  = null;
+    var dropdown    = null;
     var searchTimer = null;
-    var autoTimer   = null;
+    var cityTimer   = null;
+    var dirTimer    = null;
 
-    function initMap() {
-      if (formMap) return;
-      formMap = L.map('mapPreview', { scrollWheelZoom: false })
-                 .setView([4.65, -74.09], 12);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© <a href="https://www.openstreetmap.org">OSM</a>',
-        maxZoom: 19,
-      }).addTo(formMap);
-      formMarker = L.marker([4.65, -74.09], { draggable: true }).addTo(formMap);
-      formMarker.on('dragend', function () {
-        var p = formMarker.getLatLng();
-        document.getElementById('coordenadas').value = p.lat.toFixed(6) + ',' + p.lng.toFixed(6);
-      });
+    function initMap(lat, lng, zoom) {
+      if (!formMap) {
+        formMap = L.map('mapPreview', { scrollWheelZoom: false })
+                   .setView([lat, lng], zoom);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '© <a href="https://www.openstreetmap.org">OSM</a>',
+          maxZoom: 19,
+        }).addTo(formMap);
+        formMarker = L.marker([lat, lng], { draggable: true }).addTo(formMap);
+        formMarker.on('dragend', function () {
+          var p = formMarker.getLatLng();
+          document.getElementById('coordenadas').value = p.lat.toFixed(6) + ',' + p.lng.toFixed(6);
+        });
+      }
     }
 
-    function moveMap(lat, lng) {
+    function moveMap(lat, lng, zoom) {
+      zoom = zoom || 16;
       document.getElementById('mapPreviewWrap').style.display = 'block';
-      initMap();
-      formMap.setView([lat, lng], 16);
+      initMap(lat, lng, zoom);
+      formMap.setView([lat, lng], zoom);
       formMarker.setLatLng([lat, lng]);
       setTimeout(function () { formMap.invalidateSize(); }, 150);
       document.getElementById('coordenadas').value = lat.toFixed(6) + ',' + lng.toFixed(6);
@@ -611,9 +614,7 @@
       return dropdown;
     }
 
-    function closeDropdown() {
-      if (dropdown) dropdown.style.display = 'none';
-    }
+    function closeDropdown() { if (dropdown) dropdown.style.display = 'none'; }
 
     function showDropdown(features) {
       var dd = getDropdown();
@@ -636,7 +637,7 @@
         li.addEventListener('mouseleave', function () { li.style.background = ''; });
         li.addEventListener('mousedown', function (e) {
           e.preventDefault();
-          moveMap(lat, lng);
+          moveMap(lat, lng, 16);
           document.getElementById('mapSearch').value = main + (sub ? ', ' + sub : '');
           closeDropdown();
         });
@@ -653,39 +654,51 @@
         .replace(/\bAv\.?\s*/gi,'Avenida ')  .replace(/\s+/g,' ').trim();
     }
 
-    function buildQ(raw) {
-      var ciu = document.getElementById('ciudad').value.trim();
-      var q   = expandCo(raw);
-      if (ciu && !q.toLowerCase().includes(ciu.toLowerCase())) q += ', ' + ciu;
-      return q + ', Colombia';
+    /* Auto-centrar en la ciudad al zoom 12 — siempre funciona */
+    function centerOnCity(ciu) {
+      if (!ciu || ciu.length < 2) return;
+      fetch('https://photon.komoot.io/api/?q=' + encodeURIComponent(ciu + ', Colombia') + '&lang=es&limit=1')
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d.features && d.features.length) {
+            var f = d.features[0];
+            moveMap(f.geometry.coordinates[1], f.geometry.coordinates[0], 12);
+          }
+        }).catch(function () {});
     }
 
-    /* Búsqueda manual → muestra dropdown con sugerencias */
+    /* Intentar precisar con la dirección completa al zoom 16 */
+    function refineWithAddress(dir, ciu) {
+      if (!dir || dir.length < 3) return;
+      var q = expandCo(dir);
+      if (ciu) q += ', ' + ciu;
+      q += ', Colombia';
+      fetch('https://photon.komoot.io/api/?q=' + encodeURIComponent(q) + '&lang=es&limit=1')
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d.features && d.features.length) {
+            moveMap(d.features[0].geometry.coordinates[1], d.features[0].geometry.coordinates[0], 16);
+          }
+          /* Si Photon no encontró la calle exacta, el mapa queda en la vista de ciudad — OK */
+        }).catch(function () {});
+    }
+
+    /* Búsqueda manual en mapSearch → muestra dropdown */
     function search(raw) {
       if (!raw || raw.trim().length < 3) { closeDropdown(); return; }
       var gps = raw.match(/^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/);
-      if (gps) { moveMap(+gps[1], +gps[2]); closeDropdown(); return; }
-      fetch('https://photon.komoot.io/api/?q=' + encodeURIComponent(buildQ(raw)) + '&lang=es&limit=6')
+      if (gps) { moveMap(+gps[1], +gps[2], 16); closeDropdown(); return; }
+      var ciu = document.getElementById('ciudad').value.trim();
+      var q   = expandCo(raw);
+      if (ciu && !q.toLowerCase().includes(ciu.toLowerCase())) q += ', ' + ciu;
+      q += ', Colombia';
+      fetch('https://photon.komoot.io/api/?q=' + encodeURIComponent(q) + '&lang=es&limit=6')
         .then(function (r) { return r.json(); })
         .then(function (d) { showDropdown(d.features || []); })
         .catch(function () {});
     }
 
-    /* Auto-ubicar: toma el primer resultado sin mostrar dropdown (al cambiar dirección/ciudad) */
-    function autoPlace(raw) {
-      if (!raw || raw.trim().length < 3) return;
-      fetch('https://photon.komoot.io/api/?q=' + encodeURIComponent(buildQ(raw)) + '&lang=es&limit=1')
-        .then(function (r) { return r.json(); })
-        .then(function (d) {
-          if (d.features && d.features.length) {
-            var f = d.features[0];
-            moveMap(f.geometry.coordinates[1], f.geometry.coordinates[0]);
-          }
-        })
-        .catch(function () {});
-    }
-
-    /* ── Autocomplete en tiempo real en el campo mapSearch ── */
+    /* ── Autocomplete en mapSearch ── */
     var ms = document.getElementById('mapSearch');
     if (ms) {
       ms.addEventListener('input', function () {
@@ -697,19 +710,26 @@
       ms.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeDropdown(); });
     }
 
-    /* ── Al cambiar Dirección o Ciudad → auto-ubicar mapa automáticamente ── */
-    ['direccion', 'ciudad'].forEach(function (id) {
-      var el = document.getElementById(id);
-      if (!el) return;
-      el.addEventListener('change', function () {
-        clearTimeout(autoTimer);
-        autoTimer = setTimeout(function () {
-          var dir = document.getElementById('direccion').value.trim();
-          var ciu = document.getElementById('ciudad').value.trim();
-          if (dir) autoPlace(dir + (ciu ? ', ' + ciu : ''));
-        }, 600);
+    /* ── Ciudad: centrar mapa en la ciudad al salir del campo ── */
+    var ciudadEl = document.getElementById('ciudad');
+    if (ciudadEl) {
+      ciudadEl.addEventListener('change', function () {
+        clearTimeout(cityTimer);
+        var ciu = this.value.trim();
+        cityTimer = setTimeout(function () { centerOnCity(ciu); }, 400);
       });
-    });
+    }
+
+    /* ── Dirección: intentar precisar la ubicación al salir del campo ── */
+    var dirEl = document.getElementById('direccion');
+    if (dirEl) {
+      dirEl.addEventListener('change', function () {
+        clearTimeout(dirTimer);
+        var dir = this.value.trim();
+        var ciu = document.getElementById('ciudad').value.trim();
+        dirTimer = setTimeout(function () { refineWithAddress(dir, ciu); }, 400);
+      });
+    }
 
     document.addEventListener('click', function (e) {
       if (dropdown && !dropdown.contains(e.target) && e.target !== ms) closeDropdown();
