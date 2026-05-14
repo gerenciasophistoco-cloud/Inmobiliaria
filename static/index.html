@@ -966,28 +966,73 @@
     ms.addEventListener('blur',    function () { setTimeout(closeMapDd, 200); });
     ms.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeMapDd(); });
 
-    /* ── Botón lupa: buscar dirección en el mapa ── */
+    /* ── Botón lupa: búsqueda con cascada Nominatim → Photon ── */
     var btnDir = document.getElementById('btnBuscarDir');
     if (btnDir) {
       btnDir.addEventListener('click', function () {
         var dir = document.getElementById('direccion').value.trim();
         if (!dir) return;
+        var ciu = ciudadEl.value.trim();
+
         btnDir.disabled = true;
         btnDir.classList.add('searching');
-        var ciu = ciudadEl.value.trim();
-        var q   = expandCo(dir) + (ciu ? ', ' + ciu : '') + ', Colombia';
-        var url = 'https://photon.komoot.io/api/?q=' + encodeURIComponent(q) + '&lang=es&limit=1';
-        if (cityLat !== null) url += '&lat=' + cityLat + '&lon=' + cityLng;
-        fetch(url)
-          .then(function (r) { return r.json(); })
-          .then(function (d) {
-            btnDir.disabled = false;
-            btnDir.classList.remove('searching');
-            if (d.features && d.features.length) {
-              moveMap(d.features[0].geometry.coordinates[1], d.features[0].geometry.coordinates[0], 16);
-            }
-          })
-          .catch(function () { btnDir.disabled = false; btnDir.classList.remove('searching'); });
+
+        var exp     = expandCo(dir);
+        var noHash  = exp.replace(/\s*#\s*/g, ' ').replace(/\s+/g, ' ').trim();
+        var cityStr = ciu ? ', ' + ciu : '';
+
+        /* Variantes de query a intentar en orden */
+        var variants = [
+          noHash + cityStr + ', Colombia',
+          exp.split('#')[0].trim() + cityStr + ', Colombia',
+          dir + cityStr + ', Colombia',
+        ];
+
+        var found = false;
+        function setDone() { btnDir.disabled = false; btnDir.classList.remove('searching'); }
+        function onResult(lat, lng) {
+          if (found) return;
+          found = true; setDone();
+          moveMap(lat, lng, 17);
+        }
+
+        /* Intento con Nominatim (tiene calles colombianas en OSM) */
+        function tryNominatim(idx) {
+          if (idx >= variants.length) { tryPhoton(); return; }
+          fetch('https://nominatim.openstreetmap.org/search?q=' + encodeURIComponent(variants[idx])
+                + '&format=json&limit=3&countrycodes=co')
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+              if (found) return;
+              if (!d || !d.length) { tryNominatim(idx + 1); return; }
+              var lat = parseFloat(d[0].lat), lng = parseFloat(d[0].lon);
+              /* Descartar si está a más de 1.5° de la ciudad seleccionada */
+              if (cityLat !== null && (Math.abs(lat - cityLat) > 1.5 || Math.abs(lng - cityLng) > 1.5)) {
+                tryNominatim(idx + 1); return;
+              }
+              onResult(lat, lng);
+            })
+            .catch(function () { if (!found) tryNominatim(idx + 1); });
+        }
+
+        /* Fallback: Photon con bias de ciudad */
+        function tryPhoton() {
+          if (found) return;
+          var url = 'https://photon.komoot.io/api/?q=' + encodeURIComponent(variants[0]) + '&lang=es&limit=1';
+          if (cityLat !== null) url += '&lat=' + cityLat + '&lon=' + cityLng;
+          fetch(url)
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+              if (found) return;
+              if (d.features && d.features.length) {
+                onResult(d.features[0].geometry.coordinates[1], d.features[0].geometry.coordinates[0]);
+              } else { setDone(); }
+            })
+            .catch(function () { if (!found) setDone(); });
+        }
+
+        setTimeout(function () { if (!found) { found = true; setDone(); } }, 8000);
+        tryNominatim(0);
       });
     }
 
