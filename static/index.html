@@ -711,10 +711,94 @@
 
     function closeCityDd() { if (cityDd) cityDd.style.display = 'none'; }
 
+    /* Coordenadas precargadas de los principales municipios colombianos */
+    var COORDS_CO = {
+      'bogota d.c.':[4.711,-74.072],'bogota':[4.711,-74.072],'bogotá d.c.':[4.711,-74.072],'bogotá':[4.711,-74.072],
+      'medellin':[6.251,-75.564],'medellín':[6.251,-75.564],
+      'cali':[3.451,-76.532],'barranquilla':[10.964,-74.796],
+      'cartagena':[10.391,-75.479],'cucuta':[7.894,-72.508],'cúcuta':[7.894,-72.508],
+      'bucaramanga':[7.119,-73.123],'pereira':[4.813,-75.696],
+      'manizales':[5.070,-75.514],'santa marta':[11.244,-74.199],
+      'ibague':[4.438,-75.232],'ibagué':[4.438,-75.232],
+      'pasto':[1.213,-77.281],'armenia':[4.534,-75.681],
+      'monteria':[8.757,-75.890],'montería':[8.757,-75.890],
+      'villavicencio':[4.142,-73.627],'neiva':[2.935,-75.290],
+      'valledupar':[10.463,-73.253],'popayan':[2.441,-76.606],'popayán':[2.441,-76.606],
+      'sincelejo':[9.305,-75.398],'florencia':[1.618,-75.607],
+      'quibdo':[5.694,-76.658],'quibdó':[5.694,-76.658],
+      'riohacha':[11.544,-72.907],'mocoa':[1.149,-76.648],
+      'yopal':[5.354,-72.395],'leticia':[-4.215,-69.939],
+      'arauca':[7.090,-70.762],'san jose del guaviare':[2.565,-72.639],
+      'san josé del guaviare':[2.565,-72.639],
+      'mitu':[1.253,-70.233],'mitú':[1.253,-70.233],
+      'puerto inirida':[3.867,-67.924],'puerto inírida':[3.867,-67.924],
+      'puerto carreno':[6.188,-67.485],'puerto carreño':[6.188,-67.485],
+      'tunja':[5.535,-73.357],'bello':[6.336,-75.556],
+      'soacha':[4.577,-74.214],'itagui':[6.185,-75.599],'itagüí':[6.185,-75.599],
+      'envigado':[6.175,-75.591],'soledad':[10.917,-74.770],
+      'barrancabermeja':[7.065,-73.854],'palmira':[3.539,-76.303],
+      'buga':[3.900,-76.299],'girardot':[4.303,-74.803],
+      'tulua':[4.084,-76.195],'tuluá':[4.084,-76.195],
+      'rionegro':[6.155,-75.374],'duitama':[5.827,-73.030],
+      'sogamoso':[5.714,-72.933],'chiquinquira':[5.617,-73.820],'chiquinquirá':[5.617,-73.820],
+      'zipaquira':[5.024,-74.006],'zipaquirá':[5.024,-74.006],
+      'facatativa':[4.817,-74.357],'facatativá':[4.817,-74.357],
+      'fusagasuga':[4.337,-74.364],'fusagasugá':[4.337,-74.364],
+      'chia':[4.861,-74.063],'chía':[4.861,-74.063],
+      'mosquera':[4.707,-74.231],'madrid':[4.730,-74.268],
+      'funza':[4.717,-74.212],'cajica':[4.918,-74.026],'cajicá':[4.918,-74.026],
+      'tocancipa':[4.970,-73.911],'tocancipá':[4.970,-73.911],
+      'la calera':[4.721,-73.970],'sopo':[4.908,-73.940],'sopó':[4.908,-73.940],
+      'giron':[7.076,-73.165],'girón':[7.076,-73.165],
+      'floridablanca':[7.065,-73.091],'piedecuesta':[6.988,-73.053],
+      'ocana':[8.237,-73.356],'ocaña':[8.237,-73.356],
+      'pamplona':[7.375,-72.651],'dosquebradas':[4.839,-75.668],
+      'santa rosa de cabal':[4.868,-75.619],'la virginia':[4.898,-75.876],
+      'espinal':[4.152,-74.887],'flandes':[4.284,-74.811],
+      'melgar':[4.206,-74.644],'honda':[5.209,-74.742],
+      'pitalito':[1.850,-76.052],'garzon':[2.200,-75.630],'garzón':[2.200,-75.630],
+      'cartago':[4.746,-75.911],'jamundi':[3.263,-76.539],'jamundí':[3.263,-76.539],
+      'yumbo':[3.602,-76.492],'buenaventura':[3.878,-77.021],
+      'ipiales':[0.830,-77.644],'tumaco':[1.813,-78.756],
+      'santander de quilichao':[3.008,-76.484],'puerto tejada':[3.232,-76.408],
+      'cienaga':[11.007,-74.252],'ciénaga':[11.007,-74.252],
+      'fundacion':[10.525,-74.186],'fundación':[10.525,-74.186],
+      'maicao':[11.380,-72.244],'corozal':[9.319,-75.295],
+      'cerete':[8.885,-75.791],'cereté':[8.885,-75.791],
+      'sahagún':[8.952,-75.449],'sahagún':[8.952,-75.449],
+      'apartado':[7.883,-76.633],'apartadó':[7.883,-76.633],
+      'turbo':[8.099,-76.728],'caucasia':[7.987,-75.198],
+      'la dorada':[5.455,-74.665],'san gil':[6.557,-73.133],
+      'velez':[6.011,-73.671],'vélez':[6.011,-73.671],
+      'socorro':[6.461,-73.263],'yarumal':[6.972,-75.415],
+      'la ceja':[6.024,-75.436],'sabaneta':[6.152,-75.617],
+      'la estrella':[6.156,-75.643],'caldas':[6.095,-75.636],
+      'copacabana':[6.349,-75.508],'barbosa':[6.437,-75.332],
+      'marinilla':[6.177,-75.341],'el retiro':[6.059,-75.501],
+      'guarne':[6.278,-75.445],'la union':[4.533,-75.360],'la unión':[4.533,-75.360],
+      'el carmen de viboral':[6.088,-75.346],'riosucio':[5.416,-75.710],
+      'villa de leyva':[5.633,-73.525],'paipa':[5.783,-73.117],
+      'san andres':[12.544,-81.722],'san andrés':[12.544,-81.722],
+      'villapinzon':[5.208,-73.584],'villapinzón':[5.208,-73.584],
+      'zipacon':[4.740,-74.384],'zipacón':[4.740,-74.384],
+      'tabio':[4.916,-74.096],'tenjo':[4.872,-74.141],
+      'subachoque':[4.936,-74.181],'el rosal':[4.854,-74.265],
+      'sibaté':[4.494,-74.259],'sibate':[4.494,-74.259]
+    };
+
     /* Geocodifica un nombre de municipio y mueve el mapa */
     function geocodeCity(name) {
-      fetch('https://photon.komoot.io/api/?q=' + encodeURIComponent(name + ', Colombia')
-            + '&lang=es&limit=1')
+      /* 1. Buscar en tabla de coordenadas (instantáneo, sin API) */
+      var key = norm(name);
+      if (COORDS_CO[key]) {
+        cityLat = COORDS_CO[key][0];
+        cityLng = COORDS_CO[key][1];
+        moveMap(cityLat, cityLng, 12);
+        return;
+      }
+      /* 2. Fallback: Photon (para municipios pequeños no en la tabla) */
+      var q = name.replace(/\s*d\.c\.?\s*/gi, '').trim();
+      fetch('https://photon.komoot.io/api/?q=' + encodeURIComponent(q + ', Colombia') + '&lang=es&limit=1')
         .then(function (r) { return r.json(); })
         .then(function (d) {
           if (d.features && d.features.length) {
