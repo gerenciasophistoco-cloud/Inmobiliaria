@@ -74,88 +74,105 @@
 
   <!-- ══ HEADER ══ -->
   <header class="absolute top-0 left-0 right-0 z-50">
-    <div class="max-w-7xl w-full mx-auto px-5 py-4 flex justify-between items-center">
-      <div class="flex items-center gap-3">
+    <div class="max-w-7xl w-full mx-auto px-4 py-3 flex justify-between items-center gap-2">
+
+      <!-- Izquierda: logo/flecha + nombre (truncado en móvil) -->
+      <div class="flex items-center gap-2 min-w-0 flex-1">
         {% if logo_url %}
-        <img src="{{ logo_url }}" class="h-8 w-8 object-contain rounded"/>
+        <img src="{{ logo_url }}" class="h-7 w-7 object-contain rounded flex-shrink-0"/>
         {% else %}
-        <span class="material-symbols-outlined text-white">arrow_back</span>
+        <span class="material-symbols-outlined text-white flex-shrink-0" style="font-size:22px;">arrow_back</span>
         {% endif %}
-        <h1 class="font-display-lg font-bold text-white tracking-tight text-xl">
+        <h1 class="text-white font-semibold truncate" style="font-size:clamp(13px,3.5vw,18px); line-height:1.2;">
           {{ nombre_inmobiliaria or nombre_agente }}
         </h1>
       </div>
+
+      <!-- Derecha: botón compartir (solo icono en móvil, icono+texto en escritorio) -->
       <a href="{{ whatsapp_link }}" target="_blank"
-         class="bg-white/20 hover:opacity-80 backdrop-blur-md px-4 py-2
-                rounded-full flex items-center gap-2 text-white transition-opacity">
-        <span class="material-symbols-outlined text-white">share</span>
-        <span class="font-label-caps text-label-caps">Compartir</span>
+         class="bg-white/20 hover:opacity-80 backdrop-blur-md rounded-full flex items-center gap-1.5
+                text-white transition-opacity flex-shrink-0"
+         style="padding: 7px 14px;">
+        <span class="material-symbols-outlined text-white" style="font-size:18px;">share</span>
+        <span class="hidden sm:inline font-label-caps text-label-caps text-sm">Compartir</span>
       </a>
     </div>
   </header>
 
-  <!-- ══ HERO: full-width, altura fija en PC ══ -->
-  <section class="relative w-full overflow-hidden h-64 md:h-[450px]">
+  <!-- ══ HERO: altura fluida responsive ══ -->
+  <section class="relative w-full overflow-hidden" style="height:clamp(320px,55vw,480px);">
     {% if fotos %}
-    <img class="w-full h-full object-cover"
-         src="{{ fotos[0] }}" alt="{{ tipo_propiedad }} en {{ ciudad }}"/>
+    <img class="w-full h-full object-cover" src="{{ fotos[0] }}"
+         alt="{{ tipo_propiedad }} en {{ ciudad }}" loading="eager"/>
     {% else %}
     <div class="w-full h-full bg-surface-container-high flex items-center justify-center">
       <span class="material-symbols-outlined text-outline" style="font-size:72px;">apartment</span>
     </div>
     {% endif %}
 
-    <!-- Gradiente: sólido a la izquierda, transparente a la derecha (igual que Stitch) -->
-    <div class="absolute inset-0 bg-gradient-to-r from-black/90 via-black/40 to-transparent"></div>
+    <!-- Gradiente oscuro sobre foto -->
+    <div class="absolute inset-0" style="background:linear-gradient(to top, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.45) 55%, rgba(0,0,0,0.15) 100%);"></div>
 
-    <!-- Info sobre el hero, contenida en max-w-5xl -->
+    <!-- Info sobre el hero -->
     <div class="absolute bottom-0 left-0 right-0">
-      <div class="max-w-7xl w-full mx-auto px-5 pb-5">
+      <div class="max-w-7xl w-full mx-auto px-4" style="padding-bottom:clamp(14px,4vw,24px);">
+
+        <!-- Badge tipo + operación -->
         <span class="bg-primary-container text-on-primary-container font-label-caps text-label-caps
-                     px-3 py-1 rounded-sm inline-block mb-3">
+                     px-2.5 py-1 rounded-sm inline-block mb-2" style="font-size:11px;">
           {{ tipo_propiedad | upper }} EN {{ operacion | upper }}
         </span>
-        <h2 class="font-display-lg text-white text-3xl md:text-4xl leading-tight mb-1">
+
+        <!-- Título -->
+        <h2 class="font-bold text-white leading-tight mb-0.5"
+            style="font-size:clamp(20px,5.5vw,36px);">
           {{ tipo_propiedad }}, {{ ciudad }}
         </h2>
-        <p class="text-white/90 text-sm mb-1">{{ direccion }}</p>
-        <div class="font-price-display text-2xl md:text-3xl text-primary-fixed-dim mb-4">
+
+        <!-- Dirección -->
+        <p class="text-white/80 mb-1" style="font-size:clamp(12px,3vw,14px);">{{ direccion }}</p>
+
+        <!-- Precio -->
+        <div class="font-bold text-primary-fixed-dim mb-3"
+             style="font-size:clamp(18px,5vw,28px);">
           {{ precio }}
         </div>
-        <div class="flex items-end justify-between text-white">
-          <div class="flex gap-6">
+
+        <!-- Características + estrato -->
+        <div class="flex items-end justify-between text-white gap-2">
+          <div class="flex gap-4">
             {% if metros %}
-            <div class="flex flex-col items-center gap-1">
-              <span class="material-symbols-outlined text-primary-fixed" style="font-size:26px;">square_foot</span>
-              <span class="font-label-caps text-[11px]">{{ metros }} m²</span>
+            <div class="flex flex-col items-center gap-0.5">
+              <span class="material-symbols-outlined text-primary-fixed" style="font-size:22px;">square_foot</span>
+              <span style="font-size:10px;" class="font-label-caps">{{ metros }} m²</span>
             </div>
             {% endif %}
             {% if habitaciones %}
-            <div class="flex flex-col items-center gap-1">
-              <span class="material-symbols-outlined text-primary-fixed" style="font-size:26px;">bed</span>
-              <span class="font-label-caps text-[11px]">{{ habitaciones }} Hab.</span>
+            <div class="flex flex-col items-center gap-0.5">
+              <span class="material-symbols-outlined text-primary-fixed" style="font-size:22px;">bed</span>
+              <span style="font-size:10px;" class="font-label-caps">{{ habitaciones }} Hab.</span>
             </div>
             {% endif %}
             {% if banos %}
-            <div class="flex flex-col items-center gap-1">
-              <span class="material-symbols-outlined text-primary-fixed" style="font-size:26px;">bathtub</span>
-              <span class="font-label-caps text-[11px]">{{ banos }} Baños</span>
+            <div class="flex flex-col items-center gap-0.5">
+              <span class="material-symbols-outlined text-primary-fixed" style="font-size:22px;">bathtub</span>
+              <span style="font-size:10px;" class="font-label-caps">{{ banos }} Baños</span>
             </div>
             {% endif %}
             {% if estacionamientos %}
-            <div class="flex flex-col items-center gap-1">
-              <span class="material-symbols-outlined text-primary-fixed" style="font-size:26px;">directions_car</span>
-              <span class="font-label-caps text-[11px]">{{ estacionamientos }} Parq.</span>
+            <div class="flex flex-col items-center gap-0.5">
+              <span class="material-symbols-outlined text-primary-fixed" style="font-size:22px;">directions_car</span>
+              <span style="font-size:10px;" class="font-label-caps">{{ estacionamientos }} Parq.</span>
             </div>
             {% endif %}
           </div>
           {% if estrato %}
-          <div class="bg-black/40 backdrop-blur-md px-3 py-2 rounded-xl
-                      flex items-center gap-2 border border-white/10">
-            <span class="material-symbols-outlined text-primary-fixed" style="font-size:20px;">apartment</span>
+          <div class="bg-black/40 backdrop-blur-md px-2.5 py-1.5 rounded-xl
+                      flex items-center gap-1.5 border border-white/10 flex-shrink-0">
+            <span class="material-symbols-outlined text-primary-fixed" style="font-size:16px;">apartment</span>
             <div>
-              <p class="font-label-caps text-[11px] text-white">Estrato {{ estrato }}</p>
-              <p class="text-[10px] text-white/60">{{ ciudad }}</p>
+              <p style="font-size:10px;" class="font-label-caps text-white">Estrato {{ estrato }}</p>
+              <p style="font-size:9px;" class="text-white/60">{{ ciudad }}</p>
             </div>
           </div>
           {% endif %}
