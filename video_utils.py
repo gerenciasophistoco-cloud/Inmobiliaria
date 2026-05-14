@@ -1023,18 +1023,28 @@ def generate_slideshow(
             f.write(f"file '{clip}'\n")
 
     output = str(Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.mp4")
-    cmd = [
-        _ffmpeg_bin(), "-y",
-        "-f", "concat", "-safe", "0", "-i", playlist,
-        # Re-encode en lugar de copy → timestamps limpios y continuos → seek funciona
+
+    def _run_concat(extra_flags: list) -> subprocess.CompletedProcess:
+        return subprocess.run([
+            _ffmpeg_bin(), "-y",
+            "-f", "concat", "-safe", "0", "-i", playlist,
+        ] + extra_flags + [
+            "-movflags", "+faststart",
+            output,
+        ], capture_output=True, timeout=600)
+
+    # Intento 1: re-encode h264 → timestamps continuos → seek funciona
+    r = _run_concat([
         "-c:v", "libx264", "-preset", "fast", "-crf", "22",
-        "-profile:v", "high", "-level", "4.0",
-        "-pix_fmt", "yuv420p",
-        "-an",                        # sin audio (slideshow de fotos)
-        "-movflags", "+faststart",    # MOOV al inicio → streaming y seek desde byte 0
-        output,
-    ]
-    r = subprocess.run(cmd, capture_output=True, timeout=600)
+        "-pix_fmt", "yuv420p", "-an",
+    ])
+
+    # Intento 2: si falla (libx264 no disponible) → copy con genpts
+    if r.returncode != 0:
+        log.warning("Re-encode falló, intentando -c copy: %s",
+                    r.stderr.decode("utf-8", errors="replace")[-300:])
+        r = _run_concat(["-c", "copy", "-fflags", "+genpts"])
+
     if r.returncode != 0:
         raise RuntimeError(
             f"Concat error:\n{r.stderr.decode('utf-8', errors='replace')[-800:]}")

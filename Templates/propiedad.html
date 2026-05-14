@@ -329,7 +329,7 @@
               polling = false;
               if (poll) { clearInterval(poll); poll = null; }
               const msg = document.getElementById('mainVideoMsg');
-              if (msg) msg.textContent = '⚠️ Error generando video';
+              if (msg) msg.textContent = '⚠️ ' + (d.video_url_error || 'Error generando video');
               return;
             }
 
