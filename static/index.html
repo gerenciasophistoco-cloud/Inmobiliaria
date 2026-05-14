@@ -175,7 +175,7 @@
                 placeholder="Busca dirección, conjunto o barrio… o pega coordenadas GPS"
                 autocomplete="off">
               <input type="hidden" id="coordenadas" name="coordenadas">
-              <span class="field-hint">Escribe y selecciona del menú — arrastra el pin para afinar</span>
+              <span class="field-hint">Clic en el mapa para ubicar el pin · en móvil mantén presionado · o arrástralo para ajustar</span>
 
               <!-- Mapa en vivo con Leaflet — siempre visible -->
               <div id="mapPreviewWrap"
@@ -663,11 +663,38 @@
         attribution: '© <a href="https://www.openstreetmap.org">OSM</a>', maxZoom: 19
       }).addTo(formMap);
       formMarker = L.marker([4.65, -74.09], { draggable: true, opacity: 0 }).addTo(formMap);
-      formMarker.on('dragend', function () {
+
+      function pinTo(latlng) {
+        formMarker.setLatLng(latlng);
         formMarker.setOpacity(1);
-        var p = formMarker.getLatLng();
-        document.getElementById('coordenadas').value = p.lat.toFixed(6) + ',' + p.lng.toFixed(6);
-      });
+        document.getElementById('coordenadas').value =
+          latlng.lat.toFixed(6) + ',' + latlng.lng.toFixed(6);
+      }
+
+      /* Arrastrar el pin */
+      formMarker.on('dragend', function () { pinTo(formMarker.getLatLng()); });
+
+      /* Clic en el mapa → pin salta a ese punto (desktop y tap móvil) */
+      formMap.on('click', function (e) { pinTo(e.latlng); });
+
+      /* Long press en móvil: mantener 600ms sin mover → pin al punto presionado */
+      var _lpTimer = null, _lpMoved = false, _lpT = null;
+      var mc = formMap.getContainer();
+      mc.addEventListener('touchstart', function (ev) {
+        _lpMoved = false; _lpT = ev.touches[0];
+        _lpTimer = setTimeout(function () {
+          if (_lpMoved || !_lpT) return;
+          var r = mc.getBoundingClientRect();
+          pinTo(formMap.containerPointToLatLng(
+            L.point(_lpT.clientX - r.left, _lpT.clientY - r.top)
+          ));
+          /* Pulso visual de confirmación */
+          mc.style.outline = '3px solid #3b82f6';
+          setTimeout(function () { mc.style.outline = ''; }, 350);
+        }, 600);
+      }, { passive: true });
+      mc.addEventListener('touchmove',  function () { _lpMoved = true; clearTimeout(_lpTimer); }, { passive: true });
+      mc.addEventListener('touchend',   function () { clearTimeout(_lpTimer); }, { passive: true });
     }
 
     function moveMap(lat, lng, zoom) {
