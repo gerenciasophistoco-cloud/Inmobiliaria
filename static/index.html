@@ -563,14 +563,81 @@
     if (e.key === 'Escape') { cancelarOtraInput(); }
   });
 
+  /* ── Lista completa de municipios colombianos para filtrado local ── */
+  var MUNICIPIOS_CO = ('Abejorral,Abriaquí,Acacías,Acandí,Acevedo,Achí,Agrado,Aguachica,Aguada,Aguadas,Aguazul,' +
+    'Agustín Codazzi,Aipe,Albania,Alcalá,Alejandría,Algeciras,Algarrobo,Almaguer,Alpujarra,Alto Baudó,' +
+    'Altos del Rosario,Alvarado,Amagá,Amalfi,Ambalema,Anapoima,Ancuyá,Andalucía,Andes,Angelópolis,Angostura,' +
+    'Anorí,Ansermanuevo,Anzoátegui,Apía,Apulo,Aquitania,Aracataca,Arauca,Arauquita,Arboleda,Arboletes,' +
+    'Arcabuco,Argelia,Ariguaní,Arjona,Armenia,Armero,Arroyohondo,Astrea,Ataco,Atrato,Ayapel,' +
+    'Baranoa,Barbacoas,Barbosa,Barichara,Barranca de Upía,Barrancabermeja,Barranco de Loba,Barranquilla,' +
+    'Becerril,Belén,Belén de los Andaquíes,Belén de Umbría,Bello,Beltrán,Berbeo,Betania,Betéitiva,Betulia,' +
+    'Bituima,Boavita,Bogotá D.C.,Bojacá,Bojayá,Bosconia,Briceño,Buenavista,Buenos Aires,Buga,Bugalagrande,' +
+    'Bucaramanga,Buenaventura,Buesaco,Buriticá,Cáceres,Cácota,Cachipay,Cachirá,Caicedo,Caicedonia,' +
+    'Cajamarca,Cajicá,Calarcá,Calima,Cali,California,Calamar,Caldas,Caldono,Caloto,Campamento,' +
+    'Campoalegre,Campo de la Cruz,Candelaria,Cañasgordas,Caracolí,Caramanta,Carepa,Cáqueza,' +
+    'Carmen de Apicalá,Carmen de Carupa,Cartagena,Cartagena del Chairá,Cartago,Caucasia,Cereté,' +
+    'Cerrito,Cerro San Antonio,Chaguaní,Chalán,Chaparral,Charalá,Charta,Chía,Chigorodó,Chima,' +
+    'Chipatá,Chiquinquirá,Chiriguaná,Chitagá,Chivolo,Choachí,Chocontá,Ciénaga,Cimitarra,Cisneros,' +
+    'Ciudad Bolívar,Cocorná,Coello,Cogua,Colosó,Condoto,Convención,Copacabana,Córdoba,Coromoro,' +
+    'Corozal,Cota,Coveñas,Cubarral,Cubará,Cúcuta,Cucunubá,Cucutilla,Cuítiva,Cumaral,Cunday,Curillo,Curití,' +
+    'Dagua,Dibulla,Distracción,Dolores,Dosquebradas,Duitama,Durania,Ebéjico,El Banco,El Cairo,' +
+    'El Calvario,El Carmen de Atrato,El Carmen de Bolívar,El Carmen de Chucurí,El Carmen de Viboral,' +
+    'El Cerrito,El Cocuy,El Colegio,El Doncello,El Dovio,El Espinal,El Espino,El Guacamayo,El Molino,' +
+    'El Paujil,El Peñol,El Peñón,El Piñón,El Playón,El Retén,El Retiro,El Rosal,El Rosario,' +
+    'El Santuario,El Socorro,El Tablón,El Tambo,El Tarra,El Zulia,Encino,Enciso,Entrerríos,Envigado,' +
+    'Facatativá,Filadelfia,Filandia,Florencia,Floridablanca,Florián,Florida,Flandes,Fonseca,Fómeque,' +
+    'Fosca,Fredonia,Fresno,Frontino,Fundación,Funza,Fusagasugá,Gachalá,Gachancipá,Gachetá,Gama,' +
+    'Galán,Galapa,Galeras,Gamarra,Gámbita,Girardot,Girardota,Girón,González,Gramalote,Granada,' +
+    'Guadalupe,Guacamayas,Guachetá,Guaduas,Guamal,Guarne,Guasca,Guatapé,Guataquí,Guatavita,' +
+    'Guayabal de Síquima,Guayabetal,Guacarí,Guapi,Guática,Güicán,Gutiérrez,Hacarí,Hato,' +
+    'Hatillo de Loba,Honda,Ibagué,Iles,Iquira,Ipiales,Isnos,Itagüí,Istmina,Ituango,' +
+    'Jambaló,Jamundí,Jardín,Jenesano,Jericó,Jerusalén,Junín,La Apartada,La Argentina,La Belleza,' +
+    'La Calera,La Ceja,La Cruz,La Dorada,La Estrella,La Florida,La Gloria,La Jagua de Ibirico,' +
+    'La Jagua del Pilar,La Mesa,La Montañita,La Palma,La Paz,La Peña,La Pintada,La Plata,' +
+    'La Primavera,La Sierra,La Tebaida,La Unión,La Uvita,La Vega,La Victoria,La Virginia,' +
+    'Labateca,Labranzagrande,Landázuri,Leticia,Lebrija,Lérida,Leiva,Lenguazaque,Líbano,' +
+    'Lorica,Los Córdobas,Los Palmitos,Los Patios,Luruaco,Macaravita,Malambo,Málaga,Manatí,' +
+    'Manaure,Maní,Marinilla,Marmato,Mariquita,Marquetalia,Marulanda,Medellín,Medina,Melgar,' +
+    'Mercaderes,Miranda,Mistrató,Miraflores,Mitú,Mocoa,Mogotes,Momil,Mompós,Monguí,Moniquirá,' +
+    'Montebello,Monterrey,Montería,Morales,Morroa,Mosquera,Murillo,Mutatá,Nariño,Nechí,Necoclí,' +
+    'Neira,Nemocón,Neiva,Nilo,Nimaima,Nobsa,Nocaima,Norcasia,Nunchía,Ocaña,Oiba,Oporapa,Orito,' +
+    'Ortega,Ovejas,Pacho,Paicol,Paime,Paipa,Palmira,Palmar de Varela,Pandi,Paratebueno,Pasca,' +
+    'Pasto,Patía,Paz de Ariporo,Paz de Río,Pedraza,Pensilvania,Peque,Pereira,Piedecuesta,' +
+    'Piendamó,Pijiño del Carmen,Pijao,Pivijay,Planeta Rica,Plato,Policarpa,Polonuevo,Ponedera,' +
+    'Popayán,Potosí,Pradera,Pueblo Bello,Pueblo Nuevo,Pueblorrico,Puerto Asís,Puerto Berrío,' +
+    'Puerto Boyacá,Puerto Carreño,Puerto Colombia,Puerto Concordia,Puerto Escondido,Puerto Gaitán,' +
+    'Puerto Inírida,Puerto Leguízamo,Puerto Libertador,Puerto López,Puerto Nare,Puerto Rico,' +
+    'Puerto Salgar,Puerto Santander,Puerto Tejada,Puerto Triunfo,Puerto Wilches,Pulí,Purificación,' +
+    'Purísima,Quibdó,Quimbaya,Quinchía,Quetame,Quipile,Ragonvalia,Remedios,Repelón,Restrepo,' +
+    'Ricaurte,Riofrío,Riohacha,Rionegro,Riosucio,Roldanillo,Roncesvalles,Rovira,Sabana de Torres,' +
+    'Sabanagrande,Sabanalarga,Sabaneta,Salazar,Salamina,Saldaña,Salento,Salgar,Sampués,Samaná,' +
+    'Samaniego,San Agustín,San Alberto,San Andrés,San Andrés de Cuerquia,San Andrés de Sotavento,' +
+    'San Antero,San Antonio,San Bernardo,San Bernardo del Viento,San Calixto,San Carlos,San Cayetano,' +
+    'San Diego,San Eduardo,San Francisco,San Gil,San Jacinto,San Jerónimo,San Joaquín,San José,' +
+    'San José de Miranda,San José de Pare,San José de Uré,San José del Fragua,San José del Guaviare,' +
+    'San Juan de Arama,San Juan de Betulia,San Juan de Rioseco,San Juan de Urabá,San Juan Nepomuceno,' +
+    'San Luis,San Marcos,San Martín,San Mateo,San Miguel,San Onofre,San Pablo,San Pedro,San Pelayo,' +
+    'San Rafael,San Roque,San Sebastián,San Vicente,San Zenón,Santa Ana,Santa Bárbara,Santa Catalina,' +
+    'Santa Helena,Santa Isabel,Santa Lucía,Santa Marta,Santa Rosa,Santa Rosa de Cabal,Santa Rosa de Osos,' +
+    'Santa Rosa de Viterbo,Santa Rosa del Sur,Santa Sofía,Santander de Quilichao,Santiago,Santo Domingo,' +
+    'Santo Tomás,Santuario,Saravena,Sasaima,Sesquilé,Sevilla,Sibaté,Sibundoy,Silvania,Silvia,Simijaca,' +
+    'Simití,Sincelejo,Sipí,Soacha,Soatá,Socha,Socotá,Sogamoso,Soledad,Sopó,Sopetrán,Suaita,Suaza,' +
+    'Subachoque,Suesca,Supatá,Susa,Sucre,Sutatausa,Tabio,Tadó,Támara,Támesis,Tarazá,Tame,Tarqui,' +
+    'Tausa,Tauramena,Tena,Tenjo,Tibacuy,Tibú,Titiribí,Toca,Toledo,Tolú,Tona,Tópaga,Toro,Tota,' +
+    'Tuluá,Tumaco,Tunja,Turbo,Ubalá,Ubaque,Ulloa,Unguía,Uribia,Urrao,Urumita,Uticá,Valdivia,' +
+    'Valledupar,Valle de San José,Valparaíso,Vegachí,Vélez,Vergara,Versalles,Vetas,Vianí,Vijes,' +
+    'Villa Caro,Villa de Leyva,Villa del Rosario,Villa Rica,Villagómez,Villagarzón,Villapinzón,' +
+    'Villanueva,Villavicencio,Villeta,Viotá,Viterbo,Yacopí,Yalí,Yarumal,Yolombó,Yondó,Yopal,' +
+    'Yotoco,Yumbo,Zaragoza,Zarzal,Zipaquirá,Zipacón').split(',');
+
   /* ── Mapa con autocomplete (Photon + Leaflet) ── */
   (function () {
     var formMap       = null;
     var formMarker    = null;
-    var cityLat       = null;   /* coordenadas de la ciudad seleccionada */
+    var cityLat       = null;
     var cityLng       = null;
-    var cityDd        = null;   /* dropdown de ciudad */
-    var mapDd         = null;   /* dropdown de mapSearch */
+    var cityDd        = null;
+    var mapDd         = null;
     var cityTimer     = null;
     var mapTimer      = null;
 
@@ -631,64 +698,92 @@
     /* ── Autocomplete Ciudad/Municipio ── */
     var ciudadEl = document.getElementById('ciudad');
 
+    /* Normaliza texto quitando tildes y a minúsculas para comparación */
+    function norm(s) {
+      return (s || '').toLowerCase()
+        .normalize('NFD').replace(/[̀-ͯ]/g, '');
+    }
+
     function closeCityDd() { if (cityDd) cityDd.style.display = 'none'; }
 
-    function showCityDd(features) {
+    /* Geocodifica un nombre de municipio y mueve el mapa */
+    function geocodeCity(name) {
+      fetch('https://photon.komoot.io/api/?q=' + encodeURIComponent(name + ', Colombia')
+            + '&lang=es&limit=1')
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d.features && d.features.length) {
+            cityLat = d.features[0].geometry.coordinates[1];
+            cityLng = d.features[0].geometry.coordinates[0];
+            moveMap(cityLat, cityLng, 12);
+          }
+        }).catch(function () {});
+    }
+
+    function addCityLi(name, subText, onSelect) {
       if (!cityDd) cityDd = makeDropdown(ciudadEl, 'ciudadDropdown');
-      cityDd.innerHTML = '';
-      if (!features.length) { cityDd.style.display = 'none'; return; }
-      features.forEach(function (f) {
-        var p    = f.properties;
-        var lat  = f.geometry.coordinates[1];
-        var lng  = f.geometry.coordinates[0];
-        var name = p.name || '';
-        var sub  = [p.state, 'Colombia'].filter(Boolean).join(', ');
-        cityDd.appendChild(makeLi(name, sub, function () {
-          ciudadEl.value = name;
-          cityLat = lat;
-          cityLng = lng;
-          moveMap(lat, lng, 12);
-          closeCityDd();
-        }));
-      });
-      cityDd.style.display = 'block';
+      cityDd.appendChild(makeLi(name, subText, onSelect));
     }
 
     function searchCity(val) {
-      if (!val || val.length < 2) { closeCityDd(); return; }
-      fetch('https://photon.komoot.io/api/?q=' + encodeURIComponent(val + ', Colombia')
-            + '&lang=es&limit=6&osm_tag=place:city&osm_tag=place:town&osm_tag=place:village')
-        .then(function (r) { return r.json(); })
-        .then(function (d) {
-          var feats = (d.features || []).filter(function (f) {
-            var t = (f.properties.type || '').toLowerCase();
-            return t === 'city' || t === 'town' || t === 'village' || t === 'municipality';
+      if (!val || val.trim().length < 1) { closeCityDd(); return; }
+      if (!cityDd) cityDd = makeDropdown(ciudadEl, 'ciudadDropdown');
+      cityDd.innerHTML = '';
+
+      /* ── 1. Filtrar lista local de municipios colombianos ── */
+      var q = norm(val.trim());
+      /* primero los que empiezan con el texto, luego los que lo contienen */
+      var starts   = MUNICIPIOS_CO.filter(function (m) { return norm(m).startsWith(q); });
+      var contains = MUNICIPIOS_CO.filter(function (m) { return !norm(m).startsWith(q) && norm(m).includes(q); });
+      var local    = starts.concat(contains).slice(0, 8);
+
+      if (local.length) {
+        local.forEach(function (name) {
+          addCityLi(name, 'Colombia', function () {
+            ciudadEl.value = name;
+            cityLat = null; cityLng = null;  /* se llenará en geocodeCity */
+            closeCityDd();
+            geocodeCity(name);
           });
-          /* si el filtro dejó vacío, usar primeros 5 sin filtrar */
-          showCityDd(feats.length ? feats : (d.features || []).slice(0, 5));
-        }).catch(function () {});
+        });
+        cityDd.style.display = 'block';
+      } else {
+        /* ── 2. Si no hay coincidencias locales → buscar en Photon ── */
+        cityDd.style.display = 'none';
+        fetch('https://photon.komoot.io/api/?q=' + encodeURIComponent(val.trim() + ', Colombia')
+              + '&lang=es&limit=6')
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (!cityDd) cityDd = makeDropdown(ciudadEl, 'ciudadDropdown');
+            cityDd.innerHTML = '';
+            var feats = d.features || [];
+            if (!feats.length) { cityDd.style.display = 'none'; return; }
+            feats.forEach(function (f) {
+              var p   = f.properties;
+              var lat = f.geometry.coordinates[1];
+              var lng = f.geometry.coordinates[0];
+              var name = p.name || '';
+              var sub  = [p.state, 'Colombia'].filter(Boolean).join(', ');
+              addCityLi(name, sub, function () {
+                ciudadEl.value = name;
+                cityLat = lat; cityLng = lng;
+                moveMap(lat, lng, 12);
+                closeCityDd();
+              });
+            });
+            cityDd.style.display = 'block';
+          }).catch(function () {});
+      }
     }
 
     ciudadEl.addEventListener('input', function () {
       clearTimeout(cityTimer);
       var v = this.value;
-      cityTimer = setTimeout(function () { searchCity(v); }, 300);
+      cityTimer = setTimeout(function () { searchCity(v); }, 200);
     });
     ciudadEl.addEventListener('blur', function () {
       setTimeout(closeCityDd, 200);
-      /* Si el usuario escribió pero no seleccionó, geocodificar igual */
-      if (!cityLat && this.value.trim().length > 1) {
-        fetch('https://photon.komoot.io/api/?q=' + encodeURIComponent(this.value.trim() + ', Colombia')
-              + '&lang=es&limit=1')
-          .then(function (r) { return r.json(); })
-          .then(function (d) {
-            if (d.features && d.features.length) {
-              cityLat = d.features[0].geometry.coordinates[1];
-              cityLng = d.features[0].geometry.coordinates[0];
-              moveMap(cityLat, cityLng, 12);
-            }
-          }).catch(function () {});
-      }
+      if (!cityLat && this.value.trim().length > 1) geocodeCity(this.value.trim());
     });
     ciudadEl.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeCityDd(); });
 
