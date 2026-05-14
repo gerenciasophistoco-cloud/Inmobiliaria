@@ -13,7 +13,7 @@ from typing import List, Optional
 
 from dotenv import load_dotenv
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from anthropic import AsyncAnthropic
@@ -38,8 +38,8 @@ _uploads_dir = BASE_DIR / "uploads"
 _static_dir.mkdir(exist_ok=True)
 _uploads_dir.mkdir(exist_ok=True)
 
-app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
-app.mount("/uploads", StaticFiles(directory=str(_uploads_dir)), name="uploads")
+app.mount("/static",   StaticFiles(directory=str(_static_dir)),   name="static")
+app.mount("/uploads",  StaticFiles(directory=str(_uploads_dir)),  name="uploads")
 
 
 # ── Modelo para video y página web ───────────────────────────────────────────
@@ -571,6 +571,52 @@ async def upload_video_endpoint(video: UploadFile = File(...)):
     return JSONResponse({"url": f"/uploads/{dest.name}"})
 
 
+# ── Streaming de video local con soporte Range requests (seek funciona) ──────
+@app.get("/video/{filename}")
+async def stream_video(filename: str, request: Request):
+    """Sirve archivos mp4 con soporte completo de HTTP Range para seek en browser."""
+    file_path = _uploads_dir / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Video no encontrado")
+
+    file_size = file_path.stat().st_size
+    range_header = request.headers.get("range", "")
+
+    if range_header:
+        m = re.match(r"bytes=(\d+)-(\d*)", range_header)
+        if m:
+            start = int(m.group(1))
+            end   = int(m.group(2)) if m.group(2) else file_size - 1
+            end   = min(end, file_size - 1)
+            length = end - start + 1
+
+            def _iter():
+                with open(file_path, "rb") as fh:
+                    fh.seek(start)
+                    remaining = length
+                    while remaining > 0:
+                        chunk = fh.read(min(65536, remaining))
+                        if not chunk:
+                            break
+                        remaining -= len(chunk)
+                        yield chunk
+
+            return StreamingResponse(
+                _iter(), status_code=206, media_type="video/mp4",
+                headers={
+                    "Content-Range":  f"bytes {start}-{end}/{file_size}",
+                    "Accept-Ranges":  "bytes",
+                    "Content-Length": str(length),
+                    "Cache-Control":  "public, max-age=3600",
+                },
+            )
+
+    return FileResponse(
+        str(file_path), media_type="video/mp4",
+        headers={"Accept-Ranges": "bytes", "Content-Length": str(file_size)},
+    )
+
+
 # ── Página web de la propiedad ───────────────────────────────────────────────
 @app.get("/propiedad/{property_id}", response_class=HTMLResponse)
 async def ver_propiedad(property_id: str, request: Request):
@@ -712,10 +758,10 @@ def _video_task(task_id: str, data: dict, prop_id: Optional[str],
         if cloud_url:
             video_url = cloud_url
         else:
-            # Fallback: servir desde /uploads/ (montado como StaticFiles)
+            # Fallback: servir desde /video/ con soporte Range (seek funciona)
             dest = _uploads_dir / f"video_{task_id}.mp4"
             shutil.copy2(local_out, str(dest))
-            video_url = f"/uploads/{dest.name}"
+            video_url = f"/video/{dest.name}"
 
         if prop_id:
             update = {field: video_url, f"{field}_error": None}
