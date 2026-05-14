@@ -30,19 +30,12 @@
     .photo-thumb-wrap.dragging { opacity: .4; }
     .photo-thumb-wrap.drag-over { border-color: #c9a227; box-shadow: 0 0 0 3px #c9a22740; }
     .photo-thumb-container {
-      position: relative;
       width: 100%;
-      padding-top: 75%;   /* 4:3 */
-      background: #e8e5de;
+      height: 140px;            /* altura fija — sin conflicto con style.css */
+      background: #d6cfc4 center/cover no-repeat;
       overflow: hidden;
       flex-shrink: 0;
-    }
-    .photo-thumb {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
+      position: relative;
     }
     .cover-badge {
       display: none;
@@ -661,13 +654,38 @@
       geocodeTimer = setTimeout(function () { geocode(value); }, 900);
     }
 
-    // Solo geocodifica cuando el usuario escribe en el campo de coordenadas.
-    // NO se auto-geocodifica desde dirección/ciudad porque Nominatim
-    // no interpreta bien el formato colombiano (Cra 70 c # 1-72).
+    // Geocodificar cuando el usuario escribe en el campo de coordenadas
     var coordInput = document.getElementById('coordenadas');
     if (coordInput) {
       coordInput.addEventListener('input', function () { scheduleGeocode(this.value); });
     }
+
+    // Geocodificar al salir de dirección o ciudad
+    // Estrategia: expandir abreviaturas + quitar número de casa (#1-72)
+    // para que Nominatim encuentre la calle aunque no tenga el número exacto.
+    // También funciona con conjuntos: "Conjunto Los Pinos, Bogotá"
+    ['direccion', 'ciudad'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('blur', function () {
+        // Si ya hay coordenadas GPS guardadas, no sobreescribir
+        var coord = (document.getElementById('coordenadas').value || '').trim();
+        if (coord.match(/^-?\d+\.?\d*\s*,\s*-?\d+\.?\d*$/)) return;
+
+        var dir = document.getElementById('direccion').value.trim();
+        var ciu = document.getElementById('ciudad').value.trim();
+        if (!dir || !ciu) return;
+
+        // 1. Expandir abreviaturas colombianas
+        var expanded = expandColombian(dir);
+        // 2. Quitar el número de casa (# 1-72) para mejor resultado en Nominatim
+        //    "Carrera 70 # 1-72" → "Carrera 70"
+        //    "Conjunto Los Pinos" → sin cambios
+        var clean = expanded.replace(/\s*#\s*[\d\s-]+[a-zA-Z]?\s*/g, ' ').replace(/\s+/g, ' ').trim();
+        var query = clean + ', ' + ciu;
+        geocode(query);
+      });
+    });
   })();
   </script>
 </body>
