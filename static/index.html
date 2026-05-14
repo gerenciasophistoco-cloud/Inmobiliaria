@@ -781,14 +781,30 @@
       }
     }
 
+    var cityGeoTimer = null;
+
     ciudadEl.addEventListener('input', function () {
+      var v = this.value.trim();
+      /* Dropdown: aparece rápido (250ms) */
       clearTimeout(cityTimer);
-      var v = this.value;
-      cityTimer = setTimeout(function () { searchCity(v); }, 200);
+      cityTimer = setTimeout(function () { searchCity(v); }, 250);
+      /* Mapa: se mueve cuando el usuario termina de escribir (700ms) */
+      clearTimeout(cityGeoTimer);
+      if (v.length > 2) {
+        cityGeoTimer = setTimeout(function () {
+          cityLat = null; cityLng = null;
+          geocodeCity(v);
+        }, 700);
+      }
     });
     ciudadEl.addEventListener('blur', function () {
       setTimeout(closeCityDd, 200);
-      if (!cityLat && this.value.trim().length > 1) geocodeCity(this.value.trim());
+      var ciu = this.value.trim();
+      /* Siempre geocodificar al salir del campo, aunque ya haya coordenadas */
+      if (ciu.length > 1) {
+        cityLat = null; cityLng = null;
+        geocodeCity(ciu);
+      }
     });
     ciudadEl.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeCityDd(); });
 
