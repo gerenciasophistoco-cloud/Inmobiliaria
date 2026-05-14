@@ -172,9 +172,9 @@
               <input type="hidden" id="coordenadas" name="coordenadas">
               <span class="field-hint">Escribe y selecciona del menú — arrastra el pin para afinar</span>
 
-              <!-- Mapa en vivo con Leaflet -->
+              <!-- Mapa en vivo con Leaflet — siempre visible -->
               <div id="mapPreviewWrap"
-                   style="display:none; margin-top:0.75rem; border-radius:12px;
+                   style="margin-top:0.75rem; border-radius:12px;
                           overflow:hidden; height:280px; border:1px solid #e2e8f0;">
                 <div id="mapPreview" style="width:100%; height:100%;"></div>
               </div>
@@ -569,32 +569,30 @@
     var formMarker  = null;
     var dropdown    = null;
     var searchTimer = null;
-    var cityTimer   = null;
-    var dirTimer    = null;
 
-    function initMap(lat, lng, zoom) {
-      if (!formMap) {
-        formMap = L.map('mapPreview', { scrollWheelZoom: false })
-                   .setView([lat, lng], zoom);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '© <a href="https://www.openstreetmap.org">OSM</a>',
-          maxZoom: 19,
-        }).addTo(formMap);
-        formMarker = L.marker([lat, lng], { draggable: true }).addTo(formMap);
-        formMarker.on('dragend', function () {
-          var p = formMarker.getLatLng();
-          document.getElementById('coordenadas').value = p.lat.toFixed(6) + ',' + p.lng.toFixed(6);
-        });
-      }
+    /* ── Inicializar mapa al cargar la página ── */
+    function initMap() {
+      if (formMap) return;
+      formMap = L.map('mapPreview', { scrollWheelZoom: false })
+                 .setView([4.65, -74.09], 5);            /* Colombia overview */
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© <a href="https://www.openstreetmap.org">OSM</a>',
+        maxZoom: 19,
+      }).addTo(formMap);
+      formMarker = L.marker([4.65, -74.09], { draggable: true, opacity: 0 }).addTo(formMap);
+      formMarker.on('dragend', function () {
+        formMarker.setOpacity(1);
+        var p = formMarker.getLatLng();
+        document.getElementById('coordenadas').value = p.lat.toFixed(6) + ',' + p.lng.toFixed(6);
+      });
     }
 
     function moveMap(lat, lng, zoom) {
-      zoom = zoom || 16;
-      document.getElementById('mapPreviewWrap').style.display = 'block';
-      initMap(lat, lng, zoom);
-      formMap.setView([lat, lng], zoom);
+      initMap();
       formMarker.setLatLng([lat, lng]);
-      setTimeout(function () { formMap.invalidateSize(); }, 150);
+      formMarker.setOpacity(1);
+      formMap.setView([lat, lng], zoom || 14);
+      setTimeout(function () { formMap.invalidateSize(); }, 100);
       document.getElementById('coordenadas').value = lat.toFixed(6) + ',' + lng.toFixed(6);
     }
 
@@ -621,9 +619,9 @@
       dd.innerHTML = '';
       if (!features.length) { dd.style.display = 'none'; return; }
       features.forEach(function (f) {
-        var p   = f.properties;
-        var geo = f.geometry.coordinates;
-        var lat = geo[1], lng = geo[0];
+        var p    = f.properties;
+        var geo  = f.geometry.coordinates;
+        var lat  = geo[1], lng = geo[0];
         var main = p.name || p.street || '';
         var sub  = [p.street !== main ? p.street : '', p.district, p.city, p.state]
                     .filter(Boolean).join(', ');
@@ -654,32 +652,17 @@
         .replace(/\bAv\.?\s*/gi,'Avenida ')  .replace(/\s+/g,' ').trim();
     }
 
-    /* Auto-centrar en la ciudad al zoom 12 — siempre funciona */
-    function centerOnCity(ciu) {
-      if (!ciu || ciu.length < 2) return;
-      fetch('https://photon.komoot.io/api/?q=' + encodeURIComponent(ciu + ', Colombia') + '&lang=es&limit=1')
+    /* Geocodifica y mueve el mapa — sin dropdown */
+    function geoAndMove(query, zoom) {
+      if (!query || query.trim().length < 2) return;
+      fetch('https://photon.komoot.io/api/?q=' + encodeURIComponent(query + ', Colombia')
+            + '&lang=es&limit=1')
         .then(function (r) { return r.json(); })
         .then(function (d) {
           if (d.features && d.features.length) {
             var f = d.features[0];
-            moveMap(f.geometry.coordinates[1], f.geometry.coordinates[0], 12);
+            moveMap(f.geometry.coordinates[1], f.geometry.coordinates[0], zoom || 14);
           }
-        }).catch(function () {});
-    }
-
-    /* Intentar precisar con la dirección completa al zoom 16 */
-    function refineWithAddress(dir, ciu) {
-      if (!dir || dir.length < 3) return;
-      var q = expandCo(dir);
-      if (ciu) q += ', ' + ciu;
-      q += ', Colombia';
-      fetch('https://photon.komoot.io/api/?q=' + encodeURIComponent(q) + '&lang=es&limit=1')
-        .then(function (r) { return r.json(); })
-        .then(function (d) {
-          if (d.features && d.features.length) {
-            moveMap(d.features[0].geometry.coordinates[1], d.features[0].geometry.coordinates[0], 16);
-          }
-          /* Si Photon no encontró la calle exacta, el mapa queda en la vista de ciudad — OK */
         }).catch(function () {});
     }
 
@@ -691,12 +674,18 @@
       var ciu = document.getElementById('ciudad').value.trim();
       var q   = expandCo(raw);
       if (ciu && !q.toLowerCase().includes(ciu.toLowerCase())) q += ', ' + ciu;
-      q += ', Colombia';
-      fetch('https://photon.komoot.io/api/?q=' + encodeURIComponent(q) + '&lang=es&limit=6')
+      fetch('https://photon.komoot.io/api/?q=' + encodeURIComponent(q + ', Colombia') + '&lang=es&limit=6')
         .then(function (r) { return r.json(); })
         .then(function (d) { showDropdown(d.features || []); })
         .catch(function () {});
     }
+
+    /* ── Inicializar mapa al cargar ── */
+    initMap();
+
+    /* ── Si ya hay ciudad cargada (edición de formulario), centrar ── */
+    var ciudadInicial = document.getElementById('ciudad').value.trim();
+    if (ciudadInicial) geoAndMove(ciudadInicial, 12);
 
     /* ── Autocomplete en mapSearch ── */
     var ms = document.getElementById('mapSearch');
@@ -710,26 +699,18 @@
       ms.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeDropdown(); });
     }
 
-    /* ── Ciudad: centrar mapa en la ciudad al salir del campo ── */
-    var ciudadEl = document.getElementById('ciudad');
-    if (ciudadEl) {
-      ciudadEl.addEventListener('change', function () {
-        clearTimeout(cityTimer);
-        var ciu = this.value.trim();
-        cityTimer = setTimeout(function () { centerOnCity(ciu); }, 400);
-      });
-    }
+    /* ── Ciudad blur → centrar mapa en esa ciudad (zoom 12) ── */
+    document.getElementById('ciudad').addEventListener('blur', function () {
+      var ciu = this.value.trim();
+      if (ciu) geoAndMove(ciu, 12);
+    });
 
-    /* ── Dirección: intentar precisar la ubicación al salir del campo ── */
-    var dirEl = document.getElementById('direccion');
-    if (dirEl) {
-      dirEl.addEventListener('change', function () {
-        clearTimeout(dirTimer);
-        var dir = this.value.trim();
-        var ciu = document.getElementById('ciudad').value.trim();
-        dirTimer = setTimeout(function () { refineWithAddress(dir, ciu); }, 400);
-      });
-    }
+    /* ── Dirección blur → intentar precisar (zoom 15) ── */
+    document.getElementById('direccion').addEventListener('blur', function () {
+      var dir = this.value.trim();
+      var ciu = document.getElementById('ciudad').value.trim();
+      if (dir && ciu) geoAndMove(expandCo(dir) + ', ' + ciu, 15);
+    });
 
     document.addEventListener('click', function (e) {
       if (dropdown && !dropdown.contains(e.target) && e.target !== ms) closeDropdown();
