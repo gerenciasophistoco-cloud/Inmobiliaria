@@ -165,11 +165,12 @@
 
           <div class="form-row">
             <div class="field-group">
-              <label for="coordenadas">📍 Ubicación en mapa <span class="field-hint-inline">(opcional)</span></label>
-              <input type="text" id="coordenadas" name="coordenadas"
-                placeholder="Ej: 4.6097,-74.0817  (recomendado: pega coordenadas GPS de Google Maps)"
+              <label for="mapSearch">📍 Ubicación en mapa <span class="field-hint-inline">(opcional)</span></label>
+              <input type="text" id="mapSearch"
+                placeholder="Busca dirección, conjunto o barrio… o pega coordenadas GPS"
                 autocomplete="off">
-              <span class="field-hint">Pega coordenadas GPS para máxima precisión — o escribe "Carrera 70, Bogotá" y arrastra el pin para afinar</span>
+              <input type="hidden" id="coordenadas" name="coordenadas">
+              <span class="field-hint">Escribe y selecciona del menú — arrastra el pin para afinar</span>
 
               <!-- Mapa en vivo con Leaflet -->
               <div id="mapPreviewWrap"
@@ -567,9 +568,9 @@
     var formMap    = null;
     var formMarker = null;
     var dropdown   = null;
-    var timer      = null;
+    var searchTimer = null;
+    var autoTimer   = null;
 
-    /* ── Inicializar mapa ── */
     function initMap() {
       if (formMap) return;
       formMap = L.map('mapPreview', { scrollWheelZoom: false })
@@ -594,7 +595,7 @@
       document.getElementById('coordenadas').value = lat.toFixed(6) + ',' + lng.toFixed(6);
     }
 
-    /* ── Dropdown de sugerencias ── */
+    /* ── Dropdown de sugerencias bajo mapSearch ── */
     function getDropdown() {
       if (dropdown) return dropdown;
       dropdown = document.createElement('ul');
@@ -604,10 +605,9 @@
         'padding:0;list-style:none;background:#fff;border:1px solid #d1c9b8;' +
         'border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.13);' +
         'max-height:220px;overflow-y:auto;display:none;';
-
-      var wrap = document.getElementById('coordenadas').parentNode;
-      wrap.style.position = 'relative';
-      wrap.appendChild(dropdown);
+      var ms = document.getElementById('mapSearch');
+      ms.parentNode.style.position = 'relative';
+      ms.parentNode.appendChild(dropdown);
       return dropdown;
     }
 
@@ -619,31 +619,25 @@
       var dd = getDropdown();
       dd.innerHTML = '';
       if (!features.length) { dd.style.display = 'none'; return; }
-
       features.forEach(function (f) {
         var p   = f.properties;
-        var geo = f.geometry.coordinates;        // [lng, lat]
+        var geo = f.geometry.coordinates;
         var lat = geo[1], lng = geo[0];
-
-        /* Construir etiqueta legible */
         var main = p.name || p.street || '';
         var sub  = [p.street !== main ? p.street : '', p.district, p.city, p.state]
                     .filter(Boolean).join(', ');
-
         var li = document.createElement('li');
         li.style.cssText =
-          'padding:10px 14px;cursor:pointer;border-bottom:1px solid #f0ede7;' +
-          'font-size:13px;line-height:1.4;';
+          'padding:10px 14px;cursor:pointer;border-bottom:1px solid #f0ede7;font-size:13px;line-height:1.4;';
         li.innerHTML =
           '<span style="font-weight:600;color:#1c1b1b;">' + main + '</span>' +
           (sub ? '<br><span style="color:#64748b;font-size:11px;">' + sub + '</span>' : '');
-
         li.addEventListener('mouseenter', function () { li.style.background = '#fdf8f0'; });
         li.addEventListener('mouseleave', function () { li.style.background = ''; });
-        li.addEventListener('mousedown',  function (e) {
-          e.preventDefault();                   // evita que el blur cierre el dropdown
+        li.addEventListener('mousedown', function (e) {
+          e.preventDefault();
           moveMap(lat, lng);
-          document.getElementById('coordenadas').value = main + (sub ? ', ' + sub : '');
+          document.getElementById('mapSearch').value = main + (sub ? ', ' + sub : '');
           closeDropdown();
         });
         dd.appendChild(li);
@@ -651,77 +645,74 @@
       dd.style.display = 'block';
     }
 
-    /* ── Búsqueda con Photon (tiempo real, sin API key) ── */
     function expandCo(t) {
       return t
         .replace(/\bCra\.?\s*/gi,'Carrera ').replace(/\bKr\.?\s*/gi,'Carrera ')
-        .replace(/\bCll?\.?\s*/gi,'Calle ') .replace(/\bCl\.?\s*/gi,'Calle ')
-        .replace(/\bDg\.?\s*/gi,'Diagonal ').replace(/\bTv\.?\s*/gi,'Transversal ')
-        .replace(/\bAv\.?\s*/gi,'Avenida ') .replace(/\s+/g,' ').trim();
+        .replace(/\bCll?\.?\s*/gi,'Calle ')  .replace(/\bCl\.?\s*/gi,'Calle ')
+        .replace(/\bDg\.?\s*/gi,'Diagonal ') .replace(/\bTv\.?\s*/gi,'Transversal ')
+        .replace(/\bAv\.?\s*/gi,'Avenida ')  .replace(/\s+/g,' ').trim();
     }
 
+    function buildQ(raw) {
+      var ciu = document.getElementById('ciudad').value.trim();
+      var q   = expandCo(raw);
+      if (ciu && !q.toLowerCase().includes(ciu.toLowerCase())) q += ', ' + ciu;
+      return q + ', Colombia';
+    }
+
+    /* Búsqueda manual → muestra dropdown con sugerencias */
     function search(raw) {
       if (!raw || raw.trim().length < 3) { closeDropdown(); return; }
-
-      /* Coordenadas GPS directas */
       var gps = raw.match(/^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/);
       if (gps) { moveMap(+gps[1], +gps[2]); closeDropdown(); return; }
-
-      /* Añadir ciudad como contexto si no está en el texto */
-      var ciu  = document.getElementById('ciudad').value.trim();
-      var q    = expandCo(raw);
-      if (ciu && !q.toLowerCase().includes(ciu.toLowerCase())) q += ', ' + ciu;
-      q += ', Colombia';
-
-      /* Photon: autocomplete real, sin API key */
-      fetch('https://photon.komoot.io/api/?q=' + encodeURIComponent(q)
-            + '&lang=es&limit=6')
+      fetch('https://photon.komoot.io/api/?q=' + encodeURIComponent(buildQ(raw)) + '&lang=es&limit=6')
         .then(function (r) { return r.json(); })
         .then(function (d) { showDropdown(d.features || []); })
         .catch(function () {});
     }
 
-    function scheduleSearch(val) {
-      clearTimeout(timer);
-      timer = setTimeout(function () { search(val); }, 350);
+    /* Auto-ubicar: toma el primer resultado sin mostrar dropdown (al cambiar dirección/ciudad) */
+    function autoPlace(raw) {
+      if (!raw || raw.trim().length < 3) return;
+      fetch('https://photon.komoot.io/api/?q=' + encodeURIComponent(buildQ(raw)) + '&lang=es&limit=1')
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d.features && d.features.length) {
+            var f = d.features[0];
+            moveMap(f.geometry.coordinates[1], f.geometry.coordinates[0]);
+          }
+        })
+        .catch(function () {});
     }
 
-    /* ── Campo "Ubicación en mapa" — autocomplete en tiempo real ── */
-    var coordInput = document.getElementById('coordenadas');
-    if (coordInput) {
-      coordInput.addEventListener('input',  function () { scheduleSearch(this.value); });
-      coordInput.addEventListener('blur',   function () { setTimeout(closeDropdown, 200); });
-      coordInput.addEventListener('keydown',function (e) {
-        if (e.key === 'Escape') closeDropdown();
+    /* ── Autocomplete en tiempo real en el campo mapSearch ── */
+    var ms = document.getElementById('mapSearch');
+    if (ms) {
+      ms.addEventListener('input', function () {
+        clearTimeout(searchTimer);
+        var v = this.value;
+        searchTimer = setTimeout(function () { search(v); }, 350);
       });
+      ms.addEventListener('blur',    function () { setTimeout(closeDropdown, 200); });
+      ms.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeDropdown(); });
     }
 
-    /* ── Al salir de Dirección o Ciudad → buscar automáticamente ── */
+    /* ── Al cambiar Dirección o Ciudad → auto-ubicar mapa automáticamente ── */
     ['direccion', 'ciudad'].forEach(function (id) {
       var el = document.getElementById(id);
       if (!el) return;
       el.addEventListener('change', function () {
-        /* Limpiar coordenadas anteriores para forzar nueva búsqueda */
-        var coordEl = document.getElementById('coordenadas');
-        var prev    = (coordEl.value || '').trim();
-        /* Solo limpiar si el valor guardado era coords GPS (no texto de búsqueda) */
-        if (prev.match(/^-?\d+\.?\d*\s*,\s*-?\d+\.?\d*$/)) coordEl.value = '';
-
-        var dir = document.getElementById('direccion').value.trim();
-        var ciu = document.getElementById('ciudad').value.trim();
-        if (dir && ciu) {
-          /* Esperar un momento para que el usuario termine de escribir */
-          clearTimeout(timer);
-          timer = setTimeout(function () { search(dir + ', ' + ciu); }, 500);
-        }
+        clearTimeout(autoTimer);
+        autoTimer = setTimeout(function () {
+          var dir = document.getElementById('direccion').value.trim();
+          var ciu = document.getElementById('ciudad').value.trim();
+          if (dir) autoPlace(dir + (ciu ? ', ' + ciu : ''));
+        }, 600);
       });
     });
 
-    /* Cerrar dropdown al clic fuera */
     document.addEventListener('click', function (e) {
-      if (dropdown && !dropdown.contains(e.target) && e.target !== coordInput) {
-        closeDropdown();
-      }
+      if (dropdown && !dropdown.contains(e.target) && e.target !== ms) closeDropdown();
     });
   })();
   </script>
