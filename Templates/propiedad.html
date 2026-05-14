@@ -61,12 +61,36 @@
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-        /* ── Fullscreen: el CSS es un refuerzo; el JS es la fuente de verdad ── */
-        /* Sin antecesor #mainVideoSection porque en fullscreen el browser
-           saca el elemento del flujo normal y los selectores de ancestro fallan */
+        /* ── Fullscreen ── */
         video:fullscreen      { object-fit: contain !important; background: #000 !important; }
         video:-webkit-full-screen { object-fit: contain !important; background: #000 !important; }
         video:-moz-full-screen    { object-fit: contain !important; background: #000 !important; }
+
+        /* ── Marca de agua en fotos ── */
+        .protected-media {
+            position: relative;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .protected-media::after {
+            content: 'VISTA PREVIA';
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Arial Black', Arial, sans-serif;
+            font-size: clamp(10px, 2.8vw, 18px);
+            font-weight: 900;
+            letter-spacing: 0.15em;
+            color: rgba(255,255,255,0.52);
+            text-shadow: 0 1px 4px rgba(0,0,0,0.55);
+            pointer-events: none;
+            z-index: 10;
+        }
+        /* Bloquear arrastrar imágenes */
+        .protected-media img,
+        .protected-media video { pointer-events: none; }
     </style>
 </head>
 
@@ -184,6 +208,48 @@
   <!-- ══ CONTENIDO PRINCIPAL ══ -->
   <main class="max-w-7xl w-full mx-auto px-5 mt-10 space-y-10" style="padding-bottom:120px;">
 
+    <!-- ══ PANEL ADMIN (visible solo con ?admin=1) ══ -->
+    {% if request.query_params.get('admin') == '1' %}
+    <div id="adminPanel" style="
+      background:linear-gradient(135deg,#1e293b,#0f172a);
+      border:1.5px solid rgba(201,162,39,0.4);
+      border-radius:16px; padding:18px 22px;
+      display:flex; align-items:center; justify-content:space-between; gap:16px;
+      box-shadow:0 4px 24px rgba(0,0,0,0.3);">
+      <div>
+        <p style="color:#e2e8f0;font-weight:700;font-size:14px;margin:0 0 4px;">
+          🔐 Panel de administración
+        </p>
+        <p style="color:#94a3b8;font-size:12px;margin:0;">
+          Estado actual:
+          <strong style="color:{% if pago_realizado %}#4ade80{% else %}#f87171{% endif %};">
+            {% if pago_realizado %}✅ Pago confirmado — sin marca de agua
+            {% else %}⏳ Pendiente de pago — con marca de agua
+            {% endif %}
+          </strong>
+        </p>
+      </div>
+      <button id="btnTogglePago" onclick="togglePago()"
+        style="background:{% if pago_realizado %}#dc2626{% else %}#16a34a{% endif %};
+               color:#fff;font-weight:700;font-size:13px;letter-spacing:0.04em;
+               border:none;border-radius:50px;padding:10px 22px;cursor:pointer;
+               white-space:nowrap;transition:opacity 0.15s;">
+        {% if pago_realizado %}Revocar pago{% else %}✔ Confirmar pago{% endif %}
+      </button>
+    </div>
+    <script>
+    async function togglePago() {
+      const btn = document.getElementById('btnTogglePago');
+      btn.disabled = true; btn.style.opacity = '0.6';
+      try {
+        const r = await fetch('/admin/pago/{{ property_id }}', {method:'POST'});
+        if (r.ok) { location.reload(); }
+        else { alert('Error al actualizar'); btn.disabled=false; btn.style.opacity='1'; }
+      } catch(e) { alert('Error de red'); btn.disabled=false; btn.style.opacity='1'; }
+    }
+    </script>
+    {% endif %}
+
     <!-- Galería de fotos -->
     {% if fotos and fotos | length > 1 %}
     <section>
@@ -196,13 +262,14 @@
       </div>
       <div class="grid grid-cols-2 md:grid-cols-5 gap-3 h-[200px] md:h-[180px]">
         {% for foto in fotos[1:6] %}
-        <div class="rounded-xl overflow-hidden shadow-sm relative cursor-pointer group"
+        <div class="rounded-xl overflow-hidden shadow-sm relative cursor-pointer group{% if not pago_realizado %} protected-media{% endif %}"
              onclick="openGallery({{ loop.index }})">
           <img class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105
                       {% if loop.last and fotos | length > 6 %}brightness-[0.35]{% endif %}"
-               src="{{ foto }}" alt="Foto {{ loop.index + 1 }}"/>
+               src="{{ foto }}" alt="Foto {{ loop.index + 1 }}"
+               {% if not pago_realizado %}draggable="false"{% endif %}/>
           {% if loop.last and fotos | length > 6 %}
-          <div class="absolute inset-0 flex items-center justify-center">
+          <div class="absolute inset-0 flex items-center justify-center" style="z-index:11;">
             <span class="text-white font-bold text-3xl">+{{ fotos | length - 6 }}</span>
           </div>
           {% endif %}
@@ -877,6 +944,30 @@
     }
   })();
   </script>
+
+  {% if not pago_realizado %}
+  <script>
+  /* ── Protección de contenido: bloquear clic derecho e inspección en fotos ── */
+  (function() {
+    function block(e) {
+      if (e.target && (e.target.tagName === 'IMG' || e.target.tagName === 'VIDEO'
+          || e.target.closest('.protected-media'))) {
+        e.preventDefault();
+        return false;
+      }
+    }
+    document.addEventListener('contextmenu', block);
+    document.addEventListener('dragstart',   block);
+
+    /* Bloquear atajos de teclado de descarga (Ctrl+S, Ctrl+U) */
+    document.addEventListener('keydown', function(e) {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'u')) {
+        e.preventDefault();
+      }
+    });
+  })();
+  </script>
+  {% endif %}
 
 </body>
 </html>

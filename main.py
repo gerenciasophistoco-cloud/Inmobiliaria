@@ -294,6 +294,7 @@ async def generate_content(
     otras_caracteristicas: Optional[str] = Form(None),
     foto_labels:        Optional[str] = Form(default="[]"),  # JSON: ["Sala","Cocina",…]
     foto_descriptions:  Optional[str] = Form(default="[]"),  # JSON: ["Americana","Principal",…]
+    pago_realizado:     bool           = Form(default=False),
     account_type: str = Form(default="particular"),
     nombre_inmobiliaria: Optional[str] = Form(None),
     nombre_agente: str = Form(...),
@@ -449,6 +450,7 @@ Datos:
             telefono_agente,
             f"Hola, estoy interesado en la propiedad en {direccion}, {ciudad}"
         ),
+        "pago_realizado":         pago_realizado,
         "video_url":              None,
         "video_recorrido_url":    video_recorrido_url or None,
         # Si el usuario ya subió su video, el link está listo de inmediato
@@ -488,6 +490,7 @@ Datos:
             "logo_url":           logo_path or "",
             "foto_agente_url":    foto_agente_path or "",
             "video_url_propio":   None,
+            "pago_realizado":     pago_realizado,
         }
         threading.Thread(
             target=_video_task,
@@ -615,6 +618,18 @@ async def stream_video(filename: str, request: Request):
         str(file_path), media_type="video/mp4",
         headers={"Accept-Ranges": "bytes", "Content-Length": str(file_size)},
     )
+
+
+# ── Toggle de pago (admin) ────────────────────────────────────────────────────
+@app.post("/admin/pago/{property_id}")
+async def toggle_pago(property_id: str):
+    """Activa/desactiva pago_realizado. Solo accesible desde la vista admin."""
+    data = db.get_property(property_id)
+    if not data:
+        raise HTTPException(status_code=404)
+    nuevo = not bool(data.get("pago_realizado", False))
+    db.update_property(property_id, {"pago_realizado": nuevo})
+    return JSONResponse({"pago_realizado": nuevo})
 
 
 # ── Página web de la propiedad ───────────────────────────────────────────────

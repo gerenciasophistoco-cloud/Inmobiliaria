@@ -956,6 +956,58 @@ def _make_clip(jpeg: str, idx: int, overlay_path: Optional[str] = None,
 
 # ── Utilidades de audio ───────────────────────────────────────────────────────
 
+def _make_watermark_overlay() -> str:
+    """PNG semitransparente 1080×1350 con texto 'VISTA PREVIA' (25 % opacidad)."""
+    from PIL import Image, ImageDraw
+    wm   = Image.new("RGBA", (VW, VH), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(wm)
+    alpha = 64  # 25 % de 255
+
+    f_big = _load_font(88, bold=True)
+    f_sub = _load_font(32)
+
+    text1 = "VISTA PREVIA"
+    bb1   = draw.textbbox((0, 0), text1, font=f_big)
+    w1    = bb1[2] - bb1[0]
+    cx, cy = VW // 2, VH // 2
+    draw.text((cx - w1 // 2, cy - 70), text1, font=f_big, fill=(255, 255, 255, alpha))
+
+    # Línea dorada
+    draw.line([(cx - 130, cy + 20), (cx + 130, cy + 20)], fill=(201, 162, 39, alpha), width=2)
+
+    text2 = "CRISTIAN R INMOBILIARIA"
+    bb2   = draw.textbbox((0, 0), text2, font=f_sub)
+    w2    = bb2[2] - bb2[0]
+    draw.text((cx - w2 // 2, cy + 34), text2, font=f_sub, fill=(255, 255, 255, alpha))
+
+    path = str(Path(tempfile.mkdtemp()) / "watermark.png")
+    wm.save(path, "PNG")
+    return path
+
+
+def _apply_watermark(video_path: str) -> str:
+    """Superpone la marca de agua semitransparente en cada frame del video."""
+    wm_path = _make_watermark_overlay()
+    out     = str(Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.mp4")
+    cmd = [
+        _ffmpeg_bin(), "-y",
+        "-i", video_path,
+        "-i", wm_path,
+        "-filter_complex", "[0:v][1:v]overlay=(W-w)/2:(H-h)/2[out]",
+        "-map", "[out]",
+        "-c:v", "libx264", "-preset", "fast", "-crf", "22",
+        "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
+        out,
+    ]
+    r = subprocess.run(cmd, capture_output=True, timeout=300)
+    if r.returncode != 0:
+        log.warning("Watermark falló: %s", r.stderr.decode("utf-8", errors="replace")[-300:])
+        return video_path
+    log.info("Marca de agua aplicada OK")
+    return out
+
+
 def _get_video_duration(video_path: str) -> float:
     """Obtiene la duración exacta del video usando ffmpeg."""
     r = subprocess.run(
@@ -1123,7 +1175,11 @@ def generate_slideshow(
         raise RuntimeError(f"Video final vacío ({size} bytes)")
     log.info("Slideshow OK: %d clips, %d bytes", len(clips), size)
 
-    # 7. Añadir música de fondo
+    # 7. Marca de agua si pago_realizado = False
+    if not specs.get("pago_realizado", False):
+        output = _apply_watermark(output)
+
+    # 8. Añadir música de fondo
     dur    = _get_video_duration(output)
     output = _add_music(output, dur)
 
