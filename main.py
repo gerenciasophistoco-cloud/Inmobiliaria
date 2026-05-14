@@ -5,6 +5,7 @@ import os
 import re
 import shutil
 import tempfile
+import unicodedata
 import uuid
 
 log = logging.getLogger(__name__)
@@ -25,6 +26,41 @@ import storage
 load_dotenv()
 
 app = FastAPI(title="ListaPro")
+
+# ── Patrón UUID para distinguir IDs legacy de slugs amigables ────────────────
+_UUID_RE = re.compile(
+    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+    re.IGNORECASE,
+)
+
+
+def _make_slug(tipo: str, direccion: str, ciudad: str) -> str:
+    """
+    Genera un slug SEO-friendly.
+    Ej: 'Casa Cra 70c Medellín' → 'casa-cra-70c-medellin'
+    """
+    # Tomar solo la primera parte de la dirección (antes de la coma o #)
+    dir_short = re.split(r'[,#]', direccion or '')[0].strip()[:35]
+    raw  = f"{tipo} {dir_short} {ciudad}"
+    # Quitar tildes y diacríticos
+    norm = unicodedata.normalize('NFKD', raw)
+    text = ''.join(c for c in norm if not unicodedata.combining(c))
+    # Solo alfanuméricos y espacios, luego reemplazar espacios por guiones
+    text = re.sub(r'[^a-z0-9\s]', '', text.lower())
+    text = re.sub(r'\s+', '-', text.strip())
+    return text[:65]
+
+
+def _unique_slug(base: str) -> str:
+    """Garantiza que el slug sea único en la DB añadiendo -1, -2… si hay colisión."""
+    if not db.get_property_by_slug(base):
+        return base
+    for i in range(1, 200):
+        candidate = f"{base}-{i}"
+        if not db.get_property_by_slug(candidate):
+            return candidate
+    return f"{base}-{uuid.uuid4().hex[:6]}"   # fallback extremo
+
 
 BASE_DIR = Path(__file__).parent
 _tpl_dir = BASE_DIR / "Templates"
@@ -416,9 +452,12 @@ Datos:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al generar contenido: {str(e)}")
 
-    # Guardar en Supabase (o fallback memoria)
-    property_id = str(uuid.uuid4())
+    # Generar slug amigable único
+    property_id   = str(uuid.uuid4())
+    property_slug = _unique_slug(_make_slug(tipo_propiedad, direccion, ciudad))
+
     db.save_property(property_id, {
+        "slug":              property_slug,
         "tipo_propiedad":    tipo_propiedad,
         "operacion":         operacion,
         "direccion":         direccion,
@@ -513,6 +552,7 @@ Datos:
         "foto_agente":       foto_agente_path,
         "colors":            logo_colors,
         "property_id":       property_id,
+        "property_slug":     property_slug,
         "propiedad": {
             "tipo":      tipo_propiedad,
             "operacion": operacion,
@@ -632,17 +672,24 @@ async def toggle_pago(property_id: str):
     return JSONResponse({"pago_realizado": nuevo})
 
 
-# ── Página web de la propiedad ───────────────────────────────────────────────
-@app.get("/propiedad/{property_id}", response_class=HTMLResponse)
-async def ver_propiedad(property_id: str, request: Request):
-    data = db.get_property(property_id)
+# ── Página web de la propiedad (acepta UUID legacy o slug amigable) ───────────
+@app.get("/propiedad/{id_or_slug}", response_class=HTMLResponse)
+async def ver_propiedad(id_or_slug: str, request: Request):
+    # Detectar formato: UUID vs slug
+    if _UUID_RE.match(id_or_slug):
+        property_id = id_or_slug
+        data        = db.get_property(property_id)
+    else:
+        result = db.get_property_by_slug(id_or_slug)
+        if result is None:
+            raise HTTPException(status_code=404, detail="Propiedad no encontrada.")
+        property_id, data = result
+
     if not data:
         raise HTTPException(status_code=404, detail="Propiedad no encontrada.")
 
     account_type = data.get("account_type", "particular")
 
-    # Carrusel de otras propiedades: SOLO para cuentas 'inmobiliaria'.
-    # Los particulares no muestran nada que distraiga del inmueble principal.
     if account_type == "inmobiliaria":
         telefono = data.get("telefono_agente", "")
         otras = (

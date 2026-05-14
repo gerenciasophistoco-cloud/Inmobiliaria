@@ -74,8 +74,11 @@ def update_property(property_id: str, fields: dict) -> bool:
 def _format_card(prop_id: str, data: dict) -> dict:
     """Convierte datos crudos de una propiedad al formato que usa la tarjeta en el template."""
     fotos = data.get("fotos") or []
+    slug  = data.get("slug") or prop_id   # slug amigable o UUID como fallback
     return {
         "id":               prop_id,
+        "slug":             slug,
+        "url":              f"/propiedad/{slug}",
         "nombre":           f"{data.get('tipo_propiedad', 'Propiedad')} en {data.get('ciudad', '')}",
         "ciudad":           data.get("ciudad", ""),
         "operacion":        data.get("operacion", ""),
@@ -121,6 +124,34 @@ def get_agent_properties(telefono_agente: str, exclude_id: str = "", limit: int 
     except Exception as e:
         log.error("Error buscando propiedades del agente: %s", e)
         return []
+
+
+def get_property_by_slug(slug: str) -> Optional[tuple]:
+    """
+    Busca una propiedad por su slug amigable.
+    Retorna (property_id, data_dict) o None si no existe.
+    """
+    client = _get_client()
+    if client is None:
+        for prop_id, data in _memory_store.items():
+            if data.get("slug") == slug:
+                return (prop_id, data)
+        return None
+    try:
+        result = (
+            client.table("propiedades")
+            .select("id, datos")
+            .eq("datos->>slug", slug)
+            .limit(1)
+            .execute()
+        )
+        rows = result.data or []
+        if rows:
+            return (rows[0]["id"], rows[0]["datos"])
+        return None
+    except Exception as e:
+        log.error("Error buscando slug '%s': %s", slug, e)
+        return None
 
 
 def get_recent_properties(limit: int = 6, exclude_id: str = "") -> list:

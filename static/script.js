@@ -1,6 +1,7 @@
 /* ── Datos del último listado generado ── */
 let lastPDFData = null;
-let lastPropertyId = null;
+let lastPropertyId   = null;
+let lastPropertySlug = null;
 let lastVideoPropio = null;
 let selectedCoverIndex = 0;
 let photoLabels       = [];   // zona: "Cocina", "Habitación 1"…
@@ -336,6 +337,7 @@ form.addEventListener('submit', async e => {
 
     const data = await res.json();
     lastPropertyId = data.property_id || null;
+    lastPropertySlug = data.property_slug || data.property_id || null;
     renderResults(data);
 
     // Deshabilitar "Ver inmueble" hasta que video_ready = true en DB
@@ -543,7 +545,8 @@ function downloadPDF() {
 /* ── Abrir página web del inmueble ── */
 function openPropiedad() {
   if (!lastPropertyId) { showToast('⚠️ Genera el contenido primero'); return; }
-  window.open(`/propiedad/${lastPropertyId}`, '_blank');
+  const slug = lastPropertySlug || lastPropertyId;
+  window.open(`/propiedad/${slug}`, '_blank');
 }
 
 /* ── Polling: esperar a que video_ready = true en DB ── */
