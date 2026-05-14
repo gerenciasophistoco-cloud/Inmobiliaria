@@ -347,10 +347,11 @@ _AMENIDAD_ICONS = {
     "Salón comunal": "◉", "Ascensor": "◉", "Terraza": "◉", "Bodega": "◉",
 }
 
-def _slide_amenidad_single(amenidad: str, specs: dict, nombre: str) -> str:
+def _slide_amenidad_single(amenidad: str, specs: dict, nombre: str, subtitle: str = "") -> str:
     """
     Una amenidad por slide — texto flotante elegante sobre vignette profunda.
     Label 'INCLUYE' en champagne · Nombre en bold blanco grande · línea dorada.
+    Si hay subtítulo (descripción del usuario) se muestra debajo en champagne.
     """
     from PIL import Image, ImageDraw
     ov = _canvas()
@@ -365,18 +366,23 @@ def _slide_amenidad_single(amenidad: str, specs: dict, nombre: str) -> str:
 
     M = 48
 
-    f_label = _load_font(20)
-    f_name  = _load_font(72, bold=True)
+    f_label    = _load_font(20)
+    f_name     = _load_font(72, bold=True)
+    f_subtitle = _load_font(26)
 
-    # Sin precio — todo baja hacia el borde inferior
+    has_sub = bool(subtitle and subtitle.strip())
+
+    # Posiciones verticales — si hay subtítulo, subir todo un poco
     y_sep   = VH - 92
-    y_name  = VH - 210
+    y_name  = VH - 210 if not has_sub else VH - 240
     y_label = y_name - 36
+    y_sub   = y_name + 78   # debajo del nombre grande
 
-    # El precio NO aparece aquí — solo en el slide de cierre
     _sep(draw, M, y_sep)
     _txt(draw, (M, y_name),  amenidad.upper(), f_name,  _WHITE,     sh=4)
     _txt(draw, (M, y_label), "INCLUYE",        f_label, _CHAMPAGNE, sh=1)
+    if has_sub:
+        _txt(draw, (M, y_sub), subtitle.upper(), f_subtitle, _CHAMPAGNE, sh=1)
 
     path = str(Path(tempfile.mkdtemp()) / f"ov_am_{amenidad[:10].lower().replace(' ','_')}.png")
     ov.save(path, "PNG")
@@ -655,7 +661,7 @@ def _overlay_contextual(
         return _slide_zona(display_text, subtitle, specs, nombre)
 
     if zone == "amenidad":
-        return _slide_amenidad_single(display_text, specs, nombre)
+        return _slide_amenidad_single(display_text, specs, nombre, subtitle=user_subtitle)
 
     # Para todas las demás zonas: título = campo 1, subtítulo = campo 2 (si lo escribió)
     return _slide_zona(display_text, user_subtitle, specs, nombre)
@@ -960,9 +966,9 @@ def generate_slideshow(
 
     specs = specs or {}
 
-    # 1. Fotos → JPEG
+    # 1. Fotos → JPEG (máximo 20 para no exceder memoria/tiempo)
     jpegs: List[str] = []
-    for src in photo_sources[:6]:
+    for src in photo_sources[:20]:
         try:
             jpegs.append(_to_jpeg(src))
             log.info("Foto %d/%d OK", len(jpegs), min(len(photo_sources), 6))
