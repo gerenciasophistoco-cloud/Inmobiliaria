@@ -562,129 +562,166 @@
     if (e.key === 'Escape') { cancelarOtraInput(); }
   });
 
-  /* ── Mapa en vivo del formulario (Leaflet + OpenStreetMap) ── */
+  /* ── Mapa con autocomplete tipo Google Maps (Photon + Leaflet) ── */
   (function () {
-    var formMap     = null;
-    var formMarker  = null;
-    var geocodeTimer = null;
-    var lastGeocode = '';
+    var formMap    = null;
+    var formMarker = null;
+    var dropdown   = null;
+    var timer      = null;
 
-    function initFormMap() {
+    /* ── Inicializar mapa ── */
+    function initMap() {
       if (formMap) return;
-      formMap = L.map('mapPreview', { scrollWheelZoom: false }).setView([4.65, -74.09], 13);
+      formMap = L.map('mapPreview', { scrollWheelZoom: false })
+                 .setView([4.65, -74.09], 12);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        attribution: '© <a href="https://www.openstreetmap.org">OSM</a>',
         maxZoom: 19,
       }).addTo(formMap);
-
       formMarker = L.marker([4.65, -74.09], { draggable: true }).addTo(formMap);
-
-      // Cuando el usuario arrastra el pin → actualiza el campo de coordenadas
       formMarker.on('dragend', function () {
-        var pos = formMarker.getLatLng();
-        var coords = pos.lat.toFixed(6) + ',' + pos.lng.toFixed(6);
-        document.getElementById('coordenadas').value = coords;
-        updateGmLink(pos.lat, pos.lng);
+        var p = formMarker.getLatLng();
+        document.getElementById('coordenadas').value = p.lat.toFixed(6) + ',' + p.lng.toFixed(6);
       });
     }
 
     function moveMap(lat, lng) {
       document.getElementById('mapPreviewWrap').style.display = 'block';
-      initFormMap();
+      initMap();
       formMap.setView([lat, lng], 16);
       formMarker.setLatLng([lat, lng]);
       setTimeout(function () { formMap.invalidateSize(); }, 150);
-      updateGmLink(lat, lng);
+      document.getElementById('coordenadas').value = lat.toFixed(6) + ',' + lng.toFixed(6);
     }
 
-    function updateGmLink(lat, lng) {
-      // noop en el form — el link está en la otra página
+    /* ── Dropdown de sugerencias ── */
+    function getDropdown() {
+      if (dropdown) return dropdown;
+      dropdown = document.createElement('ul');
+      dropdown.id = 'mapDropdown';
+      dropdown.style.cssText =
+        'position:absolute;z-index:10000;left:0;right:0;top:100%;margin:2px 0 0;' +
+        'padding:0;list-style:none;background:#fff;border:1px solid #d1c9b8;' +
+        'border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.13);' +
+        'max-height:220px;overflow-y:auto;display:none;';
+
+      var wrap = document.getElementById('coordenadas').parentNode;
+      wrap.style.position = 'relative';
+      wrap.appendChild(dropdown);
+      return dropdown;
     }
 
-    // Expande abreviaturas colombianas para mejor geocodificación
-    function expandColombian(text) {
-      return text
-        .replace(/\bCra\.?\s*/gi, 'Carrera ')
-        .replace(/\bKr\.?\s*/gi,  'Carrera ')
-        .replace(/\bCll?\.?\s*/gi,'Calle ')
-        .replace(/\bCl\.?\s*/gi,  'Calle ')
-        .replace(/\bDg\.?\s*/gi,  'Diagonal ')
-        .replace(/\bTv\.?\s*/gi,  'Transversal ')
-        .replace(/\bAv\.?\s*/gi,  'Avenida ')
-        .replace(/\s+/g, ' ').trim();
+    function closeDropdown() {
+      if (dropdown) dropdown.style.display = 'none';
     }
 
-    function geocode(query) {
-      if (!query || query.trim() === lastGeocode) return;
-      lastGeocode = query.trim();
+    function showDropdown(features) {
+      var dd = getDropdown();
+      dd.innerHTML = '';
+      if (!features.length) { dd.style.display = 'none'; return; }
 
-      // ¿Ya son coordenadas GPS?
-      var m = query.match(/^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/);
-      if (m) { moveMap(parseFloat(m[1]), parseFloat(m[2])); return; }
+      features.forEach(function (f) {
+        var p   = f.properties;
+        var geo = f.geometry.coordinates;        // [lng, lat]
+        var lat = geo[1], lng = geo[0];
 
-      // Expandir abreviaturas colombianas antes de enviar a Nominatim
-      var expanded = expandColombian(query);
-      // Añadir ciudad si no está en el texto
-      var ciu = document.getElementById('ciudad').value.trim();
-      if (ciu && !expanded.toLowerCase().includes(ciu.toLowerCase())) {
-        expanded = expanded + ', ' + ciu;
-      }
+        /* Construir etiqueta legible */
+        var main = p.name || p.street || '';
+        var sub  = [p.street !== main ? p.street : '', p.district, p.city, p.state]
+                    .filter(Boolean).join(', ');
 
-      fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=co&q='
-            + encodeURIComponent(expanded),
-            { headers: { 'Accept-Language': 'es' } })
+        var li = document.createElement('li');
+        li.style.cssText =
+          'padding:10px 14px;cursor:pointer;border-bottom:1px solid #f0ede7;' +
+          'font-size:13px;line-height:1.4;';
+        li.innerHTML =
+          '<span style="font-weight:600;color:#1c1b1b;">' + main + '</span>' +
+          (sub ? '<br><span style="color:#64748b;font-size:11px;">' + sub + '</span>' : '');
+
+        li.addEventListener('mouseenter', function () { li.style.background = '#fdf8f0'; });
+        li.addEventListener('mouseleave', function () { li.style.background = ''; });
+        li.addEventListener('mousedown',  function (e) {
+          e.preventDefault();                   // evita que el blur cierre el dropdown
+          moveMap(lat, lng);
+          document.getElementById('coordenadas').value = main + (sub ? ', ' + sub : '');
+          closeDropdown();
+        });
+        dd.appendChild(li);
+      });
+      dd.style.display = 'block';
+    }
+
+    /* ── Búsqueda con Photon (tiempo real, sin API key) ── */
+    function expandCo(t) {
+      return t
+        .replace(/\bCra\.?\s*/gi,'Carrera ').replace(/\bKr\.?\s*/gi,'Carrera ')
+        .replace(/\bCll?\.?\s*/gi,'Calle ') .replace(/\bCl\.?\s*/gi,'Calle ')
+        .replace(/\bDg\.?\s*/gi,'Diagonal ').replace(/\bTv\.?\s*/gi,'Transversal ')
+        .replace(/\bAv\.?\s*/gi,'Avenida ') .replace(/\s+/g,' ').trim();
+    }
+
+    function search(raw) {
+      if (!raw || raw.trim().length < 3) { closeDropdown(); return; }
+
+      /* Coordenadas GPS directas */
+      var gps = raw.match(/^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/);
+      if (gps) { moveMap(+gps[1], +gps[2]); closeDropdown(); return; }
+
+      /* Añadir ciudad como contexto si no está en el texto */
+      var ciu  = document.getElementById('ciudad').value.trim();
+      var q    = expandCo(raw);
+      if (ciu && !q.toLowerCase().includes(ciu.toLowerCase())) q += ', ' + ciu;
+      q += ', Colombia';
+
+      /* Photon: autocomplete real, sin API key */
+      fetch('https://photon.komoot.io/api/?q=' + encodeURIComponent(q)
+            + '&lang=es&limit=6')
         .then(function (r) { return r.json(); })
-        .then(function (data) {
-          if (data && data.length > 0) {
-            var lat = parseFloat(data[0].lat);
-            var lng = parseFloat(data[0].lon);
-            moveMap(lat, lng);
-            // Guardar coordenadas exactas en el campo para persistir en DB
-            document.getElementById('coordenadas').value = lat.toFixed(6) + ',' + lng.toFixed(6);
-          } else {
-            showToast('📍 No se encontró la dirección. Ajusta el pin manualmente.');
-          }
-        })
+        .then(function (d) { showDropdown(d.features || []); })
         .catch(function () {});
     }
 
-    function scheduleGeocode(value) {
-      clearTimeout(geocodeTimer);
-      if (!value.trim()) return;
-      geocodeTimer = setTimeout(function () { geocode(value); }, 900);
+    function scheduleSearch(val) {
+      clearTimeout(timer);
+      timer = setTimeout(function () { search(val); }, 350);
     }
 
-    // Geocodificar cuando el usuario escribe en el campo de coordenadas
+    /* ── Campo "Ubicación en mapa" — autocomplete en tiempo real ── */
     var coordInput = document.getElementById('coordenadas');
     if (coordInput) {
-      coordInput.addEventListener('input', function () { scheduleGeocode(this.value); });
+      coordInput.addEventListener('input',  function () { scheduleSearch(this.value); });
+      coordInput.addEventListener('blur',   function () { setTimeout(closeDropdown, 200); });
+      coordInput.addEventListener('keydown',function (e) {
+        if (e.key === 'Escape') closeDropdown();
+      });
     }
 
-    // Geocodificar al salir de dirección o ciudad
-    // Estrategia: expandir abreviaturas + quitar número de casa (#1-72)
-    // para que Nominatim encuentre la calle aunque no tenga el número exacto.
-    // También funciona con conjuntos: "Conjunto Los Pinos, Bogotá"
+    /* ── Al salir de Dirección o Ciudad → buscar automáticamente ── */
     ['direccion', 'ciudad'].forEach(function (id) {
       var el = document.getElementById(id);
       if (!el) return;
-      el.addEventListener('blur', function () {
-        // Si ya hay coordenadas GPS guardadas, no sobreescribir
-        var coord = (document.getElementById('coordenadas').value || '').trim();
-        if (coord.match(/^-?\d+\.?\d*\s*,\s*-?\d+\.?\d*$/)) return;
+      el.addEventListener('change', function () {
+        /* Limpiar coordenadas anteriores para forzar nueva búsqueda */
+        var coordEl = document.getElementById('coordenadas');
+        var prev    = (coordEl.value || '').trim();
+        /* Solo limpiar si el valor guardado era coords GPS (no texto de búsqueda) */
+        if (prev.match(/^-?\d+\.?\d*\s*,\s*-?\d+\.?\d*$/)) coordEl.value = '';
 
         var dir = document.getElementById('direccion').value.trim();
         var ciu = document.getElementById('ciudad').value.trim();
-        if (!dir || !ciu) return;
-
-        // 1. Expandir abreviaturas colombianas
-        var expanded = expandColombian(dir);
-        // 2. Quitar el número de casa (# 1-72) para mejor resultado en Nominatim
-        //    "Carrera 70 # 1-72" → "Carrera 70"
-        //    "Conjunto Los Pinos" → sin cambios
-        var clean = expanded.replace(/\s*#\s*[\d\s-]+[a-zA-Z]?\s*/g, ' ').replace(/\s+/g, ' ').trim();
-        var query = clean + ', ' + ciu;
-        geocode(query);
+        if (dir && ciu) {
+          /* Esperar un momento para que el usuario termine de escribir */
+          clearTimeout(timer);
+          timer = setTimeout(function () { search(dir + ', ' + ciu); }, 500);
+        }
       });
+    });
+
+    /* Cerrar dropdown al clic fuera */
+    document.addEventListener('click', function (e) {
+      if (dropdown && !dropdown.contains(e.target) && e.target !== coordInput) {
+        closeDropdown();
+      }
     });
   })();
   </script>
