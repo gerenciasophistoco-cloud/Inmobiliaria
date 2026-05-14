@@ -1016,7 +1016,7 @@ def generate_slideshow(
     except Exception as e:
         log.warning("Outro omitido: %s", e)
 
-    # 6. Concat -c copy
+    # 6. Concat con re-encode para timestamps continuos (seek funciona correctamente)
     playlist = str(Path(tempfile.mkdtemp()) / "playlist.txt")
     with open(playlist, "w") as f:
         for clip in clips:
@@ -1026,12 +1026,15 @@ def generate_slideshow(
     cmd = [
         _ffmpeg_bin(), "-y",
         "-f", "concat", "-safe", "0", "-i", playlist,
-        "-c", "copy",
-        "-movflags", "+faststart",
-        "-fflags", "+genpts",   # regenera timestamps para que el seek funcione
+        # Re-encode en lugar de copy → timestamps limpios y continuos → seek funciona
+        "-c:v", "libx264", "-preset", "fast", "-crf", "22",
+        "-profile:v", "high", "-level", "4.0",
+        "-pix_fmt", "yuv420p",
+        "-an",                        # sin audio (slideshow de fotos)
+        "-movflags", "+faststart",    # MOOV al inicio → streaming y seek desde byte 0
         output,
     ]
-    r = subprocess.run(cmd, capture_output=True, timeout=300)
+    r = subprocess.run(cmd, capture_output=True, timeout=600)
     if r.returncode != 0:
         raise RuntimeError(
             f"Concat error:\n{r.stderr.decode('utf-8', errors='replace')[-800:]}")
