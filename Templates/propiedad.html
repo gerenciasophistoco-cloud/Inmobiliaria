@@ -88,9 +88,26 @@
             pointer-events: none;
             z-index: 10;
         }
-        /* Bloquear arrastrar imágenes */
-        .protected-media img,
-        .protected-media video { pointer-events: none; }
+        /* Bloquear arrastrar imágenes (NO videos: los controles deben funcionar) */
+        .protected-media img { pointer-events: none; }
+
+        /* En el video el texto de marca de agua es más grande */
+        .protected-video::after {
+            content: 'VISTA PREVIA';
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Arial Black', Arial, sans-serif;
+            font-size: clamp(22px, 5vw, 42px);
+            font-weight: 900;
+            letter-spacing: 0.18em;
+            color: rgba(255,255,255,0.45);
+            text-shadow: 0 2px 8px rgba(0,0,0,0.7);
+            pointer-events: none;
+            z-index: 10;
+        }
     </style>
 </head>
 
@@ -335,7 +352,8 @@
       <div id="mainVideoSection" class="space-y-3">
         <h3 class="font-headline-md text-headline-md">Video del inmueble</h3>
         {% if video_url %}
-        <div style="position:relative; width:100%; padding-top:125%; background:#000; border-radius:12px;">
+        <div style="position:relative; width:100%; padding-top:125%; background:#000; border-radius:12px;"
+             {% if not pago_realizado %}class="protected-video"{% endif %}>
           <video controls preload="auto" playsinline
                  style="position:absolute; inset:0; width:100%; height:100%;
                         object-fit:cover; display:block; border-radius:12px;"
@@ -376,10 +394,12 @@
           if (!sec) return;
           /* No reemplazar si ya hay un <video> — el usuario puede estar viéndolo */
           if (sec.querySelector('video')) return;
+          var _pago = {{ 'true' if pago_realizado else 'false' }};
           sec.innerHTML =
             `<h3 class="font-headline-md text-headline-md">Video del inmueble</h3>
              <div style="position:relative;width:100%;padding-top:125%;
-                         background:#000;border-radius:12px;">
+                         background:#000;border-radius:12px;"
+                  ${_pago ? '' : 'class="protected-video"'}>
                <video controls preload="auto" playsinline
                       style="position:absolute;inset:0;width:100%;height:100%;
                              object-fit:cover;display:block;border-radius:12px;">
