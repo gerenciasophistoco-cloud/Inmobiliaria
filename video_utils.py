@@ -17,6 +17,7 @@ Anti-ICC:  -bsf:v filter_units=remove_types=6 en cada clip.
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -26,6 +27,17 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 log = logging.getLogger(__name__)
+
+# Ruta al archivo de música — busca en ambas variantes de capitalización
+_MUSIC_PATH = next(
+    (p for p in [
+        Path(__file__).parent / "static" / "Audio" / "Musica_Fondo.mp3",
+        Path(__file__).parent / "static" / "audio" / "musica_fondo.mp3",
+        Path(__file__).parent / "static" / "Audio" / "musica_fondo.mp3",
+        Path(__file__).parent / "static" / "audio" / "Musica_Fondo.mp3",
+    ] if p.exists()),
+    Path(__file__).parent / "static" / "audio" / "musica_fondo.mp3",  # fallback
+)
 
 VW, VH       = 1080, 1350
 FPS          = 25
@@ -942,6 +954,63 @@ def _make_clip(jpeg: str, idx: int, overlay_path: Optional[str] = None,
     return out
 
 
+# ── Utilidades de audio ───────────────────────────────────────────────────────
+
+def _get_video_duration(video_path: str) -> float:
+    """Obtiene la duración exacta del video usando ffmpeg."""
+    r = subprocess.run(
+        [_ffmpeg_bin(), "-i", video_path],
+        capture_output=True, timeout=30,
+    )
+    m = re.search(
+        r"Duration:\s*(\d+):(\d+):(\d+\.?\d*)",
+        r.stderr.decode("utf-8", errors="replace"),
+    )
+    if m:
+        h, mn, s = m.groups()
+        return int(h) * 3600 + int(mn) * 60 + float(s)
+    return 30.0
+
+
+def _add_music(video_path: str, dur: float) -> str:
+    """
+    Mezcla musica_fondo.mp3 con el video.
+      · Volumen 40% (fondo suave)
+      · Loop automático si el mp3 es más corto que el video
+      · Fade-out de 2 s al final
+    Devuelve la ruta del nuevo archivo; si falla, devuelve el original sin audio.
+    """
+    if not _MUSIC_PATH.exists():
+        log.warning("musica_fondo.mp3 no encontrado en %s — video sin música", _MUSIC_PATH)
+        return video_path
+
+    fade_st = max(0.0, dur - 2.0)
+    out     = str(Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.mp4")
+
+    cmd = [
+        _ffmpeg_bin(), "-y",
+        "-i", video_path,                            # pista de video (sin audio)
+        "-stream_loop", "-1", "-i", str(_MUSIC_PATH), # audio en loop infinito
+        "-filter_complex",
+        f"[1:a]volume=0.4,afade=t=out:st={fade_st:.3f}:d=2[mus]",
+        "-map", "0:v",      # video del archivo original
+        "-map", "[mus]",    # audio procesado
+        "-t", f"{dur:.3f}", # recortar exactamente a la duración del video
+        "-c:v", "copy",     # no re-encodear el video
+        "-c:a", "aac", "-b:a", "128k",
+        "-movflags", "+faststart",
+        out,
+    ]
+    r = subprocess.run(cmd, capture_output=True, timeout=300)
+    if r.returncode != 0:
+        log.warning("Mezcla de audio falló (video queda sin música): %s",
+                    r.stderr.decode("utf-8", errors="replace")[-300:])
+        return video_path
+
+    log.info("Música añadida: dur=%.1fs, vol=40%%, fade-out=2s", dur)
+    return out
+
+
 # ─── pipeline principal ───────────────────────────────────────────────────────
 
 def generate_slideshow(
@@ -1053,6 +1122,11 @@ def generate_slideshow(
     if size < 1000:
         raise RuntimeError(f"Video final vacío ({size} bytes)")
     log.info("Slideshow OK: %d clips, %d bytes", len(clips), size)
+
+    # 7. Añadir música de fondo
+    dur    = _get_video_duration(output)
+    output = _add_music(output, dur)
+
     return output
 
 
