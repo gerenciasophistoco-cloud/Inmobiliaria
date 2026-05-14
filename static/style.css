@@ -270,6 +270,35 @@ textarea {
 .toggle-option span:hover { background: #F8FAFC; }
 .toggle-option input:checked + span:hover { background: var(--primary); }
 
+/* ── DIRECCIÓN + BOTÓN LUPA ─────────────────────────── */
+.input-with-search {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+.input-with-search input {
+  flex: 1;
+  min-width: 0;
+}
+.input-with-search button {
+  flex-shrink: 0;
+  padding: 0 14px;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, transform 0.1s;
+}
+.input-with-search button:hover  { background: #1e40af; }
+.input-with-search button:active { transform: scale(0.95); }
+.input-with-search button:disabled { opacity: 0.5; cursor: not-allowed; }
+.input-with-search button.searching svg { animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
 /* ── PRECIO PREFIX ───────────────────────────────────── */
 .input-prefix {
   display: flex;

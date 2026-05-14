@@ -158,8 +158,13 @@
           <div class="form-row">
             <div class="field-group">
               <label for="direccion">Dirección / Sector <span class="required">*</span></label>
-              <input type="text" id="direccion" name="direccion"
-                placeholder="Ej: Cra 15 #85-42, Barrio Rosales" required>
+              <div class="input-with-search">
+                <input type="text" id="direccion" name="direccion"
+                  placeholder="Ej: Cra 15 #85-42, Barrio Rosales" required>
+                <button type="button" id="btnBuscarDir" title="Buscar dirección en el mapa">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -860,6 +865,31 @@
     });
     ms.addEventListener('blur',    function () { setTimeout(closeMapDd, 200); });
     ms.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeMapDd(); });
+
+    /* ── Botón lupa: buscar dirección en el mapa ── */
+    var btnDir = document.getElementById('btnBuscarDir');
+    if (btnDir) {
+      btnDir.addEventListener('click', function () {
+        var dir = document.getElementById('direccion').value.trim();
+        if (!dir) return;
+        btnDir.disabled = true;
+        btnDir.classList.add('searching');
+        var ciu = ciudadEl.value.trim();
+        var q   = expandCo(dir) + (ciu ? ', ' + ciu : '') + ', Colombia';
+        var url = 'https://photon.komoot.io/api/?q=' + encodeURIComponent(q) + '&lang=es&limit=1';
+        if (cityLat !== null) url += '&lat=' + cityLat + '&lon=' + cityLng;
+        fetch(url)
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            btnDir.disabled = false;
+            btnDir.classList.remove('searching');
+            if (d.features && d.features.length) {
+              moveMap(d.features[0].geometry.coordinates[1], d.features[0].geometry.coordinates[0], 16);
+            }
+          })
+          .catch(function () { btnDir.disabled = false; btnDir.classList.remove('searching'); });
+      });
+    }
 
     /* ── Inicializar mapa y ciudad inicial si hay valor ── */
     initMap();
