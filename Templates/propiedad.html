@@ -354,7 +354,7 @@
         {% if video_url %}
         <div style="position:relative; width:100%; padding-top:125%; background:#000; border-radius:12px;"
              {% if not pago_realizado %}class="protected-video"{% endif %}>
-          <video controls preload="auto" playsinline
+          <video controls preload="none" playsinline
                  style="position:absolute; inset:0; width:100%; height:100%;
                         object-fit:cover; display:block; border-radius:12px;"
                  poster="{{ fotos[0] if fotos else '' }}">
@@ -400,7 +400,7 @@
              <div style="position:relative;width:100%;padding-top:125%;
                          background:#000;border-radius:12px;"
                   ${_pago ? '' : 'class="protected-video"'}>
-               <video controls preload="auto" playsinline
+               <video controls preload="none" playsinline
                       style="position:absolute;inset:0;width:100%;height:100%;
                              object-fit:cover;display:block;border-radius:12px;">
                  <source src="${url}" type="video/mp4"/>
@@ -668,7 +668,7 @@
       </div>
       <div style="position:relative; width:100%; padding-top:56.25%; overflow:hidden; border-radius:16px;
                   box-shadow:0 8px 32px rgba(0,0,0,0.12);">
-        <video controls preload="metadata"
+        <video controls preload="none"
                style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;display:block;"
                poster="{{ fotos[0] if fotos else '' }}">
           <source src="{{ video_recorrido_url }}" type="video/mp4"/>

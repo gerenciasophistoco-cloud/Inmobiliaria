@@ -39,7 +39,8 @@ _MUSIC_PATH = next(
     Path(__file__).parent / "static" / "audio" / "musica_fondo.mp3",  # fallback
 )
 
-VW, VH       = 1080, 1350
+VW, VH       = 1080, 1350   # resolución interna de clips (Pillow overlay)
+OUT_W, OUT_H = 720,   900   # resolución de salida — ~55% menos peso en móvil
 FPS          = 25
 DUR_PER      = 3.5          # más tiempo por slide para leer los datos
 FADE_DUR     = 0.5          # fade clip in/out
@@ -957,28 +958,31 @@ def _make_clip(jpeg: str, idx: int, overlay_path: Optional[str] = None,
 # ── Utilidades de audio ───────────────────────────────────────────────────────
 
 def _make_watermark_overlay() -> str:
-    """PNG semitransparente 1080×1350 con texto 'VISTA PREVIA' (25 % opacidad)."""
+    """PNG semitransparente OUT_W×OUT_H con texto 'VISTA PREVIA' (25 % opacidad)."""
     from PIL import Image, ImageDraw
-    wm   = Image.new("RGBA", (VW, VH), (0, 0, 0, 0))
+    # Usar dimensiones de salida (720×900) no las de los clips internos (1080×1350)
+    wm   = Image.new("RGBA", (OUT_W, OUT_H), (0, 0, 0, 0))
     draw = ImageDraw.Draw(wm)
     alpha = 64  # 25 % de 255
+    scale = OUT_W / VW  # factor 0.667
 
-    f_big = _load_font(88, bold=True)
-    f_sub = _load_font(32)
+    f_big = _load_font(int(88 * scale), bold=True)
+    f_sub = _load_font(int(32 * scale))
 
     text1 = "VISTA PREVIA"
     bb1   = draw.textbbox((0, 0), text1, font=f_big)
     w1    = bb1[2] - bb1[0]
-    cx, cy = VW // 2, VH // 2
-    draw.text((cx - w1 // 2, cy - 70), text1, font=f_big, fill=(255, 255, 255, alpha))
+    cx, cy = OUT_W // 2, OUT_H // 2
+    draw.text((cx - w1 // 2, cy - int(70 * scale)), text1, font=f_big, fill=(255, 255, 255, alpha))
 
-    # Línea dorada
-    draw.line([(cx - 130, cy + 20), (cx + 130, cy + 20)], fill=(201, 162, 39, alpha), width=2)
+    draw.line([(cx - int(130*scale), cy + int(20*scale)),
+               (cx + int(130*scale), cy + int(20*scale))],
+              fill=(201, 162, 39, alpha), width=2)
 
     text2 = "CRISTIAN R INMOBILIARIA"
     bb2   = draw.textbbox((0, 0), text2, font=f_sub)
     w2    = bb2[2] - bb2[0]
-    draw.text((cx - w2 // 2, cy + 34), text2, font=f_sub, fill=(255, 255, 255, alpha))
+    draw.text((cx - w2 // 2, cy + int(34 * scale)), text2, font=f_sub, fill=(255, 255, 255, alpha))
 
     path = str(Path(tempfile.mkdtemp()) / "watermark.png")
     wm.save(path, "PNG")
@@ -995,7 +999,7 @@ def _apply_watermark(video_path: str) -> str:
         "-i", wm_path,
         "-filter_complex", "[0:v][1:v]overlay=(W-w)/2:(H-h)/2[out]",
         "-map", "[out]",
-        "-c:v", "libx264", "-preset", "fast", "-crf", "22",
+        "-c:v", "libx264", "-preset", "fast", "-crf", "26",
         "-pix_fmt", "yuv420p",
         "-movflags", "+faststart",
         out,
@@ -1154,16 +1158,27 @@ def generate_slideshow(
             output,
         ], capture_output=True, timeout=600)
 
-    # Intento 1: re-encode h264 → timestamps continuos → seek funciona
+    # Intento 1: re-encode h264 escalado a OUT_W×OUT_H para reducir peso en móvil
+    # CRF 26 = calidad aceptable, ~60% menos peso que CRF 22 a 1080p
     r = _run_concat([
-        "-c:v", "libx264", "-preset", "fast", "-crf", "22",
+        "-vf", f"scale={OUT_W}:{OUT_H}",
+        "-c:v", "libx264", "-preset", "fast", "-crf", "26",
         "-pix_fmt", "yuv420p", "-an",
     ])
 
-    # Intento 2: si falla (libx264 no disponible) → copy con genpts
+    # Intento 2: sin escalar (por si el filtro falla en algún entorno)
+    if r.returncode != 0:
+        log.warning("Re-encode con scale falló, intentando sin scale: %s",
+                    r.stderr.decode("utf-8", errors="replace")[-200:])
+        r = _run_concat([
+            "-c:v", "libx264", "-preset", "fast", "-crf", "26",
+            "-pix_fmt", "yuv420p", "-an",
+        ])
+
+    # Intento 3: si libx264 no disponible → copy con genpts
     if r.returncode != 0:
         log.warning("Re-encode falló, intentando -c copy: %s",
-                    r.stderr.decode("utf-8", errors="replace")[-300:])
+                    r.stderr.decode("utf-8", errors="replace")[-200:])
         r = _run_concat(["-c", "copy", "-fflags", "+genpts"])
 
     if r.returncode != 0:
