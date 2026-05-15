@@ -98,9 +98,7 @@
             z-index: 10;
             line-height: 1.7;
         }
-        /* Blur en el video — el ::after NO se usa para video porque bloquea controles en iOS */
-        .protected-video video { filter: blur(7px); }
-        /* El overlay de texto en el video es un <div> explícito (pointer-events:none garantizado) */
+        /* El overlay blurs el video con backdrop-filter (no filter en <video> = controles funcionan) */
         .video-contact-overlay {
             position: absolute;
             inset: 0;
@@ -110,14 +108,19 @@
             flex-direction: column;
             text-align: center;
             gap: 6px;
-            pointer-events: none;   /* ← pasa todos los toques al video debajo */
+            /* backdrop-filter aplica el blur a lo que hay DETRÁS (el video) */
+            background: rgba(0, 0, 0, 0.08);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            pointer-events: none;   /* ← TODOS los toques pasan al <video> debajo */
             z-index: 10;
             font-family: 'Arial Black', Arial, sans-serif;
             font-weight: 900;
             letter-spacing: 0.06em;
-            color: rgba(255,255,255,0.92);
+            color: rgba(255,255,255,0.95);
             text-shadow: 0 2px 8px rgba(0,0,0,0.95), 0 0 20px rgba(0,0,0,0.8);
             line-height: 1.5;
+            border-radius: 12px;
         }
         .video-contact-overlay .vco-label { font-size: clamp(11px, 3vw, 18px); }
         .video-contact-overlay .vco-phone { font-size: clamp(20px, 6vw, 40px); color: #fbbf24; }
