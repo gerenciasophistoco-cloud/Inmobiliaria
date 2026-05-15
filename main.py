@@ -765,6 +765,9 @@ async def ver_propiedad(id_or_slug: str, request: Request):
         "otras_propiedades": otras,
         "account_type":      account_type,
         **data,
+        # Casteo explícito: garantiza que el template recibe True/False limpio
+        # (la DB puede devolver None, 0, 1, "true", etc.)
+        "pago_realizado": bool(data.get("pago_realizado", False)),
     })
 
 
