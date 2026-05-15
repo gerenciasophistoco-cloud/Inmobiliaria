@@ -7,8 +7,7 @@
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Leaflet eliminado: mapa usa Google Maps Embed API -->
 <script id="tailwind-config">
         tailwind.config = {
           darkMode: "class",
@@ -645,16 +644,30 @@
         <h3 class="font-headline-md text-headline-md">Ubicación</h3>
       </div>
 
-      <!-- Mapa Leaflet + OpenStreetMap (sin API key, funciona siempre) -->
-      <div id="propMap"
-           style="height:340px; border-radius:16px; overflow:hidden;
-                  box-shadow:0 8px 32px rgba(0,0,0,0.10); background:#e8e8e8;
-                  position:relative; z-index:0; isolation:isolate;">
+      <!-- Mapa Google Maps Embed (preciso, nativo, con botón Cómo llegar) -->
+      {% set coords = coordenadas if coordenadas and ',' in (coordenadas or '') else '' %}
+      {% if coords and google_maps_key %}
+      <div style="height:340px; border-radius:16px; overflow:hidden;
+                  box-shadow:0 8px 32px rgba(0,0,0,0.10);">
+        <iframe
+          src="https://www.google.com/maps/embed/v1/place?key={{ google_maps_key }}&q={{ coords }}&zoom=16"
+          width="100%" height="100%" style="border:0;" allowfullscreen loading="lazy"
+          referrerpolicy="no-referrer-when-downgrade">
+        </iframe>
       </div>
+      {% elif coords %}
+      <!-- Fallback sin key: mapa estático de OpenStreetMap -->
+      <div style="height:340px; border-radius:16px; overflow:hidden;
+                  box-shadow:0 8px 32px rgba(0,0,0,0.10); background:#e8e8e8;">
+        <iframe
+          src="https://www.openstreetmap.org/export/embed.html?bbox={{ coords.split(',')[1]|float - 0.005 }},{{ coords.split(',')[0]|float - 0.005 }},{{ coords.split(',')[1]|float + 0.005 }},{{ coords.split(',')[0]|float + 0.005 }}&layer=mapnik&marker={{ coords }}"
+          width="100%" height="100%" style="border:0;" allowfullscreen loading="lazy">
+        </iframe>
+      </div>
+      {% endif %}
 
       <div class="flex justify-center mt-4">
-        <a id="gmapsBtn"
-           href="https://maps.google.com/?q={{ map_query }}" target="_blank" rel="noopener"
+        <a href="https://maps.google.com/?q={{ coords or map_query }}" target="_blank" rel="noopener"
            style="display:inline-flex; align-items:center; gap:10px;
                   background:#16a34a; color:#fff; font-weight:700;
                   font-size:15px; letter-spacing:0.04em; text-transform:uppercase;
@@ -668,60 +681,6 @@
           Cómo llegar
         </a>
       </div>
-
-      <script>
-      (function () {
-        var mapEl = document.getElementById('propMap');
-        if (!mapEl || typeof L === 'undefined') return;
-
-        var coordStr   = {{ (coordenadas or '') | tojson }};
-        var direccion  = {{ (direccion or '')   | tojson }};
-        var ciudad     = {{ (ciudad or '')      | tojson }};
-
-        function buildMap(lat, lng) {
-          var map = L.map('propMap', {
-            scrollWheelZoom: false,   // no captura el scroll de página
-            zoomControl: true,
-          }).setView([lat, lng], 16);
-
-          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© <a href="https://www.openstreetmap.org/copyright">OSM</a>',
-            maxZoom: 19,
-          }).addTo(map);
-
-          L.marker([lat, lng]).addTo(map);
-
-          // Actualizar el botón "Cómo llegar" con coordenadas exactas
-          var btn = document.getElementById('gmapsBtn');
-          if (btn) btn.href = 'https://maps.google.com/?q=' + lat + ',' + lng;
-        }
-
-        // ¿Ya son coordenadas GPS?
-        var m = coordStr.match(/^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/);
-        if (m) {
-          buildMap(parseFloat(m[1]), parseFloat(m[2]));
-        } else {
-          // Geocodificar con Nominatim (OpenStreetMap, gratuito, sin API key)
-          var query = coordStr || (direccion + ', ' + ciudad + ', Colombia');
-          fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q='
-                + encodeURIComponent(query),
-                { headers: { 'Accept-Language': 'es' } })
-            .then(function (r) { return r.json(); })
-            .then(function (data) {
-              if (data && data.length > 0) {
-                buildMap(parseFloat(data[0].lat), parseFloat(data[0].lon));
-              } else {
-                mapEl.innerHTML =
-                  '<p style="padding:2rem;color:#888;text-align:center">📍 No se encontró la ubicación</p>';
-              }
-            })
-            .catch(function () {
-              mapEl.innerHTML =
-                '<p style="padding:2rem;color:#888;text-align:center">📍 Mapa no disponible</p>';
-            });
-        }
-      })();
-      </script>
     </section>
     {% endif %}
 
