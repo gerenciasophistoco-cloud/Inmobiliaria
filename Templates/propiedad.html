@@ -98,27 +98,29 @@
             z-index: 10;
             line-height: 1.7;
         }
-        /* Blur y overlay en el video del inmueble */
+        /* Blur en el video — el ::after NO se usa para video porque bloquea controles en iOS */
         .protected-video video { filter: blur(7px); }
-        .protected-video::after {
-            content: 'CONTACTE A CRISTIAN ROA\a PARA DESBLOQUEAR\a\2706  3103409986';
-            white-space: pre;
-            text-align: center;
+        /* El overlay de texto en el video es un <div> explícito (pointer-events:none garantizado) */
+        .video-contact-overlay {
             position: absolute;
             inset: 0;
             display: flex;
             align-items: center;
             justify-content: center;
+            flex-direction: column;
+            text-align: center;
+            gap: 6px;
+            pointer-events: none;   /* ← pasa todos los toques al video debajo */
+            z-index: 10;
             font-family: 'Arial Black', Arial, sans-serif;
-            font-size: clamp(14px, 4vw, 26px);
             font-weight: 900;
-            letter-spacing: 0.08em;
+            letter-spacing: 0.06em;
             color: rgba(255,255,255,0.92);
             text-shadow: 0 2px 8px rgba(0,0,0,0.95), 0 0 20px rgba(0,0,0,0.8);
-            pointer-events: none;
-            z-index: 10;
-            line-height: 1.8;
+            line-height: 1.5;
         }
+        .video-contact-overlay .vco-label { font-size: clamp(11px, 3vw, 18px); }
+        .video-contact-overlay .vco-phone { font-size: clamp(20px, 6vw, 40px); color: #fbbf24; }
     </style>
 </head>
 
@@ -391,6 +393,13 @@
                  poster="{{ fotos[0] if fotos else '' }}">
             <source src="{{ video_url }}" type="video/mp4"/>
           </video>
+          {% if not pago_realizado %}
+          <div class="video-contact-overlay">
+            <span class="vco-label">CONTACTE A CRISTIAN ROA</span>
+            <span class="vco-label">PARA DESBLOQUEAR</span>
+            <span class="vco-phone">3103409986</span>
+          </div>
+          {% endif %}
         </div>
         {% else %}
         <div id="mainVideoBox"
@@ -426,6 +435,12 @@
           /* No reemplazar si ya hay un <video> — el usuario puede estar viéndolo */
           if (sec.querySelector('video')) return;
           var _pago = {{ 'true' if pago_realizado else 'false' }};
+          var _overlay = _pago ? '' :
+            `<div class="video-contact-overlay">
+               <span class="vco-label">CONTACTE A CRISTIAN ROA</span>
+               <span class="vco-label">PARA DESBLOQUEAR</span>
+               <span class="vco-phone">3103409986</span>
+             </div>`;
           sec.innerHTML =
             `<h3 class="font-headline-md text-headline-md">Video del inmueble</h3>
              <div style="position:relative;width:100%;padding-top:125%;
@@ -436,6 +451,7 @@
                              object-fit:cover;display:block;border-radius:12px;">
                  <source src="${url}" type="video/mp4"/>
                </video>
+               ${_overlay}
              </div>`;
         }
 
