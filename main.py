@@ -330,7 +330,7 @@ async def generate_content(
     otras_caracteristicas: Optional[str] = Form(None),
     foto_labels:        Optional[str] = Form(default="[]"),  # JSON: ["Sala","Cocina",…]
     foto_descriptions:  Optional[str] = Form(default="[]"),  # JSON: ["Americana","Principal",…]
-    pago_realizado:     bool           = Form(default=False),
+    pago_realizado:     str            = Form(default="false"),
     account_type: str = Form(default="particular"),
     nombre_inmobiliaria: Optional[str] = Form(None),
     nombre_agente: str = Form(...),
@@ -452,6 +452,9 @@ Datos:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al generar contenido: {str(e)}")
 
+    # Convertir pago_realizado (string "true"/"false") a bool
+    pago_ok = str(pago_realizado).strip().lower() in ("true", "1", "yes", "on")
+
     # Generar slug amigable único
     property_id   = str(uuid.uuid4())
     property_slug = _unique_slug(_make_slug(tipo_propiedad, direccion, ciudad))
@@ -489,7 +492,7 @@ Datos:
             telefono_agente,
             f"Hola, estoy interesado en la propiedad en {direccion}, {ciudad}"
         ),
-        "pago_realizado":         pago_realizado,
+        "pago_realizado":         pago_ok,
         "video_url":              None,
         "video_recorrido_url":    video_recorrido_url or None,
         # Si el usuario ya subió su video, el link está listo de inmediato
@@ -529,7 +532,7 @@ Datos:
             "logo_url":           logo_path or "",
             "foto_agente_url":    foto_agente_path or "",
             "video_url_propio":   None,
-            "pago_realizado":     pago_realizado,
+            "pago_realizado":     pago_ok,
         }
         threading.Thread(
             target=_video_task,

@@ -326,6 +326,9 @@ form.addEventListener('submit', async e => {
   formData.set('foto_descriptions', JSON.stringify(photoDescriptions));
   // Vincular el video de recorrido subido al property record
   if (lastVideoPropio) formData.set('video_recorrido_url', lastVideoPropio);
+  // Forzar pago_realizado siempre en el envío (el hidden input puede no capturarse solo)
+  var hidPago = document.getElementById('pago_realizado');
+  formData.set('pago_realizado', hidPago ? hidPago.value : 'false');
 
   try {
     const res = await fetch('/generate', { method: 'POST', body: formData });
