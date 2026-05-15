@@ -862,6 +862,7 @@ def _video_task(task_id: str, data: dict, prop_id: Optional[str],
             "foto_labels":         data.get("foto_labels")        or [],
             "foto_descriptions":   data.get("foto_descriptions")   or [],
             "foto_agente":         data.get("foto_agente_url", "") or data.get("foto_agente", ""),
+            "pago_realizado":      bool(data.get("pago_realizado", False)),
         }
         fotos            = [f for f in data.get("fotos", []) if f][:50]
         video_url_propio = data.get("video_url_propio")
