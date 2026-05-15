@@ -72,9 +72,8 @@
             user-select: none;
             -webkit-user-select: none;
         }
-        /* Blur en imágenes de galería */
+        /* Sin blur en imágenes — solo overlay de texto */
         .protected-media img {
-            filter: blur(7px);
             pointer-events: none;
         }
         /* Overlay con número de contacto sobre cada foto */
@@ -98,7 +97,7 @@
             z-index: 10;
             line-height: 1.7;
         }
-        /* El overlay blurs el video con backdrop-filter (no filter en <video> = controles funcionan) */
+        /* Overlay de marca de agua — sin blur, video reproducible, controles accesibles */
         .video-contact-overlay {
             position: absolute;
             inset: 0;
@@ -107,23 +106,37 @@
             justify-content: center;
             flex-direction: column;
             text-align: center;
-            gap: 6px;
-            /* backdrop-filter aplica el blur a lo que hay DETRÁS (el video) */
-            background: rgba(0, 0, 0, 0.08);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
-            pointer-events: none;   /* ← TODOS los toques pasan al <video> debajo */
+            gap: 4px;
+            pointer-events: none;   /* todos los toques pasan al <video> debajo */
             z-index: 10;
-            font-family: 'Arial Black', Arial, sans-serif;
-            font-weight: 900;
-            letter-spacing: 0.06em;
-            color: rgba(255,255,255,0.95);
-            text-shadow: 0 2px 8px rgba(0,0,0,0.95), 0 0 20px rgba(0,0,0,0.8);
-            line-height: 1.5;
             border-radius: 12px;
         }
-        .video-contact-overlay .vco-label { font-size: clamp(11px, 3vw, 18px); }
-        .video-contact-overlay .vco-phone { font-size: clamp(20px, 6vw, 40px); color: #fbbf24; }
+        .video-contact-overlay .vco-inner {
+            background: rgba(0,0,0,0.55);
+            border-radius: 12px;
+            padding: 14px 22px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+        .video-contact-overlay .vco-label {
+            font-family: 'Arial Black', Arial, sans-serif;
+            font-size: clamp(12px, 3.5vw, 20px);
+            font-weight: 900;
+            letter-spacing: 0.08em;
+            color: #fff;
+            text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+        }
+        .video-contact-overlay .vco-phone {
+            font-family: 'Arial Black', Arial, sans-serif;
+            font-size: clamp(26px, 8vw, 52px);
+            font-weight: 900;
+            letter-spacing: 0.04em;
+            color: #fbbf24;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.9);
+            line-height: 1.1;
+        }
     </style>
 </head>
 
@@ -398,9 +411,11 @@
           </video>
           {% if not pago_realizado %}
           <div class="video-contact-overlay">
-            <span class="vco-label">CONTACTE A CRISTIAN ROA</span>
-            <span class="vco-label">PARA DESBLOQUEAR</span>
-            <span class="vco-phone">3103409986</span>
+            <div class="vco-inner">
+              <span class="vco-label">CONTACTE A CRISTIAN ROA</span>
+              <span class="vco-label">PARA DESBLOQUEAR</span>
+              <span class="vco-phone">3103409986</span>
+            </div>
           </div>
           {% endif %}
         </div>
@@ -440,9 +455,11 @@
           var _pago = {{ 'true' if pago_realizado else 'false' }};
           var _overlay = _pago ? '' :
             `<div class="video-contact-overlay">
-               <span class="vco-label">CONTACTE A CRISTIAN ROA</span>
-               <span class="vco-label">PARA DESBLOQUEAR</span>
-               <span class="vco-phone">3103409986</span>
+               <div class="vco-inner">
+                 <span class="vco-label">CONTACTE A CRISTIAN ROA</span>
+                 <span class="vco-label">PARA DESBLOQUEAR</span>
+                 <span class="vco-phone">3103409986</span>
+               </div>
              </div>`;
           sec.innerHTML =
             `<h3 class="font-headline-md text-headline-md">Video del inmueble</h3>
