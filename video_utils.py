@@ -958,31 +958,51 @@ def _make_clip(jpeg: str, idx: int, overlay_path: Optional[str] = None,
 # ── Utilidades de audio ───────────────────────────────────────────────────────
 
 def _make_watermark_overlay() -> str:
-    """PNG semitransparente OUT_W×OUT_H con texto 'VISTA PREVIA' (25 % opacidad)."""
+    """
+    PNG semitransparente OUT_W×OUT_H con:
+    - 'CONTACTE A CRISTIAN ROA PARA DESBLOQUEAR:'  (label)
+    - '3103409986'  (teléfono grande, protagonista)
+    Texto blanco con borde oscuro → legible sobre cualquier fondo.
+    Opacidad 40 % (alpha=102).
+    """
     from PIL import Image, ImageDraw
-    # Usar dimensiones de salida (720×900) no las de los clips internos (1080×1350)
     wm   = Image.new("RGBA", (OUT_W, OUT_H), (0, 0, 0, 0))
     draw = ImageDraw.Draw(wm)
-    alpha = 64  # 25 % de 255
-    scale = OUT_W / VW  # factor 0.667
 
-    f_big = _load_font(int(88 * scale), bold=True)
-    f_sub = _load_font(int(32 * scale))
+    ALPHA_TEXT    = 102          # 40 % opacidad
+    ALPHA_OUTLINE = 80           # borde oscuro sutilmente más transparente
+    WHITE  = (255, 255, 255, ALPHA_TEXT)
+    DARK   = (0,   0,   0,   ALPHA_OUTLINE)
+    GOLD   = (255, 200,  50, ALPHA_TEXT)
 
-    text1 = "VISTA PREVIA"
-    bb1   = draw.textbbox((0, 0), text1, font=f_big)
-    w1    = bb1[2] - bb1[0]
+    scale  = OUT_W / VW          # 0.667
     cx, cy = OUT_W // 2, OUT_H // 2
-    draw.text((cx - w1 // 2, cy - int(70 * scale)), text1, font=f_big, fill=(255, 255, 255, alpha))
 
-    draw.line([(cx - int(130*scale), cy + int(20*scale)),
-               (cx + int(130*scale), cy + int(20*scale))],
-              fill=(201, 162, 39, alpha), width=2)
+    f_label = _load_font(int(28 * scale), bold=False)
+    f_phone = _load_font(int(80 * scale), bold=True)
 
-    text2 = "CRISTIAN R INMOBILIARIA"
-    bb2   = draw.textbbox((0, 0), text2, font=f_sub)
-    w2    = bb2[2] - bb2[0]
-    draw.text((cx - w2 // 2, cy + int(34 * scale)), text2, font=f_sub, fill=(255, 255, 255, alpha))
+    def outlined_text(xy, text, font, fill, outline=DARK):
+        x, y = xy
+        for dx in (-2, -1, 0, 1, 2):
+            for dy in (-2, -1, 0, 1, 2):
+                if dx or dy:
+                    draw.text((x + dx, y + dy), text, font=font, fill=outline)
+        draw.text(xy, text, font=font, fill=fill)
+
+    # Línea 1: label
+    line1 = "CONTACTE A CRISTIAN ROA PARA DESBLOQUEAR:"
+    bb1   = draw.textbbox((0, 0), line1, font=f_label)
+    outlined_text((cx - (bb1[2] - bb1[0]) // 2, cy - int(78 * scale)), line1, f_label, WHITE)
+
+    # Separador
+    draw.line([(cx - int(120*scale), cy - int(20*scale)),
+               (cx + int(120*scale), cy - int(20*scale))],
+              fill=GOLD, width=2)
+
+    # Línea 2: teléfono (protagonista)
+    phone = "3103409986"
+    bb2   = draw.textbbox((0, 0), phone, font=f_phone)
+    outlined_text((cx - (bb2[2] - bb2[0]) // 2, cy - int(10 * scale)), phone, f_phone, WHITE)
 
     path = str(Path(tempfile.mkdtemp()) / "watermark.png")
     wm.save(path, "PNG")
@@ -990,14 +1010,21 @@ def _make_watermark_overlay() -> str:
 
 
 def _apply_watermark(video_path: str) -> str:
-    """Superpone la marca de agua semitransparente en cada frame del video."""
+    """
+    Aplica protección de contenido al video cuando pago_realizado=False:
+    1. Desenfoque ligero (boxblur) — se aprecia la calidad pero no los detalles
+    2. Overlay con texto de contacto centrado
+    """
     wm_path = _make_watermark_overlay()
     out     = str(Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.mp4")
     cmd = [
         _ffmpeg_bin(), "-y",
         "-i", video_path,
         "-i", wm_path,
-        "-filter_complex", "[0:v][1:v]overlay=(W-w)/2:(H-h)/2[out]",
+        # 1. Blur ligero en el video, 2. Superponer PNG de contacto
+        "-filter_complex",
+        "[0:v]boxblur=luma_radius=6:luma_power=1:chroma_radius=6:chroma_power=1[blurred];"
+        "[blurred][1:v]overlay=(W-w)/2:(H-h)/2[out]",
         "-map", "[out]",
         "-c:v", "libx264", "-preset", "fast", "-crf", "26",
         "-pix_fmt", "yuv420p",
@@ -1008,7 +1035,7 @@ def _apply_watermark(video_path: str) -> str:
     if r.returncode != 0:
         log.warning("Watermark falló: %s", r.stderr.decode("utf-8", errors="replace")[-300:])
         return video_path
-    log.info("Marca de agua aplicada OK")
+    log.info("Protección de video aplicada (blur + contacto)")
     return out
 
 

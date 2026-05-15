@@ -663,13 +663,71 @@ async def stream_video(filename: str, request: Request):
 # ── Toggle de pago (admin) ────────────────────────────────────────────────────
 @app.post("/admin/pago/{property_id}")
 async def toggle_pago(property_id: str):
-    """Activa/desactiva pago_realizado. Solo accesible desde la vista admin."""
+    """
+    Activa/desactiva pago_realizado.
+    Al confirmar pago (True): limpia el video y lanza regeneración sin marca de agua.
+    """
+    import threading
+    from video_utils import ffmpeg_available
+
     data = db.get_property(property_id)
     if not data:
         raise HTTPException(status_code=404)
+
     nuevo = not bool(data.get("pago_realizado", False))
-    db.update_property(property_id, {"pago_realizado": nuevo})
-    return JSONResponse({"pago_realizado": nuevo})
+
+    if nuevo:
+        # ── Pago confirmado: borrar video con marca de agua y regenerar limpio ──
+        db.update_property(property_id, {
+            "pago_realizado":  True,
+            "video_url":       None,
+            "video_url_error": None,
+            "video_ready":     False,
+        })
+        fotos = data.get("fotos") or []
+        regenerating = bool(fotos) and ffmpeg_available()
+        if regenerating:
+            task_id = str(uuid.uuid4())
+            _video_tasks[task_id] = {
+                "status": "running", "progress": 0,
+                "status_text": "regenerando video sin marca de agua",
+                "output_path": None, "error": None, "video_url": None,
+                "property_id": property_id,
+            }
+            video_data = {
+                "fotos":               fotos,
+                "nombre_agente":       data.get("nombre_agente", ""),
+                "telefono_agente":     data.get("telefono_agente", ""),
+                "habitaciones":        data.get("habitaciones") or "",
+                "banos":               data.get("banos") or "",
+                "metros_construidos":  data.get("metros") or "",
+                "estacionamientos":    data.get("estacionamientos") or "",
+                "precio":              data.get("precio", ""),
+                "ciudad":              data.get("ciudad", ""),
+                "direccion":           data.get("direccion", ""),
+                "tipo_propiedad":      data.get("tipo_propiedad", ""),
+                "operacion":           data.get("operacion", ""),
+                "nombre_inmobiliaria": data.get("nombre_inmobiliaria", ""),
+                "amenidades":          data.get("amenidades") or [],
+                "foto_labels":         data.get("foto_labels") or [],
+                "foto_descriptions":   data.get("foto_descriptions") or [],
+                "logo_url":            data.get("logo_url") or "",
+                "foto_agente_url":     data.get("foto_agente_url") or "",
+                "video_url_propio":    None,
+                "pago_realizado":      True,   # sin marca de agua
+            }
+            threading.Thread(
+                target=_video_task,
+                args=(task_id, video_data, property_id, "video_url"),
+                daemon=True,
+            ).start()
+            log.info("Regenerando video limpio para %s (task %s)", property_id, task_id)
+    else:
+        # ── Pago revocado: solo actualizar el campo ──
+        db.update_property(property_id, {"pago_realizado": False})
+        regenerating = False
+
+    return JSONResponse({"pago_realizado": nuevo, "regenerating": regenerating})
 
 
 # ── Página web de la propiedad (acepta UUID legacy o slug amigable) ───────────
