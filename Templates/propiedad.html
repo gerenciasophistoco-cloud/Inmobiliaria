@@ -7,7 +7,8 @@
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
-<!-- Leaflet eliminado: mapa usa Google Maps Embed API -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script id="tailwind-config">
         tailwind.config = {
           darkMode: "class",
@@ -644,30 +645,53 @@
         <h3 class="font-headline-md text-headline-md">Ubicación</h3>
       </div>
 
-      <!-- Mapa Google Maps Embed (preciso, nativo, con botón Cómo llegar) -->
-      {% set coords = coordenadas if coordenadas and ',' in (coordenadas or '') else '' %}
-      {% if coords and google_maps_key %}
-      <div style="height:340px; border-radius:16px; overflow:hidden;
-                  box-shadow:0 8px 32px rgba(0,0,0,0.10);">
-        <iframe
-          src="https://www.google.com/maps/embed/v1/place?key={{ google_maps_key }}&q={{ coords }}&zoom=16"
-          width="100%" height="100%" style="border:0;" allowfullscreen loading="lazy"
-          referrerpolicy="no-referrer-when-downgrade">
-        </iframe>
+      <!-- Mapa Leaflet + OpenStreetMap -->
+      <div id="propMap"
+           style="height:340px; border-radius:16px; overflow:hidden;
+                  box-shadow:0 8px 32px rgba(0,0,0,0.10); background:#e8e8e8;
+                  position:relative; z-index:0; isolation:isolate;">
       </div>
-      {% elif coords %}
-      <!-- Fallback sin key: mapa estático de OpenStreetMap -->
-      <div style="height:340px; border-radius:16px; overflow:hidden;
-                  box-shadow:0 8px 32px rgba(0,0,0,0.10); background:#e8e8e8;">
-        <iframe
-          src="https://www.openstreetmap.org/export/embed.html?bbox={{ coords.split(',')[1]|float - 0.005 }},{{ coords.split(',')[0]|float - 0.005 }},{{ coords.split(',')[1]|float + 0.005 }},{{ coords.split(',')[0]|float + 0.005 }}&layer=mapnik&marker={{ coords }}"
-          width="100%" height="100%" style="border:0;" allowfullscreen loading="lazy">
-        </iframe>
-      </div>
-      {% endif %}
+
+      <script>
+      (function () {
+        var coordStr  = {{ (coordenadas or '') | tojson }};
+        var direccion = {{ (direccion  or '') | tojson }};
+        var ciudad    = {{ (ciudad     or '') | tojson }};
+        var mapEl     = document.getElementById('propMap');
+        if (!mapEl || typeof L === 'undefined') return;
+
+        function buildMap(lat, lng) {
+          var m = L.map('propMap', { scrollWheelZoom: false, zoomControl: true })
+                   .setView([lat, lng], 16);
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© <a href="https://www.openstreetmap.org">OpenStreetMap</a>',
+            maxZoom: 19,
+          }).addTo(m);
+          L.marker([lat, lng]).addTo(m);
+          var btn = document.getElementById('gmapsBtn');
+          if (btn) btn.href = 'https://maps.google.com/?q=' + lat + ',' + lng;
+        }
+
+        var m = coordStr.match(/^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/);
+        if (m) {
+          buildMap(parseFloat(m[1]), parseFloat(m[2]));
+        } else {
+          var q = (direccion + ', ' + ciudad + ', Colombia').trim().replace(/^,\s*/, '');
+          fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=co&q=' +
+                encodeURIComponent(q), { headers: { 'Accept-Language': 'es' } })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+              if (d && d.length) buildMap(parseFloat(d[0].lat), parseFloat(d[0].lon));
+              else mapEl.innerHTML = '<p style="padding:2rem;color:#888;text-align:center">📍 Ubica el pin al crear el inmueble para ver el mapa</p>';
+            })
+            .catch(function () { mapEl.innerHTML = ''; });
+        }
+      })();
+      </script>
 
       <div class="flex justify-center mt-4">
-        <a href="https://maps.google.com/?q={{ coords or map_query }}" target="_blank" rel="noopener"
+        <a id="gmapsBtn"
+           href="https://maps.google.com/?q={{ map_query }}" target="_blank" rel="noopener"
            style="display:inline-flex; align-items:center; gap:10px;
                   background:#16a34a; color:#fff; font-weight:700;
                   font-size:15px; letter-spacing:0.04em; text-transform:uppercase;

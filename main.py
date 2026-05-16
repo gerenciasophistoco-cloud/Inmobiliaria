@@ -205,14 +205,10 @@ def _whatsapp_link(telefono: str, mensaje: str = "") -> str:
 
 
 # ── Página principal (formulario) ────────────────────────────────────────────
-GOOGLE_MAPS_KEY = os.getenv("GOOGLE_MAPS_KEY", "")
-
-
 @app.get("/", response_class=HTMLResponse)
 async def root():
     with open("static/index.html", "r", encoding="utf-8") as f:
-        html = f.read()
-    return html.replace("__GOOGLE_MAPS_KEY__", GOOGLE_MAPS_KEY)
+        return f.read()
 
 
 # ── Ruta de prueba con datos de ejemplo ──────────────────────────────────────
@@ -771,7 +767,6 @@ async def ver_propiedad(id_or_slug: str, request: Request):
         "property_id":       property_id,
         "otras_propiedades": otras,
         "account_type":      account_type,
-        "google_maps_key":   GOOGLE_MAPS_KEY,
         **data,
         "pago_realizado": bool(data.get("pago_realizado", False)),
     })
