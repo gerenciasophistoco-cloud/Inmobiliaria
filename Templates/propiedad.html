@@ -184,53 +184,6 @@
   <!-- ══ CONTENIDO PRINCIPAL ══ -->
   <main class="max-w-7xl w-full mx-auto px-5 mt-10 space-y-10" style="padding-bottom:120px;">
 
-    <!-- ══ PANEL ADMIN (visible solo con ?admin=1) ══ -->;">
-            {% if pago_realizado %}✅ Pago confirmado — sin marca de agua
-            {% else %}⏳ Pendiente de pago — con marca de agua
-            {% endif %}
-          </strong>
-        </p>
-      </div>
-      <button id="btnTogglePago" onclick="togglePago()"
-        style="background:{% if pago_realizado %}#dc2626{% else %}#16a34a{% endif %};
-               color:#fff;font-weight:700;font-size:13px;letter-spacing:0.04em;
-               border:none;border-radius:50px;padding:10px 22px;cursor:pointer;
-               white-space:nowrap;transition:opacity 0.15s;">
-        {% if pago_realizado %}Revocar pago{% else %}✔ Confirmar pago{% endif %}
-      </button>
-    </div>
-    <script>
-    async function togglePago() {
-      const btn = document.getElementById('btnTogglePago');
-      btn.disabled = true; btn.style.opacity = '0.6';
-      btn.textContent = '⏳ Procesando...';
-      try {
-        const r = await fetch('/admin/pago/{{ property_id }}', {method:'POST'});
-        const d = await r.json();
-        if (!r.ok) throw new Error('Error del servidor');
-        if (d.regenerating) {
-          btn.textContent = '🎬 Regenerando video limpio...';
-          /* Polling hasta que el video nuevo esté listo → recarga */
-          const poll = setInterval(async () => {
-            try {
-              const s  = await fetch('/propiedad-video-status/{{ property_id }}');
-              const sd = await s.json();
-              if (sd.video_url || sd.video_url_error || (sd.video_ready && !sd.generating)) {
-                clearInterval(poll); location.reload();
-              }
-            } catch(_) {}
-          }, 5000);
-        } else {
-          location.reload();
-        }
-      } catch(e) {
-        alert('Error: ' + e.message);
-        btn.disabled = false; btn.style.opacity = '1';
-        btn.textContent = '{% if pago_realizado %}Revocar pago{% else %}✔ Confirmar pago{% endif %}';
-      }
-    }
-    </script>
-    {% endif %}
 
     <!-- Galería de fotos -->
     {% if fotos and fotos | length > 1 %}
