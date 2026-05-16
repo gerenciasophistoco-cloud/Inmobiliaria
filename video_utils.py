@@ -1217,11 +1217,7 @@ def generate_slideshow(
         raise RuntimeError(f"Video final vacío ({size} bytes)")
     log.info("Slideshow OK: %d clips, %d bytes", len(clips), size)
 
-    # 7. Marca de agua si pago_realizado = False
-    if not specs.get("pago_realizado", False):
-        output = _apply_watermark(output)
-
-    # 8. Añadir música de fondo
+    # 7. Añadir música de fondo
     dur    = _get_video_duration(output)
     output = _add_music(output, dur)
 

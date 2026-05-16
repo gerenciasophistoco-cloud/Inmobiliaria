@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ListaPro — Mis Propiedades</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@400,0&display=swap" rel="stylesheet"/>
+<style>
+  body { font-family: 'Manrope', sans-serif; background: #f8f6f2; }
+  .toggle-track {
+    width: 48px; height: 26px; border-radius: 13px; position: relative;
+    cursor: pointer; transition: background 0.2s; flex-shrink: 0;
+  }
+  .toggle-track.on  { background: #16a34a; }
+  .toggle-track.off { background: #d1d5db; }
+  .toggle-knob {
+    width: 20px; height: 20px; border-radius: 50%; background: #fff;
+    position: absolute; top: 3px; transition: transform 0.2s;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+  }
+  .toggle-track.on  .toggle-knob { transform: translateX(22px); }
+  .toggle-track.off .toggle-knob { transform: translateX(3px); }
+  .copy-btn { transition: all 0.15s; }
+  .copy-btn:hover { background: #e9c349 !important; }
+  .prop-row { transition: box-shadow 0.15s; }
+  .prop-row:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+</style>
+</head>
+<body class="min-h-screen">
+
+  <!-- Header -->
+  <header style="background:linear-gradient(135deg,#1a1a2e,#16213e); padding:18px 24px;
+                 display:flex; align-items:center; justify-content:space-between;">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <span style="font-size:28px;">🏠</span>
+      <div>
+        <h1 style="color:#fff;font-weight:800;font-size:20px;margin:0;line-height:1.2;">ListaPro Admin</h1>
+        <p style="color:#e9c349;font-size:12px;margin:0;font-weight:600;">Mis Propiedades</p>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:16px;">
+      <span style="color:#94a3b8;font-size:13px;">{{ properties|length }} inmueble{{ 's' if properties|length != 1 else '' }}</span>
+      <a href="/" style="color:#e9c349;font-size:13px;font-weight:600;text-decoration:none;
+                         background:rgba(233,195,73,0.15);padding:6px 14px;border-radius:8px;
+                         border:1px solid rgba(233,195,73,0.3);">
+        + Nuevo inmueble
+      </a>
+    </div>
+  </header>
+
+  <main style="max-width:1100px;margin:0 auto;padding:28px 16px;">
+
+    {% if not properties %}
+    <div style="text-align:center;padding:80px 20px;color:#9ca3af;">
+      <span class="material-symbols-outlined" style="font-size:64px;display:block;margin-bottom:12px;">apartment</span>
+      <p style="font-size:18px;font-weight:600;margin:0 0 6px;">No tienes propiedades aún</p>
+      <p style="font-size:14px;margin:0 0 20px;">Carga tu primer inmueble para verlo aquí</p>
+      <a href="/" style="background:#735c00;color:#fff;padding:12px 28px;border-radius:10px;
+                         text-decoration:none;font-weight:700;">Cargar inmueble</a>
+    </div>
+    {% else %}
+
+    <!-- Tabla -->
+    <div style="background:#fff;border-radius:16px;border:1px solid #e5e0d8;overflow:hidden;">
+
+      <!-- Cabecera tabla -->
+      <div style="display:grid;grid-template-columns:72px 1fr 220px 110px;gap:0;
+                  background:#f6f3ee;border-bottom:1px solid #e5e0d8;
+                  padding:10px 16px;font-size:11px;font-weight:700;
+                  letter-spacing:0.06em;color:#78716c;text-transform:uppercase;">
+        <span>Foto</span>
+        <span>Inmueble</span>
+        <span>Link</span>
+        <span style="text-align:center;">Acceso</span>
+      </div>
+
+      {% for prop in properties %}
+      <div class="prop-row" id="row-{{ prop.id }}"
+           style="display:grid;grid-template-columns:72px 1fr 220px 110px;gap:0;
+                  align-items:center;border-bottom:1px solid #f0ede7;padding:14px 16px;
+                  background:#fff;{% if not prop.acceso_activo %}opacity:0.65;{% endif %}">
+
+        <!-- Foto miniatura -->
+        <div>
+          {% if prop.foto %}
+          <img src="{{ prop.foto }}" alt=""
+               style="width:56px;height:56px;border-radius:8px;object-fit:cover;
+                      border:1px solid #e5e0d8;display:block;"/>
+          {% else %}
+          <div style="width:56px;height:56px;border-radius:8px;background:#f0ede7;
+                      display:flex;align-items:center;justify-content:center;">
+            <span class="material-symbols-outlined" style="font-size:24px;color:#a8a29e;">apartment</span>
+          </div>
+          {% endif %}
+        </div>
+
+        <!-- Info del inmueble -->
+        <div style="padding-right:12px;min-width:0;">
+          <p style="font-weight:700;font-size:14px;color:#1c1b1b;margin:0 0 3px;
+                    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+            {{ prop.nombre }}
+          </p>
+          <p style="font-size:12px;color:#78716c;margin:0 0 4px;">
+            {{ prop.operacion or '' }}{% if prop.precio %} · {{ prop.precio }}{% endif %}
+          </p>
+          <p style="font-size:11px;color:#a8a29e;margin:0;">
+            {{ prop.created_at[:10] if prop.created_at else '' }}
+          </p>
+        </div>
+
+        <!-- Link + botón copiar -->
+        <div style="padding-right:12px;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <code style="font-size:11px;color:#735c00;background:#fef9e7;
+                         padding:3px 7px;border-radius:5px;border:1px solid #e9c349;
+                         white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+                         max-width:130px;display:block;"
+                  title="/propiedad/{{ prop.slug }}">/propiedad/{{ prop.slug[:22] }}{% if prop.slug|length > 22 %}…{% endif %}</code>
+            <button onclick="copyLink('{{ prop.slug }}')"
+                    id="copy-{{ prop.slug }}"
+                    class="copy-btn"
+                    title="Copiar link"
+                    style="background:#f6f3ee;border:1px solid #e5e0d8;border-radius:6px;
+                           padding:5px 8px;cursor:pointer;flex-shrink:0;font-size:13px;">
+              📋
+            </button>
+          </div>
+          <a href="/propiedad/{{ prop.slug }}" target="_blank"
+             style="font-size:11px;color:#735c00;text-decoration:none;margin-top:4px;display:inline-block;
+                    opacity:0.7;">
+            Ver micrositio →
+          </a>
+        </div>
+
+        <!-- Toggle acceso_activo -->
+        <div style="display:flex;flex-direction:column;align-items:center;gap:5px;">
+          <div class="toggle-track {{ 'on' if prop.acceso_activo else 'off' }}"
+               id="toggle-{{ prop.id }}"
+               onclick="toggleAcceso('{{ prop.id }}', this)"
+               title="{{ 'Activo — clic para desactivar' if prop.acceso_activo else 'Inactivo — clic para activar' }}">
+            <div class="toggle-knob"></div>
+          </div>
+          <span id="label-{{ prop.id }}"
+                style="font-size:10px;font-weight:700;letter-spacing:0.04em;
+                       color:{{ '#16a34a' if prop.acceso_activo else '#dc2626' }};">
+            {{ 'ACTIVO' if prop.acceso_activo else 'INACTIVO' }}
+          </span>
+        </div>
+
+      </div>
+      {% endfor %}
+    </div>
+
+    {% endif %}
+  </main>
+
+  <!-- Toast -->
+  <div id="toast" style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);
+                          background:#1c1b1b;color:#fff;padding:10px 20px;border-radius:50px;
+                          font-size:13px;font-weight:600;opacity:0;transition:all 0.25s;
+                          pointer-events:none;z-index:100;white-space:nowrap;">
+    ✅ Link copiado
+  </div>
+
+<script>
+  /* ── Copiar link amigable ── */
+  function copyLink(slug) {
+    var url = window.location.origin + '/propiedad/' + slug;
+    navigator.clipboard.writeText(url).then(function() {
+      var btn = document.getElementById('copy-' + slug);
+      if (btn) { btn.textContent = '✅'; setTimeout(function(){ btn.textContent = '📋'; }, 1800); }
+      showToast('✅ Link copiado al portapapeles');
+    }).catch(function() {
+      prompt('Copia este link:', url);
+    });
+  }
+
+  /* ── Toggle acceso_activo ── */
+  async function toggleAcceso(propId, trackEl) {
+    trackEl.style.opacity = '0.5';
+    trackEl.style.pointerEvents = 'none';
+    try {
+      var r  = await fetch('/admin/acceso/' + propId, { method: 'POST' });
+      var d  = await r.json();
+      if (!r.ok) throw new Error('Error del servidor');
+      var activo = d.acceso_activo;
+      trackEl.className = 'toggle-track ' + (activo ? 'on' : 'off');
+      var label = document.getElementById('label-' + propId);
+      if (label) {
+        label.textContent = activo ? 'ACTIVO' : 'INACTIVO';
+        label.style.color = activo ? '#16a34a' : '#dc2626';
+      }
+      var row = document.getElementById('row-' + propId);
+      if (row) row.style.opacity = activo ? '1' : '0.65';
+      showToast(activo ? '✅ Inmueble activado' : '🔒 Inmueble desactivado');
+    } catch(e) {
+      showToast('⚠️ Error al cambiar estado');
+    } finally {
+      trackEl.style.opacity = '1';
+      trackEl.style.pointerEvents = 'auto';
+    }
+  }
+
+  /* ── Toast ── */
+  function showToast(msg) {
+    var t = document.getElementById('toast');
+    t.textContent = msg;
+    t.style.opacity = '1'; t.style.transform = 'translateX(-50%) translateY(0)';
+    setTimeout(function(){ t.style.opacity='0'; t.style.transform='translateX(-50%) translateY(20px)'; }, 2200);
+  }
+</script>
+
+</body>
+</html>

@@ -429,60 +429,6 @@
           </div>
         </div>
 
-        <!-- ── Control de pago ── -->
-        <!-- Campo oculto: SIEMPRE se envía, el toggle JS cambia su value -->
-        <input type="hidden" id="pago_realizado" name="pago_realizado" value="false">
-
-        <div style="background:linear-gradient(135deg,#f0fdf4,#dcfce7);
-                    border:1.5px solid #86efac; border-radius:14px;
-                    padding:16px 20px; margin-bottom:1rem;
-                    display:flex; align-items:center; justify-content:space-between; gap:16px;">
-          <div>
-            <p style="font-weight:700;color:#15803d;font-size:14px;margin:0 0 3px;">
-              💳 ¿Pago recibido?
-            </p>
-            <p style="color:#166534;font-size:12px;margin:0;line-height:1.4;">
-              Al activar esto se elimina la marca de agua del video y las fotos en el link del cliente.
-            </p>
-          </div>
-          <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;cursor:pointer;"
-               onclick="togglePagoSwitch()">
-            <div id="pagoToggle"
-                 style="width:52px;height:28px;border-radius:14px;background:#d1d5db;
-                        position:relative;transition:background 0.2s;">
-              <div id="pagoKnob" style="width:22px;height:22px;border-radius:50%;background:#fff;
-                                        position:absolute;top:3px;left:3px;
-                                        transition:transform 0.2s;pointer-events:none;
-                                        box-shadow:0 1px 4px rgba(0,0,0,0.2);"></div>
-            </div>
-            <span id="pagoLabel" style="font-weight:700;font-size:13px;color:#6b7280;
-                                        min-width:130px;">Sin pago</span>
-          </div>
-        </div>
-        <script>
-        function togglePagoSwitch() {
-          var hid    = document.getElementById('pago_realizado');
-          var toggle = document.getElementById('pagoToggle');
-          var knob   = document.getElementById('pagoKnob');
-          var label  = document.getElementById('pagoLabel');
-          var activo = hid.value === 'true';
-          // Invertir
-          activo = !activo;
-          hid.value = activo ? 'true' : 'false';
-          if (activo) {
-            toggle.style.background = '#16a34a';
-            knob.style.transform    = 'translateX(24px)';
-            label.textContent       = '✅ PAGO CONFIRMADO';
-            label.style.color       = '#15803d';
-          } else {
-            toggle.style.background = '#d1d5db';
-            knob.style.transform    = '';
-            label.textContent       = 'Sin pago';
-            label.style.color       = '#6b7280';
-          }
-        }
-        </script>
-
         <button type="submit" class="btn-generate" id="btnGenerate">
           <span class="btn-text">✨ Generar Contenido Profesional</span>
           <span class="btn-loading" style="display:none">

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Vista previa finalizada</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Manrope', sans-serif;
+    background: #0a0a0f;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .card {
+    max-width: 520px;
+    width: 100%;
+    text-align: center;
+  }
+  .icon-wrap {
+    width: 88px; height: 88px;
+    border-radius: 50%;
+    background: rgba(201,162,39,0.12);
+    border: 2px solid rgba(201,162,39,0.3);
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 28px;
+  }
+  .lock-icon {
+    font-size: 44px;
+    filter: drop-shadow(0 0 12px rgba(201,162,39,0.4));
+  }
+  .divider {
+    width: 60px; height: 2px;
+    background: linear-gradient(90deg, transparent, #c9a227, transparent);
+    margin: 24px auto;
+  }
+  .title {
+    color: #f5f0e8;
+    font-size: clamp(20px, 5vw, 28px);
+    font-weight: 800;
+    line-height: 1.25;
+    margin-bottom: 16px;
+  }
+  .subtitle {
+    color: #94a3b8;
+    font-size: clamp(14px, 3.5vw, 16px);
+    line-height: 1.6;
+    margin-bottom: 32px;
+  }
+  .phone {
+    display: inline-block;
+    font-size: clamp(22px, 6vw, 32px);
+    font-weight: 800;
+    color: #c9a227;
+    letter-spacing: 0.04em;
+    margin-bottom: 32px;
+  }
+  .cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: #25d366;
+    color: #fff;
+    font-weight: 700;
+    font-size: 16px;
+    padding: 14px 32px;
+    border-radius: 50px;
+    text-decoration: none;
+    box-shadow: 0 4px 20px rgba(37,211,102,0.3);
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .cta:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 28px rgba(37,211,102,0.4);
+  }
+  .cta svg { flex-shrink: 0; }
+  .footer {
+    margin-top: 32px;
+    color: #475569;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+
+  <div class="card">
+
+    <div class="icon-wrap">
+      <span class="lock-icon">🔒</span>
+    </div>
+
+    <h1 class="title">Vista previa temporal<br>finalizada</h1>
+
+    <div class="divider"></div>
+
+    <p class="subtitle">
+      Para reactivar el acceso o adquirir este micrositio premium
+      para tu inmueble, contacta directamente a:
+    </p>
+
+    <p style="color:#f5f0e8;font-size:14px;font-weight:600;margin-bottom:8px;letter-spacing:0.06em;
+              text-transform:uppercase;opacity:0.7;">Cristian Roa</p>
+
+    <a href="tel:3103409986" class="phone">3103409986</a>
+
+    <br>
+
+    <a href="https://wa.me/573103409986?text=Hola%20Cristian%2C%20quiero%20reactivar%20el%20acceso%20a%20mi%20micrositio%20premium"
+       target="_blank" class="cta">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+        <path d="M12 0C5.373 0 0 5.373 0 12c0 2.119.554 4.106 1.523 5.824L0 24l6.335-1.496A11.933 11.933 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818c-1.9 0-3.677-.512-5.198-1.405l-.373-.221-3.762.888.934-3.659-.242-.38A9.778 9.778 0 012.182 12C2.182 6.57 6.57 2.182 12 2.182S21.818 6.57 21.818 12 17.43 21.818 12 21.818z"/>
+      </svg>
+      Contactar por WhatsApp
+    </a>
+
+    <p class="footer">
+      ListaPro · Micrositios premium para inmuebles<br>
+      El contenido de esta propiedad se conserva intacto.
+    </p>
+
+  </div>
+
+</body>
+</html>

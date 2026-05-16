@@ -66,77 +66,7 @@
         video:-webkit-full-screen { object-fit: contain !important; background: #000 !important; }
         video:-moz-full-screen    { object-fit: contain !important; background: #000 !important; }
 
-        /* ── Protección de contenido ── */
-        .protected-media {
-            position: relative;
-            user-select: none;
-            -webkit-user-select: none;
-        }
-        /* Sin blur en imágenes — solo overlay de texto */
-        .protected-media img {
-            pointer-events: none;
-        }
-        /* Overlay con número de contacto sobre cada foto */
-        .protected-media::after {
-            content: 'VISTA PREVIA\a\2706  3103409986';
-            white-space: pre;
-            text-align: center;
-            position: absolute;
-            inset: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-direction: column;
-            font-family: 'Arial Black', Arial, sans-serif;
-            font-size: clamp(11px, 3.2vw, 17px);
-            font-weight: 900;
-            letter-spacing: 0.1em;
-            color: rgba(255,255,255,0.9);
-            text-shadow: 0 1px 5px rgba(0,0,0,0.9), 0 0 12px rgba(0,0,0,0.7);
-            pointer-events: none;
-            z-index: 10;
-            line-height: 1.7;
-        }
-        /* Overlay de marca de agua — sin blur, video reproducible, controles accesibles */
-        .video-contact-overlay {
-            position: absolute;
-            inset: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-direction: column;
-            text-align: center;
-            gap: 4px;
-            pointer-events: none;   /* todos los toques pasan al <video> debajo */
-            z-index: 10;
-            border-radius: 12px;
-        }
-        .video-contact-overlay .vco-inner {
-            background: rgba(0,0,0,0.55);
-            border-radius: 12px;
-            padding: 14px 22px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 4px;
-        }
-        .video-contact-overlay .vco-label {
-            font-family: 'Arial Black', Arial, sans-serif;
-            font-size: clamp(12px, 3.5vw, 20px);
-            font-weight: 900;
-            letter-spacing: 0.08em;
-            color: #fff;
-            text-shadow: 0 1px 4px rgba(0,0,0,0.8);
-        }
-        .video-contact-overlay .vco-phone {
-            font-family: 'Arial Black', Arial, sans-serif;
-            font-size: clamp(26px, 8vw, 52px);
-            font-weight: 900;
-            letter-spacing: 0.04em;
-            color: #fbbf24;
-            text-shadow: 0 2px 8px rgba(0,0,0,0.9);
-            line-height: 1.1;
-        }
+
     </style>
 </head>
 
@@ -254,21 +184,7 @@
   <!-- ══ CONTENIDO PRINCIPAL ══ -->
   <main class="max-w-7xl w-full mx-auto px-5 mt-10 space-y-10" style="padding-bottom:120px;">
 
-    <!-- ══ PANEL ADMIN (visible solo con ?admin=1) ══ -->
-    {% if request.query_params.get('admin') == '1' %}
-    <div id="adminPanel" style="
-      background:linear-gradient(135deg,#1e293b,#0f172a);
-      border:1.5px solid rgba(201,162,39,0.4);
-      border-radius:16px; padding:18px 22px;
-      display:flex; align-items:center; justify-content:space-between; gap:16px;
-      box-shadow:0 4px 24px rgba(0,0,0,0.3);">
-      <div>
-        <p style="color:#e2e8f0;font-weight:700;font-size:14px;margin:0 0 4px;">
-          🔐 Panel de administración
-        </p>
-        <p style="color:#94a3b8;font-size:12px;margin:0;">
-          Estado actual:
-          <strong style="color:{% if pago_realizado %}#4ade80{% else %}#f87171{% endif %};">
+    <!-- ══ PANEL ADMIN (visible solo con ?admin=1) ══ -->;">
             {% if pago_realizado %}✅ Pago confirmado — sin marca de agua
             {% else %}⏳ Pendiente de pago — con marca de agua
             {% endif %}
@@ -328,12 +244,11 @@
       </div>
       <div class="grid grid-cols-2 md:grid-cols-5 gap-3 h-[200px] md:h-[180px]">
         {% for foto in fotos[1:6] %}
-        <div class="rounded-xl overflow-hidden shadow-sm relative cursor-pointer group{% if not pago_realizado %} protected-media{% endif %}"
+        <div class="rounded-xl overflow-hidden shadow-sm relative cursor-pointer group"
              onclick="openGallery({{ loop.index }})">
           <img class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105
                       {% if loop.last and fotos | length > 6 %}brightness-[0.35]{% endif %}"
-               src="{{ foto }}" alt="Foto {{ loop.index + 1 }}"
-               {% if not pago_realizado %}draggable="false"{% endif %}/>
+               src="{{ foto }}" alt="Foto {{ loop.index + 1 }}"/>
           {% if loop.last and fotos | length > 6 %}
           <div class="absolute inset-0 flex items-center justify-center" style="z-index:11;">
             <span class="text-white font-bold text-3xl">+{{ fotos | length - 6 }}</span>
@@ -402,22 +317,13 @@
         <h3 class="font-headline-md text-headline-md">Video del inmueble</h3>
         {% if video_url %}
         <div style="position:relative; width:100%; padding-top:125%; background:#000; border-radius:12px;"
-             {% if not pago_realizado %}class="protected-video"{% endif %}>
+>
           <video controls preload="none" playsinline
                  style="position:absolute; inset:0; width:100%; height:100%;
                         object-fit:cover; display:block; border-radius:12px;"
                  poster="{{ fotos[0] if fotos else '' }}">
             <source src="{{ video_url }}" type="video/mp4"/>
           </video>
-          {% if not pago_realizado %}
-          <div class="video-contact-overlay">
-            <div class="vco-inner">
-              <span class="vco-label">CONTACTE A CRISTIAN ROA</span>
-              <span class="vco-label">PARA DESBLOQUEAR</span>
-              <span class="vco-phone">3103409986</span>
-            </div>
-          </div>
-          {% endif %}
         </div>
         {% else %}
         <div id="mainVideoBox"
@@ -452,26 +358,15 @@
           if (!sec) return;
           /* No reemplazar si ya hay un <video> — el usuario puede estar viéndolo */
           if (sec.querySelector('video')) return;
-          var _pago = {{ 'true' if pago_realizado else 'false' }};
-          var _overlay = _pago ? '' :
-            `<div class="video-contact-overlay">
-               <div class="vco-inner">
-                 <span class="vco-label">CONTACTE A CRISTIAN ROA</span>
-                 <span class="vco-label">PARA DESBLOQUEAR</span>
-                 <span class="vco-phone">3103409986</span>
-               </div>
-             </div>`;
           sec.innerHTML =
             `<h3 class="font-headline-md text-headline-md">Video del inmueble</h3>
              <div style="position:relative;width:100%;padding-top:125%;
-                         background:#000;border-radius:12px;"
-                  ${_pago ? '' : 'class="protected-video"'}>
+                         background:#000;border-radius:12px;">
                <video controls preload="none" playsinline
                       style="position:absolute;inset:0;width:100%;height:100%;
                              object-fit:cover;display:block;border-radius:12px;">
                  <source src="${url}" type="video/mp4"/>
                </video>
-               ${_overlay}
              </div>`;
         }
 
@@ -1014,45 +909,6 @@
     }
   })();
   </script>
-
-  {% if not pago_realizado %}
-  <!-- Banner persistente de protección justo encima de la barra de contacto -->
-  <div style="position:fixed;bottom:72px;left:0;right:0;z-index:60;
-              background:rgba(5,5,5,0.92);backdrop-filter:blur(10px);
-              -webkit-backdrop-filter:blur(10px);
-              border-top:2px solid rgba(251,191,36,0.6);
-              padding:10px 16px;text-align:center;">
-    <p style="margin:0;color:#fff;font-size:13px;font-weight:600;line-height:1.4;">
-      🔒 Vista Previa Protegida &nbsp;·&nbsp;
-      Contactar a <strong style="color:#fbbf24;">Cristian Roa</strong> para acceso total:
-      &nbsp;<a href="tel:3103409986"
-               style="color:#4ade80;font-weight:800;font-size:16px;text-decoration:none;
-                      letter-spacing:0.05em;">3103409986</a>
-    </p>
-  </div>
-
-  <script>
-  /* ── Protección de contenido: bloquear clic derecho e inspección en fotos ── */
-  (function() {
-    function block(e) {
-      if (e.target && (e.target.tagName === 'IMG' || e.target.tagName === 'VIDEO'
-          || e.target.closest('.protected-media'))) {
-        e.preventDefault();
-        return false;
-      }
-    }
-    document.addEventListener('contextmenu', block);
-    document.addEventListener('dragstart',   block);
-
-    /* Bloquear atajos de teclado de descarga (Ctrl+S, Ctrl+U) */
-    document.addEventListener('keydown', function(e) {
-      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'u')) {
-        e.preventDefault();
-      }
-    });
-  })();
-  </script>
-  {% endif %}
 
 </body>
 </html>

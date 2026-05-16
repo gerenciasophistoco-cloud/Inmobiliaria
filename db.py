@@ -74,7 +74,7 @@ def update_property(property_id: str, fields: dict) -> bool:
 def _format_card(prop_id: str, data: dict) -> dict:
     """Convierte datos crudos de una propiedad al formato que usa la tarjeta en el template."""
     fotos = data.get("fotos") or []
-    slug  = data.get("slug") or prop_id   # slug amigable o UUID como fallback
+    slug  = data.get("slug") or prop_id
     return {
         "id":               prop_id,
         "slug":             slug,
@@ -90,7 +90,33 @@ def _format_card(prop_id: str, data: dict) -> dict:
         "foto":             fotos[0] if fotos else "",
         "foto_agente":      data.get("foto_agente_url") or data.get("foto_agente", ""),
         "nombre_agente":    data.get("nombre_agente", ""),
+        "acceso_activo":    bool(data.get("acceso_activo", True)),  # default True
+        "created_at":       data.get("created_at", ""),
     }
+
+
+def get_all_properties(limit: int = 300) -> list:
+    """Retorna todas las propiedades ordenadas por fecha (panel admin)."""
+    client = _get_client()
+    if client is None:
+        return [_format_card(k, v) for k, v in reversed(list(_memory_store.items()))]
+    try:
+        result = (
+            client.table("propiedades")
+            .select("id, datos, created_at")
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        cards = []
+        for row in (result.data or []):
+            d = row.get("datos") or {}
+            d["created_at"] = row.get("created_at", "")
+            cards.append(_format_card(row["id"], d))
+        return cards
+    except Exception as e:
+        log.error("Error listando propiedades: %s", e)
+        return []
 
 
 def get_agent_properties(telefono_agente: str, exclude_id: str = "", limit: int = 8) -> list:

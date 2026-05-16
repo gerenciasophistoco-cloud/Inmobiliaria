@@ -211,6 +211,27 @@ async def root():
         return f.read()
 
 
+# ── Panel de administración ───────────────────────────────────────────────────
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_panel(request: Request):
+    properties = db.get_all_properties()
+    return templates.TemplateResponse("admin.html", {
+        "request":    request,
+        "properties": properties,
+    })
+
+
+@app.post("/admin/acceso/{property_id}")
+async def toggle_acceso(property_id: str):
+    """Activa o desactiva el acceso público a un inmueble."""
+    data = db.get_property(property_id)
+    if not data:
+        raise HTTPException(status_code=404)
+    nuevo = not bool(data.get("acceso_activo", True))
+    db.update_property(property_id, {"acceso_activo": nuevo})
+    return JSONResponse({"acceso_activo": nuevo})
+
+
 # ── Ruta de prueba con datos de ejemplo ──────────────────────────────────────
 @app.get("/test-video")
 async def test_video_generation():
@@ -330,7 +351,6 @@ async def generate_content(
     otras_caracteristicas: Optional[str] = Form(None),
     foto_labels:        Optional[str] = Form(default="[]"),  # JSON: ["Sala","Cocina",…]
     foto_descriptions:  Optional[str] = Form(default="[]"),  # JSON: ["Americana","Principal",…]
-    pago_realizado:     str            = Form(default="false"),
     account_type: str = Form(default="particular"),
     nombre_inmobiliaria: Optional[str] = Form(None),
     nombre_agente: str = Form(...),
@@ -452,8 +472,6 @@ Datos:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al generar contenido: {str(e)}")
 
-    # Convertir pago_realizado (string "true"/"false") a bool
-    pago_ok = str(pago_realizado).strip().lower() in ("true", "1", "yes", "on")
 
     # Generar slug amigable único
     property_id   = str(uuid.uuid4())
@@ -492,11 +510,11 @@ Datos:
             telefono_agente,
             f"Hola, estoy interesado en la propiedad en {direccion}, {ciudad}"
         ),
-        "pago_realizado":         pago_ok,
         "video_url":              None,
         "video_recorrido_url":    video_recorrido_url or None,
         # Si el usuario ya subió su video, el link está listo de inmediato
         "video_ready":            bool(video_recorrido_url),
+        "acceso_activo":          True,
         "otras_propiedades":      None,
     })
 
@@ -532,7 +550,6 @@ Datos:
             "logo_url":           logo_path or "",
             "foto_agente_url":    foto_agente_path or "",
             "video_url_propio":   None,
-            "pago_realizado":     pago_ok,
         }
         threading.Thread(
             target=_video_task,
@@ -749,6 +766,12 @@ async def ver_propiedad(id_or_slug: str, request: Request):
     if not data:
         raise HTTPException(status_code=404, detail="Propiedad no encontrada.")
 
+    # Verificar acceso: si está desactivado, mostrar pantalla de bloqueo
+    if not bool(data.get("acceso_activo", True)):
+        return templates.TemplateResponse("acceso_bloqueado.html", {
+            "request": request,
+        }, status_code=403)
+
     account_type = data.get("account_type", "particular")
 
     if account_type == "inmobiliaria":
@@ -768,7 +791,6 @@ async def ver_propiedad(id_or_slug: str, request: Request):
         "otras_propiedades": otras,
         "account_type":      account_type,
         **data,
-        "pago_realizado": bool(data.get("pago_realizado", False)),
     })
 
 
@@ -863,7 +885,6 @@ def _video_task(task_id: str, data: dict, prop_id: Optional[str],
             "foto_labels":         data.get("foto_labels")        or [],
             "foto_descriptions":   data.get("foto_descriptions")   or [],
             "foto_agente":         data.get("foto_agente_url", "") or data.get("foto_agente", ""),
-            "pago_realizado":      bool(data.get("pago_realizado", False)),
         }
         fotos            = [f for f in data.get("fotos", []) if f][:50]
         video_url_propio = data.get("video_url_propio")
