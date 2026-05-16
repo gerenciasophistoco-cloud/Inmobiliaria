@@ -34,18 +34,6 @@ fotosInput.addEventListener('change', function () {
   }
 });
 
-/* ── Logo preview ── */
-document.getElementById('logo').addEventListener('change', function () {
-  const file = this.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = e => {
-    document.getElementById('logoPreviewImg').src = e.target.result;
-    document.getElementById('logoPlaceholder').style.display = 'none';
-    document.getElementById('logoPreviewWrap').style.display = 'flex';
-  };
-  reader.readAsDataURL(file);
-});
 
 /* ── Foto del agente preview ── */
 document.getElementById('foto_agente').addEventListener('change', function () {
@@ -97,14 +85,6 @@ function removeFotoAgente() {
   document.getElementById('fotoAgentePreviewImg').src = '';
   document.getElementById('fotoAgentePlaceholder').style.display = '';
   document.getElementById('fotoAgentePreviewWrap').style.display = 'none';
-}
-
-function removeLogo() {
-  document.getElementById('logo').value = '';
-  document.getElementById('logoPreviewImg').src = '';
-  document.getElementById('logoPaletteChips').innerHTML = '';
-  document.getElementById('logoPlaceholder').style.display = '';
-  document.getElementById('logoPreviewWrap').style.display = 'none';
 }
 
 
@@ -621,7 +601,6 @@ function resetForm() {
   if (_readyTimer) { clearInterval(_readyTimer); _readyTimer = null; }
   const btnVer = document.getElementById('btnVerInmueble');
   if (btnVer) { btnVer.disabled = false; btnVer.querySelector('.btn-pdf-text').textContent = '🌐 Ver inmueble'; }
-  removeLogo();
   showPanel('empty');
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
