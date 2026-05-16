@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ListaPro — Contenido Inmobiliario con IA</title>
   <link rel="stylesheet" href="/static/style.css">
-  <!-- Google Maps se carga al final del body -->
+  <!-- Leaflet: fallback si Google Maps key no está configurada -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
     /* ── Grid de fotos ── */
     #photoPreview {
@@ -879,8 +881,188 @@
   };
 
   </script>
-  <!-- Google Maps JS API con Places -->
+  <!-- Google Maps JS API con Places (requiere GOOGLE_MAPS_KEY en env) -->
   <script src="https://maps.googleapis.com/maps/api/js?key=__GOOGLE_MAPS_KEY__&libraries=places&callback=initGoogleMap&loading=async" defer></script>
+
+  <script>
+  /* ── Fallback Leaflet+Nominatim: se activa si Google Maps no carga ── */
+  (function() {
+    var TIMEOUT = 4000;  // esperar 4s a Google Maps; si no carga, usar Leaflet
+    var fallbackStarted = false;
+
+    function startLeafletFallback() {
+      if (fallbackStarted || typeof L === 'undefined') return;
+      fallbackStarted = true;
+
+      var mapDiv = document.getElementById('mapPreview');
+      if (!mapDiv) return;
+      document.getElementById('mapNoKey') && (document.getElementById('mapNoKey').style.display = 'block');
+
+      var lmap = L.map(mapDiv, { scrollWheelZoom: false }).setView([4.65, -74.09], 5);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© <a href="https://www.openstreetmap.org">OSM</a>', maxZoom: 19
+      }).addTo(lmap);
+
+      var lmarker = L.marker([4.65, -74.09], { draggable: true, opacity: 0 }).addTo(lmap);
+
+      function lPinTo(lat, lng) {
+        lmarker.setLatLng([lat, lng]);
+        lmarker.setOpacity(1);
+        lmap.setView([lat, lng], 16);
+        setTimeout(function(){ lmap.invalidateSize(); }, 100);
+        document.getElementById('coordenadas').value = lat.toFixed(6) + ',' + lng.toFixed(6);
+      }
+
+      /* Arrastrar pin */
+      lmarker.on('dragend', function() {
+        var p = lmarker.getLatLng();
+        document.getElementById('coordenadas').value = p.lat.toFixed(6) + ',' + p.lng.toFixed(6);
+      });
+
+      /* Clic en mapa → mover pin */
+      lmap.on('click', function(e) { lPinTo(e.latlng.lat, e.latlng.lng); });
+
+      /* Long press móvil */
+      var lpTimer=null, lpMoved=false;
+      mapDiv.addEventListener('touchstart', function(ev){
+        lpMoved=false;
+        var t=ev.touches[0];
+        lpTimer=setTimeout(function(){
+          if(lpMoved) return;
+          var r=mapDiv.getBoundingClientRect();
+          var pt=lmap.containerPointToLatLng(L.point(t.clientX-r.left, t.clientY-r.top));
+          lPinTo(pt.lat, pt.lng);
+          mapDiv.style.outline='3px solid #3b82f6';
+          setTimeout(function(){mapDiv.style.outline='';},350);
+        },600);
+      },{passive:true});
+      mapDiv.addEventListener('touchmove',function(){lpMoved=true;clearTimeout(lpTimer);},{passive:true});
+      mapDiv.addEventListener('touchend', function(){clearTimeout(lpTimer);},{passive:true});
+
+      /* Buscador con Nominatim — sin caché, siempre reactivo */
+      var searchEl = document.getElementById('mapSearch');
+      var searchTimer = null;
+
+      function nominatimSearch(q) {
+        if (!q || q.trim().length < 2) return;
+
+        /* GPS directas */
+        var gps = q.match(/^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/);
+        if (gps) { lPinTo(parseFloat(gps[1]), parseFloat(gps[2])); return; }
+
+        var url = 'https://nominatim.openstreetmap.org/search?format=json&limit=5' +
+                  '&countrycodes=co&accept-language=es&q=' + encodeURIComponent(q + ', Colombia');
+
+        fetch(url, { headers: { 'Accept-Language': 'es' } })
+          .then(function(r){ return r.json(); })
+          .then(function(data){
+            if (!data || !data.length) return;
+            lPinTo(parseFloat(data[0].lat), parseFloat(data[0].lon));
+          })
+          .catch(function(){});
+      }
+
+      /* Autocomplete dropdown con Nominatim */
+      var dd = null;
+      function closeDd(){ if(dd) dd.style.display='none'; }
+
+      function showDd(results) {
+        if (!dd) {
+          dd = document.createElement('ul');
+          dd.style.cssText = 'position:absolute;z-index:10000;left:0;right:0;top:100%;margin:2px 0 0;' +
+            'padding:0;list-style:none;background:#fff;border:1px solid #d1c9b8;border-radius:10px;' +
+            'box-shadow:0 6px 20px rgba(0,0,0,.13);max-height:200px;overflow-y:auto;display:none;';
+          searchEl.parentNode.style.position = 'relative';
+          searchEl.parentNode.appendChild(dd);
+        }
+        dd.innerHTML = '';
+        if (!results.length) { dd.style.display='none'; return; }
+        results.forEach(function(r){
+          var li = document.createElement('li');
+          li.style.cssText = 'padding:9px 13px;cursor:pointer;border-bottom:1px solid #f0ede7;font-size:13px;';
+          li.textContent = r.display_name.split(',').slice(0,3).join(', ');
+          li.addEventListener('mouseenter',function(){li.style.background='#fdf8f0';});
+          li.addEventListener('mouseleave',function(){li.style.background='';});
+          li.addEventListener('mousedown',function(e){
+            e.preventDefault();
+            searchEl.value = li.textContent;
+            lPinTo(parseFloat(r.lat), parseFloat(r.lon));
+            closeDd();
+          });
+          dd.appendChild(li);
+        });
+        dd.style.display='block';
+      }
+
+      if (searchEl) {
+        searchEl.addEventListener('input', function(){
+          clearTimeout(searchTimer);
+          var v = this.value;
+          if (!v || v.trim().length < 2) { closeDd(); return; }
+          var gps = v.match(/^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/);
+          if (gps) { lPinTo(parseFloat(gps[1]), parseFloat(gps[2])); closeDd(); return; }
+          searchTimer = setTimeout(function(){
+            var url = 'https://nominatim.openstreetmap.org/search?format=json&limit=5' +
+                      '&countrycodes=co&accept-language=es&q=' + encodeURIComponent(v + ', Colombia');
+            fetch(url,{headers:{'Accept-Language':'es'}})
+              .then(function(r){return r.json();})
+              .then(showDd).catch(function(){});
+          }, 400);
+        });
+        searchEl.addEventListener('blur', function(){ setTimeout(closeDd,200); });
+        document.addEventListener('click',function(e){
+          if(dd && !dd.contains(e.target) && e.target!==searchEl) closeDd();
+        });
+      }
+
+      /* Dirección blur → buscar con Nominatim */
+      var dirEl = document.getElementById('direccion');
+      if (dirEl) {
+        dirEl.addEventListener('blur', function(){
+          var dir = this.value.trim();
+          var ciu = document.getElementById('ciudad') ? document.getElementById('ciudad').value.trim() : '';
+          if (dir) nominatimSearch(dir + (ciu ? ', '+ciu : ''));
+        });
+      }
+
+      /* Ciudad seleccionada → centrar mapa */
+      var ciudadInput = document.getElementById('ciudad');
+      if (ciudadInput) {
+        ciudadInput.addEventListener('blur', function(){
+          var ciu = this.value.trim();
+          if (!ciu) return;
+          fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=co&q=' +
+                encodeURIComponent(ciu + ', Colombia'), { headers: {'Accept-Language':'es'} })
+            .then(function(r){return r.json();})
+            .then(function(d){
+              if(d && d.length) { lmap.setView([parseFloat(d[0].lat), parseFloat(d[0].lon)], 12); }
+            }).catch(function(){});
+        });
+      }
+
+      /* Coordenadas guardadas */
+      var saved = document.getElementById('coordenadas').value;
+      if (saved) {
+        var parts = saved.split(',');
+        if (parts.length === 2) lPinTo(parseFloat(parts[0]), parseFloat(parts[1]));
+      }
+    }
+
+    /* Si Google Maps no carga en 4s → activar Leaflet */
+    var gmapsTimer = setTimeout(function() {
+      if (typeof window.google === 'undefined' || typeof window.google.maps === 'undefined') {
+        startLeafletFallback();
+      }
+    }, TIMEOUT);
+
+    /* Si Google Maps SÍ carga (initGoogleMap es llamado) → cancelar timer */
+    var origInit = window.initGoogleMap;
+    window.initGoogleMap = function() {
+      clearTimeout(gmapsTimer);
+      if (origInit) origInit();
+    };
+  })();
+  </script>
 
 </body>
 </html>
