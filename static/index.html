@@ -115,15 +115,35 @@
           <div class="form-row two-col">
             <div class="field-group">
               <label for="tipo_propiedad">Tipo de propiedad <span class="required">*</span></label>
-              <select id="tipo_propiedad" name="tipo_propiedad" required>
+              <select id="tipo_propiedad" name="tipo_propiedad" required
+                      onchange="toggleOtroTipo(this.value)">
                 <option value="">Seleccionar...</option>
                 <option value="Casa">Casa</option>
                 <option value="Apartamento">Apartamento</option>
+                <option value="Finca">Finca</option>
                 <option value="Terreno / Lote">Terreno / Lote</option>
                 <option value="Penthouse">Penthouse</option>
                 <option value="Casa campestre">Casa campestre</option>
                 <option value="Local comercial">Local comercial</option>
+                <option value="Otro">Otro…</option>
               </select>
+              <input type="text" id="tipo_otro" name="tipo_otro"
+                     placeholder="¿Cuál tipo de inmueble?"
+                     style="display:none; margin-top:8px;"
+                     oninput="sincronizarOtroTipo(this.value)">
+              <script>
+              function toggleOtroTipo(val) {
+                var inp = document.getElementById('tipo_otro');
+                inp.style.display = val === 'Otro' ? 'block' : 'none';
+                if (val === 'Otro') inp.focus();
+              }
+              function sincronizarOtroTipo(val) {
+                /* El campo tipo_propiedad que se envía al backend
+                   debe tener el valor personalizado */
+                var sel = document.getElementById('tipo_propiedad');
+                sel.dataset.customValue = val.trim();
+              }
+              </script>
             </div>
             <div class="field-group">
               <label>Operación <span class="required">*</span></label>
@@ -410,23 +430,6 @@
             </div>
           </div>
 
-          <!-- Logo de la agencia -->
-          <div class="field-group" style="margin-top:0.85rem">
-            <label for="logo">Logo <span class="field-hint-inline">(define los colores del inmueble)</span></label>
-            <div class="logo-upload-area" id="logoUploadArea">
-              <input type="file" id="logo" name="logo" accept="image/*" class="file-input">
-              <div class="logo-upload-placeholder" id="logoPlaceholder">
-                <span class="logo-upload-icon">🏢</span>
-                <span class="logo-upload-text">Haz clic para subir el logo</span>
-                <span class="logo-upload-hint">PNG, JPG — los colores se usan en la página del inmueble</span>
-              </div>
-              <div class="logo-preview-wrap" id="logoPreviewWrap" style="display:none">
-                <img id="logoPreviewImg" src="" alt="Logo">
-                <div id="logoPaletteChips" class="logo-palette-chips"></div>
-                <button type="button" class="logo-remove-btn" onclick="removeLogo()">✕</button>
-              </div>
-            </div>
-          </div>
         </div>
 
         <button type="submit" class="btn-generate" id="btnGenerate">

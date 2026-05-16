@@ -321,14 +321,15 @@ form.addEventListener('submit', async e => {
   const formData = new FormData(form);
   formData.delete('fotos');
   photoFiles.forEach(f => formData.append('fotos', f));
-  // Zona + detalle de cada foto → el video solo muestra lo que el usuario escribe
   formData.set('foto_labels',       JSON.stringify(photoLabels));
   formData.set('foto_descriptions', JSON.stringify(photoDescriptions));
-  // Vincular el video de recorrido subido al property record
   if (lastVideoPropio) formData.set('video_recorrido_url', lastVideoPropio);
-  // Forzar pago_realizado siempre en el envío (el hidden input puede no capturarse solo)
-  var hidPago = document.getElementById('pago_realizado');
-  formData.set('pago_realizado', hidPago ? hidPago.value : 'false');
+  // Si tipo_propiedad = "Otro", usar el valor escrito por el usuario
+  const tipoSel = document.getElementById('tipo_propiedad');
+  if (tipoSel && tipoSel.value === 'Otro') {
+    const custom = (tipoSel.dataset.customValue || '').trim();
+    formData.set('tipo_propiedad', custom || 'Otro');
+  }
 
   try {
     const res = await fetch('/generate', { method: 'POST', body: formData });
