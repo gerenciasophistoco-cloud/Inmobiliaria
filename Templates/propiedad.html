@@ -346,7 +346,7 @@
               polling = false;
               if (poll) { clearInterval(poll); poll = null; }
               const msg = document.getElementById('mainVideoMsg');
-              if (msg) msg.textContent = '⚠️ ' + (d.video_url_error || 'Error generando video');
+              if (msg) msg.textContent = '⚠️ No se pudo generar el video automático. Verifica que hayas subido fotos al crear el inmueble.';
               return;
             }
 

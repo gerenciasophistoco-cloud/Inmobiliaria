@@ -934,12 +934,16 @@ def _video_task(task_id: str, data: dict, prop_id: Optional[str],
     except Exception as e:
         import traceback
         traceback.print_exc()
-        err_msg = str(e)
-        _up(status="error", error=err_msg, progress=0)
+        raw = str(e)
+        # Guardar en log el error completo; al usuario mostrar solo la causa raíz
+        log.error("Video task %s falló: %s", task_id, raw[:500])
+        # Mensaje limpio para el cliente: primera línea sin stderr de FFmpeg
+        first_line = raw.split('\n')[0][:200]
+        _up(status="error", error=first_line, progress=0)
         if prop_id:
-            update_err = {f"{field}_error": err_msg}
+            update_err = {f"{field}_error": first_line}
             if field == "video_url":
-                update_err["video_ready"] = True  # error no debe bloquear el link para siempre
+                update_err["video_ready"] = True
             db.update_property(prop_id, update_err)
 
 
