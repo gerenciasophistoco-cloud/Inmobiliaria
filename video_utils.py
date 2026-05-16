@@ -1118,17 +1118,17 @@ def generate_slideshow(
 
     specs = specs or {}
 
-    # 1. Fotos → JPEG (máximo 20 para no exceder memoria/tiempo)
+    # 1. Fotos → JPEG (máximo 50)
     jpegs: List[str] = []
-    for src in photo_sources[:20]:
+    for src in photo_sources[:50]:
         try:
             jpegs.append(_to_jpeg(src))
-            log.info("Foto %d/%d OK", len(jpegs), min(len(photo_sources), 6))
+            log.info("Foto %d OK: %s", len(jpegs), src[:60])
         except Exception as e:
-            log.warning("Foto omitida (%s): %s", src, e)
+            log.warning("Foto omitida (%s): %s", src[:60], e)
 
     if not jpegs:
-        raise ValueError("No se pudo obtener ninguna foto.")
+        raise ValueError(f"No se pudo procesar ninguna de las {len(photo_sources)} fotos.")
 
     # 2. Secuencia de slides
     sequence = _build_sequence(specs)
@@ -1157,7 +1157,19 @@ def generate_slideshow(
             # Añadir zona pill (descripción) si la hay
             ov = _add_zone(base_ov, desc) if desc and base_ov else base_ov
 
-        clips.append(_make_clip(jp, i, overlay_path=ov, dur=dur_per))
+        try:
+            clip_path = _make_clip(jp, i, overlay_path=ov, dur=dur_per)
+            # Validar que el clip tenga contenido
+            if os.path.exists(clip_path) and os.path.getsize(clip_path) > 1000:
+                clips.append(clip_path)
+                log.info("Clip %d OK (%d bytes)", i, os.path.getsize(clip_path))
+            else:
+                log.warning("Clip %d vacío, omitido", i)
+        except Exception as e:
+            log.warning("Clip %d falló, omitido: %s", i, e)
+
+    if not clips:
+        raise RuntimeError("No se pudo generar ningún clip de video. Verifica que las fotos sean válidas.")
 
     # 5. Outro
     try:
@@ -1169,6 +1181,7 @@ def generate_slideshow(
         log.warning("Outro omitido: %s", e)
 
     # 6. Concat con re-encode para timestamps continuos (seek funciona correctamente)
+    log.info("Iniciando concat de %d clips", len(clips))
     playlist = str(Path(tempfile.mkdtemp()) / "playlist.txt")
     with open(playlist, "w") as f:
         for clip in clips:
@@ -1209,12 +1222,16 @@ def generate_slideshow(
         r = _run_concat(["-c", "copy", "-fflags", "+genpts"])
 
     if r.returncode != 0:
-        raise RuntimeError(
-            f"Concat error:\n{r.stderr.decode('utf-8', errors='replace')[-800:]}")
+        stderr_tail = r.stderr.decode('utf-8', errors='replace')[-600:]
+        log.error("Concat fallido (todos los intentos). stderr:\n%s", stderr_tail)
+        raise RuntimeError(f"Concat falló con {len(clips)} clips. Error FFmpeg: {stderr_tail[:200]}")
+
+    if not os.path.exists(output):
+        raise RuntimeError("El archivo de video no fue creado por FFmpeg.")
 
     size = os.path.getsize(output)
-    if size < 1000:
-        raise RuntimeError(f"Video final vacío ({size} bytes)")
+    if size < 5000:
+        raise RuntimeError(f"Video generado demasiado pequeño ({size} bytes) con {len(clips)} clips.")
     log.info("Slideshow OK: %d clips, %d bytes", len(clips), size)
 
     # 7. Añadir música de fondo
