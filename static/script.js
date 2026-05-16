@@ -120,7 +120,7 @@ uploadArea.addEventListener('drop', e => {
 });
 
 /* ── Gestión de fotos ── */
-const MAX_PHOTOS = 10;
+const MAX_PHOTOS = 50;
 let dragFromIdx = -1;
 
 function addPhotos(fileList) {
