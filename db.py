@@ -95,6 +95,22 @@ def _format_card(prop_id: str, data: dict) -> dict:
     }
 
 
+def delete_property(property_id: str) -> bool:
+    """Elimina una propiedad permanentemente."""
+    client = _get_client()
+    if client is None:
+        if property_id in _memory_store:
+            del _memory_store[property_id]
+            return True
+        return False
+    try:
+        client.table("propiedades").delete().eq("id", property_id).execute()
+        return True
+    except Exception as e:
+        log.error("Error eliminando propiedad %s: %s", property_id, e)
+        return False
+
+
 def get_all_properties(limit: int = 300) -> list:
     """Retorna todas las propiedades ordenadas por fecha (panel admin)."""
     client = _get_client()

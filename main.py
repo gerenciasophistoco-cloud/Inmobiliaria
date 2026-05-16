@@ -221,6 +221,15 @@ async def admin_panel(request: Request):
     })
 
 
+@app.delete("/admin/propiedad/{property_id}")
+async def eliminar_propiedad(property_id: str):
+    """Elimina una propiedad permanentemente del sistema."""
+    ok = db.delete_property(property_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Propiedad no encontrada")
+    return JSONResponse({"deleted": True})
+
+
 @app.post("/admin/acceso/{property_id}")
 async def toggle_acceso(property_id: str):
     """Activa o desactiva el acceso público a un inmueble."""

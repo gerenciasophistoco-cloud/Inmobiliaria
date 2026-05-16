@@ -9,6 +9,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@400,0&display=swap" rel="stylesheet"/>
 <style>
   body { font-family: 'Manrope', sans-serif; background: #f8f6f2; }
+
+  /* Toggle */
   .toggle-track {
     width: 48px; height: 26px; border-radius: 13px; position: relative;
     cursor: pointer; transition: background 0.2s; flex-shrink: 0;
@@ -18,71 +20,111 @@
   .toggle-knob {
     width: 20px; height: 20px; border-radius: 50%; background: #fff;
     position: absolute; top: 3px; transition: transform 0.2s;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.25); pointer-events: none;
   }
   .toggle-track.on  .toggle-knob { transform: translateX(22px); }
   .toggle-track.off .toggle-knob { transform: translateX(3px); }
-  .copy-btn { transition: all 0.15s; }
-  .copy-btn:hover { background: #e9c349 !important; }
-  .prop-row { transition: box-shadow 0.15s; }
-  .prop-row:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+
+  /* Fila */
+  .prop-row { transition: box-shadow 0.15s, opacity 0.2s; }
+  .prop-row:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.07); z-index: 1; }
+  .prop-row.deleted { opacity: 0; height: 0; overflow: hidden; padding: 0; border: none; }
+
+  /* Botón eliminar */
+  .del-btn {
+    background: none; border: 1px solid #fecaca; border-radius: 8px;
+    width: 34px; height: 34px; cursor: pointer; display: flex;
+    align-items: center; justify-content: center; font-size: 15px;
+    transition: background 0.15s, border-color 0.15s; flex-shrink: 0;
+    color: #dc2626;
+  }
+  .del-btn:hover { background: #fef2f2; border-color: #dc2626; }
+
+  /* Buscador */
+  .search-wrap { position: relative; }
+  .search-wrap svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #9ca3af; }
+  #searchInput {
+    width: 100%; padding: 10px 14px 10px 38px; border-radius: 10px;
+    border: 1.5px solid #e5e0d8; background: #fff; font-size: 14px;
+    font-family: 'Manrope', sans-serif; outline: none; transition: border-color 0.15s;
+  }
+  #searchInput:focus { border-color: #c9a227; }
+
+  /* Sin resultados */
+  #noResults { display: none; text-align: center; padding: 40px; color: #9ca3af; font-size: 14px; }
 </style>
 </head>
 <body class="min-h-screen">
 
   <!-- Header -->
   <header style="background:linear-gradient(135deg,#1a1a2e,#16213e); padding:18px 24px;
-                 display:flex; align-items:center; justify-content:space-between;">
+                 display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
     <div style="display:flex;align-items:center;gap:12px;">
-      <span style="font-size:28px;">🏠</span>
+      <span style="font-size:26px;">🏠</span>
       <div>
-        <h1 style="color:#fff;font-weight:800;font-size:20px;margin:0;line-height:1.2;">ListaPro Admin</h1>
-        <p style="color:#e9c349;font-size:12px;margin:0;font-weight:600;">Mis Propiedades</p>
+        <h1 style="color:#fff;font-weight:800;font-size:18px;margin:0;line-height:1.2;">ListaPro Admin</h1>
+        <p style="color:#e9c349;font-size:11px;margin:0;font-weight:600;letter-spacing:0.04em;">MIS PROPIEDADES</p>
       </div>
     </div>
-    <div style="display:flex;align-items:center;gap:16px;">
-      <span style="color:#94a3b8;font-size:13px;">{{ properties|length }} inmueble{{ 's' if properties|length != 1 else '' }}</span>
-      <a href="/" style="color:#e9c349;font-size:13px;font-weight:600;text-decoration:none;
-                         background:rgba(233,195,73,0.15);padding:6px 14px;border-radius:8px;
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <span id="countLabel" style="color:#94a3b8;font-size:13px;">
+        {{ properties|length }} inmueble{{ 's' if properties|length != 1 else '' }}
+      </span>
+      <a href="/" style="color:#e9c349;font-size:13px;font-weight:700;text-decoration:none;
+                         background:rgba(233,195,73,0.15);padding:8px 16px;border-radius:8px;
                          border:1px solid rgba(233,195,73,0.3);">
         + Nuevo inmueble
       </a>
     </div>
   </header>
 
-  <main style="max-width:1100px;margin:0 auto;padding:28px 16px;">
+  <main style="max-width:1100px;margin:0 auto;padding:24px 16px;">
 
     {% if not properties %}
     <div style="text-align:center;padding:80px 20px;color:#9ca3af;">
       <span class="material-symbols-outlined" style="font-size:64px;display:block;margin-bottom:12px;">apartment</span>
-      <p style="font-size:18px;font-weight:600;margin:0 0 6px;">No tienes propiedades aún</p>
+      <p style="font-size:18px;font-weight:600;margin:0 0 6px;color:#6b7280;">No tienes propiedades aún</p>
       <p style="font-size:14px;margin:0 0 20px;">Carga tu primer inmueble para verlo aquí</p>
       <a href="/" style="background:#735c00;color:#fff;padding:12px 28px;border-radius:10px;
                          text-decoration:none;font-weight:700;">Cargar inmueble</a>
     </div>
     {% else %}
 
+    <!-- Buscador / Filtro -->
+    <div class="search-wrap" style="margin-bottom:16px;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input id="searchInput" type="text"
+             placeholder="Filtrar por inmueble, agente, ciudad o link…"
+             oninput="filterRows(this.value)">
+    </div>
+
     <!-- Tabla -->
     <div style="background:#fff;border-radius:16px;border:1px solid #e5e0d8;overflow:hidden;">
 
-      <!-- Cabecera tabla -->
-      <div style="display:grid;grid-template-columns:72px 1fr 220px 110px;gap:0;
-                  background:#f6f3ee;border-bottom:1px solid #e5e0d8;
-                  padding:10px 16px;font-size:11px;font-weight:700;
-                  letter-spacing:0.06em;color:#78716c;text-transform:uppercase;">
+      <!-- Cabecera -->
+      <div style="display:grid;grid-template-columns:72px 1fr 200px 112px 42px;gap:0;
+                  background:#f6f3ee;border-bottom:1px solid #e5e0d8;padding:10px 16px;
+                  font-size:11px;font-weight:700;letter-spacing:0.06em;
+                  color:#78716c;text-transform:uppercase;align-items:center;">
         <span>Foto</span>
         <span>Inmueble</span>
         <span>Link</span>
         <span style="text-align:center;">Acceso</span>
+        <span></span>
       </div>
 
+      <!-- Filas -->
+      <div id="propList">
       {% for prop in properties %}
       <div class="prop-row" id="row-{{ prop.id }}"
-           style="display:grid;grid-template-columns:72px 1fr 220px 110px;gap:0;
+           data-search="{{ (prop.nombre ~ ' ' ~ prop.nombre_agente ~ ' ' ~ prop.ciudad ~ ' ' ~ prop.slug) | lower }}"
+           style="display:grid;grid-template-columns:72px 1fr 200px 112px 42px;gap:0;
                   align-items:center;border-bottom:1px solid #f0ede7;padding:14px 16px;
-                  background:#fff;{% if not prop.acceso_activo %}opacity:0.65;{% endif %}">
+                  background:#fff;{% if not prop.acceso_activo %}opacity:0.6;{% endif %}">
 
-        <!-- Foto miniatura -->
+        <!-- Foto -->
         <div>
           {% if prop.foto %}
           <img src="{{ prop.foto }}" alt=""
@@ -91,55 +133,54 @@
           {% else %}
           <div style="width:56px;height:56px;border-radius:8px;background:#f0ede7;
                       display:flex;align-items:center;justify-content:center;">
-            <span class="material-symbols-outlined" style="font-size:24px;color:#a8a29e;">apartment</span>
+            <span class="material-symbols-outlined" style="font-size:22px;color:#a8a29e;">apartment</span>
           </div>
           {% endif %}
         </div>
 
-        <!-- Info del inmueble -->
-        <div style="padding-right:12px;min-width:0;">
-          <p style="font-weight:700;font-size:14px;color:#1c1b1b;margin:0 0 3px;
+        <!-- Info: nombre + agente + precio -->
+        <div style="padding:0 12px;min-width:0;">
+          <p style="font-weight:700;font-size:14px;color:#1c1b1b;margin:0 0 2px;
                     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
             {{ prop.nombre }}
           </p>
-          <p style="font-size:12px;color:#78716c;margin:0 0 4px;">
-            {{ prop.operacion or '' }}{% if prop.precio %} · {{ prop.precio }}{% endif %}
+          <p style="font-size:12px;color:#735c00;margin:0 0 2px;font-weight:600;
+                    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+            👤 {{ prop.nombre_agente or '—' }}
           </p>
           <p style="font-size:11px;color:#a8a29e;margin:0;">
-            {{ prop.created_at[:10] if prop.created_at else '' }}
+            {{ prop.operacion or '' }}{% if prop.precio %} · {{ prop.precio }}{% endif %}
+            {% if prop.created_at %} · {{ prop.created_at[:10] }}{% endif %}
           </p>
         </div>
 
-        <!-- Link + botón copiar -->
+        <!-- Link -->
         <div style="padding-right:12px;">
-          <div style="display:flex;align-items:center;gap:6px;">
+          <div style="display:flex;align-items:center;gap:5px;margin-bottom:4px;">
             <code style="font-size:11px;color:#735c00;background:#fef9e7;
                          padding:3px 7px;border-radius:5px;border:1px solid #e9c349;
                          white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-                         max-width:130px;display:block;"
-                  title="/propiedad/{{ prop.slug }}">/propiedad/{{ prop.slug[:22] }}{% if prop.slug|length > 22 %}…{% endif %}</code>
+                         max-width:135px;display:block;"
+                  title="/propiedad/{{ prop.slug }}">/…/{{ prop.slug[:20] }}{% if prop.slug|length > 20 %}…{% endif %}</code>
             <button onclick="copyLink('{{ prop.slug }}')"
                     id="copy-{{ prop.slug }}"
-                    class="copy-btn"
                     title="Copiar link"
                     style="background:#f6f3ee;border:1px solid #e5e0d8;border-radius:6px;
-                           padding:5px 8px;cursor:pointer;flex-shrink:0;font-size:13px;">
+                           padding:4px 7px;cursor:pointer;flex-shrink:0;font-size:13px;">
               📋
             </button>
           </div>
           <a href="/propiedad/{{ prop.slug }}" target="_blank"
-             style="font-size:11px;color:#735c00;text-decoration:none;margin-top:4px;display:inline-block;
-                    opacity:0.7;">
+             style="font-size:11px;color:#735c00;text-decoration:none;opacity:0.7;">
             Ver micrositio →
           </a>
         </div>
 
-        <!-- Toggle acceso_activo -->
+        <!-- Toggle acceso -->
         <div style="display:flex;flex-direction:column;align-items:center;gap:5px;">
           <div class="toggle-track {{ 'on' if prop.acceso_activo else 'off' }}"
                id="toggle-{{ prop.id }}"
-               onclick="toggleAcceso('{{ prop.id }}', this)"
-               title="{{ 'Activo — clic para desactivar' if prop.acceso_activo else 'Inactivo — clic para activar' }}">
+               onclick="toggleAcceso('{{ prop.id }}', this)">
             <div class="toggle-knob"></div>
           </div>
           <span id="label-{{ prop.id }}"
@@ -149,8 +190,23 @@
           </span>
         </div>
 
+        <!-- Eliminar -->
+        <div style="display:flex;justify-content:center;">
+          <button class="del-btn"
+                  onclick="confirmarEliminar('{{ prop.id }}', {{ prop.nombre | tojson }})"
+                  title="Eliminar inmueble">
+            🗑️
+          </button>
+        </div>
+
       </div>
       {% endfor %}
+      </div>
+
+      <div id="noResults">
+        <span class="material-symbols-outlined" style="font-size:36px;display:block;margin-bottom:8px;">search_off</span>
+        Sin resultados para tu búsqueda
+      </div>
     </div>
 
     {% endif %}
@@ -158,48 +214,121 @@
 
   <!-- Toast -->
   <div id="toast" style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);
-                          background:#1c1b1b;color:#fff;padding:10px 20px;border-radius:50px;
+                          background:#1c1b1b;color:#fff;padding:10px 22px;border-radius:50px;
                           font-size:13px;font-weight:600;opacity:0;transition:all 0.25s;
-                          pointer-events:none;z-index:100;white-space:nowrap;">
+                          pointer-events:none;z-index:999;white-space:nowrap;">
     ✅ Link copiado
   </div>
 
+  <!-- Modal confirmar eliminar -->
+  <div id="delModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);
+                             z-index:200;align-items:center;justify-content:center;padding:20px;">
+    <div style="background:#fff;border-radius:16px;padding:28px 24px;max-width:400px;width:100%;
+                box-shadow:0 20px 60px rgba(0,0,0,0.3);text-align:center;">
+      <p style="font-size:36px;margin:0 0 12px;">🗑️</p>
+      <h3 style="font-size:17px;font-weight:800;color:#1c1b1b;margin:0 0 8px;">¿Eliminar este inmueble?</h3>
+      <p id="delModalName" style="font-size:13px;color:#6b7280;margin:0 0 20px;font-weight:600;"></p>
+      <p style="font-size:12px;color:#ef4444;margin:0 0 24px;background:#fef2f2;
+                padding:8px 12px;border-radius:8px;">
+        ⚠️ Esta acción es permanente y no se puede deshacer
+      </p>
+      <div style="display:flex;gap:10px;justify-content:center;">
+        <button onclick="cerrarModal()"
+                style="padding:10px 22px;border-radius:10px;border:1.5px solid #e5e0d8;
+                       background:#fff;font-weight:700;font-size:14px;cursor:pointer;">
+          Cancelar
+        </button>
+        <button id="delConfirmBtn"
+                style="padding:10px 22px;border-radius:10px;border:none;
+                       background:#dc2626;color:#fff;font-weight:700;font-size:14px;cursor:pointer;">
+          Sí, eliminar
+        </button>
+      </div>
+    </div>
+  </div>
+
 <script>
-  /* ── Copiar link amigable ── */
+  var _pendingDeleteId = null;
+
+  /* ── Filtro de búsqueda ── */
+  function filterRows(q) {
+    q = q.toLowerCase().trim();
+    var rows   = document.querySelectorAll('.prop-row');
+    var visible = 0;
+    rows.forEach(function(row) {
+      var match = !q || (row.dataset.search || '').includes(q);
+      row.style.display = match ? '' : 'none';
+      if (match) visible++;
+    });
+    document.getElementById('noResults').style.display = visible === 0 ? 'block' : 'none';
+    document.getElementById('countLabel').textContent =
+      visible + ' inmueble' + (visible !== 1 ? 's' : '') +
+      (q ? ' encontrado' + (visible !== 1 ? 's' : '') : '');
+  }
+
+  /* ── Copiar link ── */
   function copyLink(slug) {
     var url = window.location.origin + '/propiedad/' + slug;
     navigator.clipboard.writeText(url).then(function() {
       var btn = document.getElementById('copy-' + slug);
       if (btn) { btn.textContent = '✅'; setTimeout(function(){ btn.textContent = '📋'; }, 1800); }
       showToast('✅ Link copiado al portapapeles');
-    }).catch(function() {
-      prompt('Copia este link:', url);
-    });
+    }).catch(function() { prompt('Copia este link:', url); });
   }
 
-  /* ── Toggle acceso_activo ── */
+  /* ── Toggle acceso ── */
   async function toggleAcceso(propId, trackEl) {
-    trackEl.style.opacity = '0.5';
-    trackEl.style.pointerEvents = 'none';
+    trackEl.style.opacity = '0.5'; trackEl.style.pointerEvents = 'none';
     try {
-      var r  = await fetch('/admin/acceso/' + propId, { method: 'POST' });
-      var d  = await r.json();
-      if (!r.ok) throw new Error('Error del servidor');
+      var r = await fetch('/admin/acceso/' + propId, { method: 'POST' });
+      var d = await r.json();
+      if (!r.ok) throw new Error();
       var activo = d.acceso_activo;
       trackEl.className = 'toggle-track ' + (activo ? 'on' : 'off');
       var label = document.getElementById('label-' + propId);
-      if (label) {
-        label.textContent = activo ? 'ACTIVO' : 'INACTIVO';
-        label.style.color = activo ? '#16a34a' : '#dc2626';
-      }
+      if (label) { label.textContent = activo ? 'ACTIVO' : 'INACTIVO'; label.style.color = activo ? '#16a34a' : '#dc2626'; }
       var row = document.getElementById('row-' + propId);
-      if (row) row.style.opacity = activo ? '1' : '0.65';
+      if (row) row.style.opacity = activo ? '1' : '0.6';
       showToast(activo ? '✅ Inmueble activado' : '🔒 Inmueble desactivado');
+    } catch(e) { showToast('⚠️ Error al cambiar estado'); }
+    finally { trackEl.style.opacity = '1'; trackEl.style.pointerEvents = 'auto'; }
+  }
+
+  /* ── Eliminar ── */
+  function confirmarEliminar(propId, propName) {
+    _pendingDeleteId = propId;
+    document.getElementById('delModalName').textContent = propName;
+    var modal = document.getElementById('delModal');
+    modal.style.display = 'flex';
+    document.getElementById('delConfirmBtn').onclick = ejecutarEliminar;
+  }
+
+  function cerrarModal() {
+    document.getElementById('delModal').style.display = 'none';
+    _pendingDeleteId = null;
+  }
+
+  async function ejecutarEliminar() {
+    if (!_pendingDeleteId) return;
+    var btn = document.getElementById('delConfirmBtn');
+    btn.textContent = 'Eliminando…'; btn.disabled = true;
+    try {
+      var r = await fetch('/admin/propiedad/' + _pendingDeleteId, { method: 'DELETE' });
+      if (!r.ok) throw new Error();
+      /* Animación de salida */
+      var row = document.getElementById('row-' + _pendingDeleteId);
+      if (row) {
+        row.style.transition = 'opacity 0.3s, max-height 0.4s';
+        row.style.opacity = '0';
+        row.style.maxHeight = row.offsetHeight + 'px';
+        setTimeout(function() { row.style.maxHeight = '0'; row.style.padding = '0'; row.style.border = 'none'; }, 300);
+        setTimeout(function() { row.remove(); }, 700);
+      }
+      cerrarModal();
+      showToast('🗑️ Inmueble eliminado');
     } catch(e) {
-      showToast('⚠️ Error al cambiar estado');
-    } finally {
-      trackEl.style.opacity = '1';
-      trackEl.style.pointerEvents = 'auto';
+      showToast('⚠️ Error al eliminar');
+      btn.textContent = 'Sí, eliminar'; btn.disabled = false;
     }
   }
 
@@ -208,8 +337,13 @@
     var t = document.getElementById('toast');
     t.textContent = msg;
     t.style.opacity = '1'; t.style.transform = 'translateX(-50%) translateY(0)';
-    setTimeout(function(){ t.style.opacity='0'; t.style.transform='translateX(-50%) translateY(20px)'; }, 2200);
+    setTimeout(function(){ t.style.opacity='0'; t.style.transform='translateX(-50%) translateY(20px)'; }, 2400);
   }
+
+  /* Cerrar modal al clic fuera */
+  document.getElementById('delModal').addEventListener('click', function(e) {
+    if (e.target === this) cerrarModal();
+  });
 </script>
 
 </body>
