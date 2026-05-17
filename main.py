@@ -13,8 +13,9 @@ from pathlib import Path
 from typing import List, Optional
 
 from dotenv import load_dotenv
-from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from anthropic import AsyncAnthropic
@@ -26,6 +27,47 @@ import storage
 load_dotenv()
 
 app = FastAPI(title="ListaPro")
+
+# ── Protección del panel de administración ────────────────────────────────────
+_http_basic = HTTPBasic(auto_error=False)
+
+def require_admin(credentials: Optional[HTTPBasicCredentials] = Depends(_http_basic)):
+    """
+    Protege todas las rutas /admin con HTTP Basic Auth.
+    Configura en Railway → Variables:
+      ADMIN_USER     = tu_usuario   (defecto: "admin")
+      ADMIN_PASSWORD = tu_contraseña_secreta
+    Si ADMIN_PASSWORD no está configurada, el panel queda desprotegido
+    y aparece un aviso en los logs (solo para desarrollo local).
+    """
+    import secrets
+    pwd = os.getenv("ADMIN_PASSWORD", "").strip()
+    usr = os.getenv("ADMIN_USER", "admin").strip()
+
+    if not pwd:
+        log.warning("⚠️  ADMIN_PASSWORD no configurada — panel de admin SIN protección")
+        return "dev"
+
+    if credentials is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Acceso al panel de administración requerido.",
+            headers={"WWW-Authenticate": 'Basic realm="ListaPro Admin"'},
+        )
+
+    user_ok = secrets.compare_digest(
+        credentials.username.encode("utf-8"), usr.encode("utf-8")
+    )
+    pass_ok = secrets.compare_digest(
+        credentials.password.encode("utf-8"), pwd.encode("utf-8")
+    )
+    if not (user_ok and pass_ok):
+        raise HTTPException(
+            status_code=401,
+            detail="Usuario o contraseña incorrectos.",
+            headers={"WWW-Authenticate": 'Basic realm="ListaPro Admin"'},
+        )
+    return credentials.username
 
 # ── Patrón UUID para distinguir IDs legacy de slugs amigables ────────────────
 _UUID_RE = re.compile(
@@ -213,7 +255,7 @@ async def root():
 
 # ── Editar propiedad existente ────────────────────────────────────────────────
 @app.get("/admin/editar/{property_id}", response_class=HTMLResponse)
-async def editar_propiedad(property_id: str):
+async def editar_propiedad(property_id: str, _: str = Depends(require_admin)):
     data = db.get_property(property_id)
     if not data:
         raise HTTPException(status_code=404, detail="Propiedad no encontrada")
@@ -258,6 +300,7 @@ async def editar_propiedad(property_id: str):
 @app.post("/admin/actualizar/{property_id}")
 async def actualizar_propiedad(
     property_id: str,
+    _: str = Depends(require_admin),
     tipo_propiedad: str = Form(...),
     operacion:      str = Form(...),
     direccion:      str = Form(...),
@@ -488,7 +531,7 @@ async def actualizar_propiedad(
 
 # ── Diagnóstico de Cloudinary ────────────────────────────────────────────────
 @app.get("/admin/test-cloudinary")
-async def test_cloudinary():
+async def test_cloudinary(_: str = Depends(require_admin)):
     """
     Verifica si Cloudinary está correctamente configurado y operativo.
     Abre este link en Railway para diagnosticar problemas de subida de fotos.
@@ -501,6 +544,7 @@ async def test_cloudinary():
 @app.post("/admin/descripcion/{property_id}")
 async def guardar_descripcion(
     property_id: str,
+    _: str = Depends(require_admin),
     descripcion:       str = Form(...),
     ig_copy:           Optional[str] = Form(None),
     frase_inspiradora: Optional[str] = Form(None),
@@ -514,7 +558,7 @@ async def guardar_descripcion(
 
 # ── Panel de administración ───────────────────────────────────────────────────
 @app.get("/admin", response_class=HTMLResponse)
-async def admin_panel(request: Request):
+async def admin_panel(request: Request, _: str = Depends(require_admin)):
     properties  = db.get_all_properties()
     db_status   = db.connection_status()
     return templates.TemplateResponse("admin.html", {
@@ -527,7 +571,7 @@ async def admin_panel(request: Request):
 
 
 @app.delete("/admin/propiedad/{property_id}")
-async def eliminar_propiedad(property_id: str):
+async def eliminar_propiedad(property_id: str, _: str = Depends(require_admin)):
     """Elimina una propiedad permanentemente y borra sus fotos de Cloudinary."""
     data = db.get_property(property_id)
     if not data:
@@ -546,7 +590,7 @@ async def eliminar_propiedad(property_id: str):
 
 
 @app.post("/admin/acceso/{property_id}")
-async def toggle_acceso(property_id: str):
+async def toggle_acceso(property_id: str, _: str = Depends(require_admin)):
     """Activa o desactiva el acceso público a un inmueble."""
     data = db.get_property(property_id)
     if not data:
@@ -1008,7 +1052,7 @@ async def stream_video(filename: str, request: Request):
 
 # ── Toggle de pago (admin) ────────────────────────────────────────────────────
 @app.post("/admin/pago/{property_id}")
-async def toggle_pago(property_id: str):
+async def toggle_pago(property_id: str, _: str = Depends(require_admin)):
     """
     Activa/desactiva pago_realizado.
     Al confirmar pago (True): limpia el video y lanza regeneración sin marca de agua.
