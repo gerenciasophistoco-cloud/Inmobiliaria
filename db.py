@@ -26,6 +26,12 @@ def _get_client():
         return None
 
 
+def is_persistent() -> bool:
+    """Retorna True si los datos se guardan en Supabase (persistente).
+    False = modo memoria temporal (datos se pierden al reiniciar)."""
+    return _get_client() is not None
+
+
 def save_property(property_id: str, data: dict) -> str:
     """Guarda o actualiza una propiedad. Retorna el property_id."""
     client = _get_client()

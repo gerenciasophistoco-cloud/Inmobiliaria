@@ -389,8 +389,9 @@ async def actualizar_propiedad(
 async def admin_panel(request: Request):
     properties = db.get_all_properties()
     return templates.TemplateResponse("admin.html", {
-        "request":    request,
-        "properties": properties,
+        "request":         request,
+        "properties":      properties,
+        "db_persistente":  db.is_persistent(),
     })
 
 
