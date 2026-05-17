@@ -358,6 +358,70 @@ async def actualizar_propiedad(
             f"Hola, estoy interesado en la propiedad en {direccion}, {ciudad}"
         ),
     }
+    # Regenerar descripción con IA si el usuario puso notas en "otras_caracteristicas"
+    descripciones_nuevas: list = []
+    ig_copy_nuevo: str = ""
+    frase_nueva: str = ""
+    if otras_caracteristicas and otras_caracteristicas.strip():
+        try:
+            specs_list = []
+            if habitaciones and habitaciones.strip() and habitaciones != "0":
+                specs_list.append(f"{habitaciones} habitaciones")
+            if banos and banos.strip() and banos != "0":
+                specs_list.append(f"{banos} baños")
+            if metros_construidos and metros_construidos.strip():
+                specs_list.append(f"{metros_construidos} m² construidos")
+            if metros_terreno and metros_terreno.strip():
+                specs_list.append(f"{metros_terreno} m² de terreno")
+            if estacionamientos and estacionamientos.strip() and estacionamientos != "0":
+                specs_list.append(f"{estacionamientos} garaje(s)")
+            otras_str = otras_caracteristicas.strip()
+            amenidades_str = ", ".join(amenidades) if amenidades else "Ninguna especificada"
+            property_info = (
+                f"Tipo de propiedad: {tipo_propiedad}\nOperación: {operacion}\n"
+                f"Ubicación: {direccion}, {ciudad}, Colombia\nPrecio: {precio_fmt}\n"
+                f"Especificaciones: {', '.join(specs_list) if specs_list else 'No especificadas'}\n"
+                f"Amenidades: {amenidades_str}\n"
+                f"DETALLES CLAVE (OBLIGATORIO incluirlos): {otras_str}\n"
+                f"Contacto: {nombre_agente} | {telefono_agente}"
+            )
+            desc_p = (
+                f"Eres un experto en bienes raíces en Colombia.\n"
+                f"Genera 5 descripciones DIFERENTES para esta propiedad en {operacion.lower()}. "
+                f"Cada una con un enfoque distinto: 1.Emocional 2.Ubicación 3.Técnica 4.Estilo de vida 5.Breve.\n"
+                f"Requisitos: español colombiano, tono elegante, 50-70 palabras, sin markdown.\n"
+                f"RESPONDE SOLO con el array JSON sin texto adicional:\n"
+                f'["desc1","desc2","desc3","desc4","desc5"]\nDatos:\n{property_info}'
+            )
+            ig_p = (
+                f"Crea un copy irresistible para Instagram sobre esta propiedad en {operacion.lower()}. "
+                f"Inicia con gancho+emojis, destaca 3-4 características, menciona precio y ubicación, "
+                f"CTA para contactar a {nombre_agente} al {telefono_agente}, "
+                f"cierra con 15-20 hashtags colombianos. Máx 2200 caracteres, texto plano.\nDatos:\n{property_info}"
+            )
+            frase_p = (
+                f"Crea UNA frase corta y poética (máx 18 palabras) en español que inspire a querer vivir "
+                f"en esta propiedad. Sin signos de exclamación, sin hashtags. Solo la frase.\nDatos:\n{property_info}"
+            )
+            ai = get_client()
+            dr, ir, fr = await asyncio.gather(
+                ai.messages.create(model="claude-sonnet-4-5", max_tokens=500,
+                                   messages=[{"role": "user", "content": desc_p}]),
+                ai.messages.create(model="claude-sonnet-4-5", max_tokens=800,
+                                   messages=[{"role": "user", "content": ig_p}]),
+                ai.messages.create(model="claude-sonnet-4-5", max_tokens=80,
+                                   messages=[{"role": "user", "content": frase_p}]),
+            )
+            descripciones_nuevas = _parse_descriptions(dr.content[0].text.strip())
+            ig_copy_nuevo  = ir.content[0].text.strip()
+            frase_nueva    = fr.content[0].text.strip().strip('"').strip("'")
+            # Guardar la primera descripción generada (el usuario puede cambiarla luego)
+            updated["descripcion"]       = descripciones_nuevas[0]
+            updated["frase_inspiradora"] = frase_nueva
+            log.info("Descripciones regeneradas para %s (%d opciones)", property_id, len(descripciones_nuevas))
+        except Exception as ai_err:
+            log.warning("No se pudo regenerar descripción: %s", ai_err)
+
     db.save_property(property_id, updated)
 
     # Regenerar video siempre que haya fotos (mismo link, video actualizado)
@@ -401,11 +465,30 @@ async def actualizar_propiedad(
 
     slug = existing.get("slug") or property_id
     return JSONResponse({
-        "ok": True,
-        "property_id": property_id,
-        "property_slug": slug,
+        "ok":                True,
+        "property_id":       property_id,
+        "property_slug":     slug,
         "regenerating_video": bool(foto_paths),
+        "descripciones":     descripciones_nuevas,
+        "descripcion":       descripciones_nuevas[0] if descripciones_nuevas else "",
+        "ig_copy":           ig_copy_nuevo,
+        "frase_inspiradora": frase_nueva,
     })
+
+
+# ── Guardar descripción elegida por el usuario después de la edición ─────────
+@app.post("/admin/descripcion/{property_id}")
+async def guardar_descripcion(
+    property_id: str,
+    descripcion:       str = Form(...),
+    ig_copy:           Optional[str] = Form(None),
+    frase_inspiradora: Optional[str] = Form(None),
+):
+    fields: dict = {"descripcion": descripcion}
+    if ig_copy:           fields["ig_copy"]           = ig_copy
+    if frase_inspiradora: fields["frase_inspiradora"] = frase_inspiradora
+    ok = db.update_property(property_id, fields)
+    return JSONResponse({"ok": ok})
 
 
 # ── Panel de administración ───────────────────────────────────────────────────

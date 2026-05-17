@@ -896,12 +896,84 @@
         var res = await fetch('/admin/actualizar/' + propId, { method: 'POST', body: fd });
         if (!res.ok) throw new Error('Error HTTP ' + res.status);
         var result = await res.json();
-        /* Redirigir al mismo micrositio (link no cambia) */
-        window.location.href = '/propiedad/' + (result.property_slug || slug || propId);
+        var destino = '/propiedad/' + (result.property_slug || slug || propId);
+        /* Si hay nuevas descripciones, mostrar picker antes de redirigir */
+        if (result.descripciones && result.descripciones.length > 0) {
+          if (btn) { btn.disabled = false; btn.querySelector('.btn-text').textContent = '💾 Guardar cambios'; }
+          _mostrarPickerDesc(result.descripciones, propId, destino, result.ig_copy || '', result.frase_inspiradora || '');
+        } else {
+          window.location.href = destino;
+        }
       } catch (err) {
         alert('Error al guardar: ' + err.message);
         if (btn) { btn.disabled = false; btn.querySelector('.btn-text').textContent = '💾 Guardar cambios'; }
       }
+    }
+
+    /* ── Picker de descripción post-edición ── */
+    var _descElegida = '';
+    var _igElegido   = '';
+    var _fraseElegida = '';
+
+    function _mostrarPickerDesc(descs, propId, destino, igCopy, frase) {
+      _igElegido = igCopy; _fraseElegida = frase;
+      var overlay = document.createElement('div');
+      overlay.id = 'descPickerOverlay';
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:9999;' +
+        'display:flex;align-items:center;justify-content:center;padding:16px;';
+      var box = document.createElement('div');
+      box.style.cssText = 'background:#fff;border-radius:18px;padding:28px 24px;max-width:620px;width:100%;' +
+        'max-height:88vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,0.35);';
+      box.innerHTML = '<h2 style="font-size:17px;font-weight:800;color:#1c1b1b;margin:0 0 6px;">✨ Nuevas opciones de descripción</h2>' +
+        '<p style="font-size:13px;color:#6b7280;margin:0 0 20px;">El texto fue generado con tus notas actualizadas. Elige la opción que mejor represente el inmueble:</p>';
+      descs.forEach(function(desc, i) {
+        var card = document.createElement('div');
+        card.className = 'desc-pick-card';
+        card.dataset.desc = desc;
+        card.style.cssText = 'border:2px solid #e5e0d8;border-radius:12px;padding:14px 16px;margin-bottom:10px;' +
+          'cursor:pointer;transition:border-color 0.15s,background 0.15s;';
+        card.innerHTML = '<span style="font-size:10px;font-weight:800;color:#735c00;letter-spacing:0.06em;">OPCIÓN ' + (i+1) + '</span>' +
+          '<p style="font-size:13px;color:#374151;margin:6px 0 0;line-height:1.6;">' + desc + '</p>';
+        card.addEventListener('mouseover', function(){ if (!card.dataset.sel) card.style.borderColor='#c9a227'; });
+        card.addEventListener('mouseout',  function(){ if (!card.dataset.sel) card.style.borderColor='#e5e0d8'; });
+        card.addEventListener('click', function() {
+          document.querySelectorAll('.desc-pick-card').forEach(function(c) {
+            c.style.borderColor = '#e5e0d8'; c.style.background = '#fff'; delete c.dataset.sel;
+          });
+          card.style.borderColor = '#c9a227'; card.style.background = '#fef9e7'; card.dataset.sel = '1';
+          _descElegida = desc;
+          document.getElementById('btnUsarDesc').style.display = 'inline-block';
+        });
+        box.appendChild(card);
+      });
+      var footer = document.createElement('div');
+      footer.style.cssText = 'display:flex;gap:10px;justify-content:flex-end;margin-top:20px;';
+      footer.innerHTML =
+        '<button onclick="document.getElementById(\'descPickerOverlay\').remove();window.location.href=\'' + destino + '\'" ' +
+        'style="padding:10px 22px;border-radius:10px;border:1.5px solid #e5e0d8;background:#fff;font-weight:700;font-size:14px;cursor:pointer;">Omitir</button>' +
+        '<button id="btnUsarDesc" ' +
+        'style="display:none;padding:10px 22px;border-radius:10px;border:none;background:#735c00;color:#fff;font-weight:700;font-size:14px;cursor:pointer;">✅ Usar esta descripción</button>';
+      document.getElementById('btnUsarDesc', footer);
+      box.appendChild(footer);
+      overlay.appendChild(box);
+      document.body.appendChild(overlay);
+      document.getElementById('btnUsarDesc').addEventListener('click', function() {
+        _guardarDescEleccion(propId, destino);
+      });
+    }
+
+    async function _guardarDescEleccion(propId, destino) {
+      if (!_descElegida) return;
+      var btn = document.getElementById('btnUsarDesc');
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ Guardando...'; }
+      try {
+        var fd2 = new FormData();
+        fd2.append('descripcion', _descElegida);
+        if (_igElegido)    fd2.append('ig_copy', _igElegido);
+        if (_fraseElegida) fd2.append('frase_inspiradora', _fraseElegida);
+        await fetch('/admin/descripcion/' + propId, { method: 'POST', body: fd2 });
+      } catch(e) {}
+      window.location.href = destino;
     }
 
     /* Pre-llenar campos de texto */
