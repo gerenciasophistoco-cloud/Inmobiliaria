@@ -52,12 +52,12 @@ def upload_file(file_obj, filename: str, folder: str = "listapro") -> Optional[s
             )
             return result["secure_url"]
         except Exception as e:
-            log.error("Error subiendo a Cloudinary: %s", e)
-            # Caer a disco local si Cloudinary falla
-            if hasattr(file_obj, "seek"):
-                file_obj.seek(0)
+            log.error("Error subiendo a Cloudinary (NO se hace fallback a disco): %s", e)
+            # Si Cloudinary está configurado pero falla, NO caer a disco local:
+            # las fotos en /uploads/ se borran en cada redeploy de Railway.
+            return None
 
-    # ── Disco local ─────────────────────────────────────────────────────────
+    # ── Disco local (solo cuando CLOUDINARY_URL no está configurado) ─────────
     upload_dir = _local_upload_dir()
     filepath = upload_dir / unique_name
     if hasattr(file_obj, "read"):
@@ -66,6 +66,8 @@ def upload_file(file_obj, filename: str, folder: str = "listapro") -> Optional[s
     else:
         filepath.write_bytes(file_obj)
 
+    log.warning("Foto guardada en disco local (/uploads/) — se perderá al reiniciar el servidor. "
+                "Configura CLOUDINARY_URL en Railway para persistencia real.")
     return f"/uploads/{unique_name}"
 
 

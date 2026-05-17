@@ -103,12 +103,16 @@
   <section class="relative w-full overflow-hidden" style="height:clamp(320px,55vw,480px);">
     {% if fotos %}
     <img class="w-full h-full object-cover" src="{{ fotos[0] }}"
-         alt="{{ tipo_propiedad }} en {{ ciudad }}" loading="eager"/>
-    {% else %}
-    <div class="w-full h-full bg-surface-container-high flex items-center justify-center">
-      <span class="material-symbols-outlined text-outline" style="font-size:72px;">apartment</span>
-    </div>
+         alt="{{ tipo_propiedad }} en {{ ciudad }}" loading="eager"
+         onerror="this.style.display='none';document.getElementById('heroFallback').style.display='flex'"/>
     {% endif %}
+    <div id="heroFallback"
+         style="display:{% if not fotos %}flex{% else %}none{% endif %};width:100%;height:100%;
+                background:linear-gradient(135deg,#1a1a2e,#2d3561);
+                align-items:center;justify-content:center;flex-direction:column;gap:12px;">
+      <span class="material-symbols-outlined" style="font-size:72px;color:#e9c349;">apartment</span>
+      <span style="color:#ffffff80;font-size:13px;font-family:Manrope,sans-serif;">{{ tipo_propiedad }} en {{ ciudad }}</span>
+    </div>
 
     <!-- Gradiente oscuro sobre foto -->
     <div class="absolute inset-0" style="background:linear-gradient(to top, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.45) 55%, rgba(0,0,0,0.15) 100%);"></div>
@@ -203,11 +207,12 @@
       </div>
       <div class="grid grid-cols-2 md:grid-cols-5 gap-3 h-[200px] md:h-[180px]">
         {% for foto in fotos[0:5] %}
-        <div class="rounded-xl overflow-hidden shadow-sm relative cursor-pointer group"
+        <div class="rounded-xl overflow-hidden shadow-sm relative cursor-pointer group bg-surface-container"
              onclick="openGallery({{ loop.index0 }})">
           <img class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105
                       {% if loop.last and fotos | length > 5 %}brightness-[0.35]{% endif %}"
-               src="{{ foto }}" alt="Foto {{ loop.index }}"/>
+               src="{{ foto }}" alt="Foto {{ loop.index }}"
+               onerror="this.style.opacity='0'"/>
           {% if loop.last and fotos | length > 5 %}
           <div class="absolute inset-0 flex items-center justify-center" style="z-index:11;">
             <span class="text-white font-bold text-3xl">+{{ fotos | length - 5 }}</span>
