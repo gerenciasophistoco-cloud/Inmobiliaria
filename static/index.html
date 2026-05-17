@@ -874,9 +874,10 @@
       try {
         var fd = new FormData(form);
         fd.delete('fotos');
-        Array.from(document.getElementById('fotos').files || []).forEach(function(f) { fd.append('fotos', f); });
-        fd.set('foto_labels',       JSON.stringify(photoLabels));
-        fd.set('foto_descriptions', JSON.stringify(photoDescriptions));
+        /* photoFiles es el array global de script.js; el input #fotos se resetea tras cada selección */
+        (typeof photoFiles !== 'undefined' ? photoFiles : []).forEach(function(f) { fd.append('fotos', f); });
+        fd.set('foto_labels',       JSON.stringify(typeof photoLabels !== 'undefined' ? photoLabels : []));
+        fd.set('foto_descriptions', JSON.stringify(typeof photoDescriptions !== 'undefined' ? photoDescriptions : []));
         /* Enviar las URLs de fotos existentes que el usuario conservó */
         (window._fotosExistentes || []).forEach(function(url) { fd.append('fotos_existentes', url); });
         var tipoSel = document.getElementById('tipo_propiedad');
