@@ -246,10 +246,9 @@ async def editar_propiedad(property_id: str):
     with open("static/index.html", "r", encoding="utf-8") as f:
         html = f.read()
     inject = (
-        f'\n<script>\nwindow.EDIT_MODE=true;\n'
-        f'window.EDIT_DATA={edit_payload};\n</script>\n'
+        f'<script>window.EDIT_MODE=true;window.EDIT_DATA={edit_payload};</script>\n'
     )
-    return html.replace("</body>", inject + "</body>")
+    return html.replace("</head>", inject + "</head>", 1)
 
 
 @app.post("/admin/actualizar/{property_id}")

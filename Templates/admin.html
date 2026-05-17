@@ -269,36 +269,8 @@
     ✅ Link copiado
   </div>
 
-  <!-- Modal confirmar eliminar -->
-  <div id="delModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);
-                             z-index:200;align-items:center;justify-content:center;padding:20px;">
-    <div style="background:#fff;border-radius:16px;padding:28px 24px;max-width:400px;width:100%;
-                box-shadow:0 20px 60px rgba(0,0,0,0.3);text-align:center;">
-      <p style="font-size:36px;margin:0 0 12px;">🗑️</p>
-      <h3 style="font-size:17px;font-weight:800;color:#1c1b1b;margin:0 0 8px;">¿Eliminar este inmueble?</h3>
-      <p id="delModalName" style="font-size:13px;color:#6b7280;margin:0 0 20px;font-weight:600;"></p>
-      <p style="font-size:12px;color:#ef4444;margin:0 0 24px;background:#fef2f2;
-                padding:8px 12px;border-radius:8px;">
-        ⚠️ Esta acción es permanente y no se puede deshacer
-      </p>
-      <div style="display:flex;gap:10px;justify-content:center;">
-        <button onclick="cerrarModal()"
-                style="padding:10px 22px;border-radius:10px;border:1.5px solid #e5e0d8;
-                       background:#fff;font-weight:700;font-size:14px;cursor:pointer;">
-          Cancelar
-        </button>
-        <button id="delConfirmBtn"
-                style="padding:10px 22px;border-radius:10px;border:none;
-                       background:#dc2626;color:#fff;font-weight:700;font-size:14px;cursor:pointer;">
-          Sí, eliminar
-        </button>
-      </div>
-    </div>
-  </div>
 
 <script>
-  var _pendingDeleteId = null;
-
   /* ── Filtro de búsqueda ── */
   function filterRows(q) {
     q = q.toLowerCase().trim();
@@ -344,40 +316,23 @@
   }
 
   /* ── Eliminar ── */
-  function confirmarEliminar(propId, propName) {
-    _pendingDeleteId = propId;
-    document.getElementById('delModalName').textContent = propName;
-    var modal = document.getElementById('delModal');
-    modal.style.display = 'flex';
-    document.getElementById('delConfirmBtn').onclick = ejecutarEliminar;
-  }
-
-  function cerrarModal() {
-    document.getElementById('delModal').style.display = 'none';
-    _pendingDeleteId = null;
-  }
-
-  async function ejecutarEliminar() {
-    if (!_pendingDeleteId) return;
-    var btn = document.getElementById('delConfirmBtn');
-    btn.textContent = 'Eliminando…'; btn.disabled = true;
+  async function confirmarEliminar(propId, propName) {
+    if (!confirm('¿Está seguro que quiere eliminar esta propiedad?\n\n' + propName + '\n\nEsta acción es permanente y no se puede deshacer.')) return;
+    var btn = document.querySelector('[onclick*="' + propId + '"].del-btn');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
     try {
-      var r = await fetch('/admin/propiedad/' + _pendingDeleteId, { method: 'DELETE' });
-      if (!r.ok) throw new Error();
-      /* Animación de salida */
-      var row = document.getElementById('row-' + _pendingDeleteId);
+      var r = await fetch('/admin/propiedad/' + propId, { method: 'DELETE' });
+      if (!r.ok) { var err = await r.json().catch(function(){ return {}; }); throw new Error(err.detail || 'Error ' + r.status); }
+      var row = document.getElementById('row-' + propId);
       if (row) {
-        row.style.transition = 'opacity 0.3s, max-height 0.4s';
+        row.style.transition = 'opacity 0.3s';
         row.style.opacity = '0';
-        row.style.maxHeight = row.offsetHeight + 'px';
-        setTimeout(function() { row.style.maxHeight = '0'; row.style.padding = '0'; row.style.border = 'none'; }, 300);
-        setTimeout(function() { row.remove(); }, 700);
+        setTimeout(function() { row.remove(); }, 320);
       }
-      cerrarModal();
       showToast('🗑️ Inmueble eliminado');
     } catch(e) {
-      showToast('⚠️ Error al eliminar');
-      btn.textContent = 'Sí, eliminar'; btn.disabled = false;
+      showToast('⚠️ Error al eliminar: ' + e.message);
+      if (btn) { btn.disabled = false; btn.textContent = '🗑️'; }
     }
   }
 
@@ -389,10 +344,7 @@
     setTimeout(function(){ t.style.opacity='0'; t.style.transform='translateX(-50%) translateY(20px)'; }, 2400);
   }
 
-  /* Cerrar modal al clic fuera */
-  document.getElementById('delModal').addEventListener('click', function(e) {
-    if (e.target === this) cerrarModal();
-  });
+
 </script>
 
 </body>
