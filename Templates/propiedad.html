@@ -139,7 +139,7 @@
         <!-- Precio -->
         <div class="font-bold text-primary-fixed-dim mb-3"
              style="font-size:clamp(18px,5vw,28px);">
-          {{ precio }}
+          {{ precio | precio_corto }}
         </div>
 
         <!-- Bar inferior hero: iconos de specs + estrato -->
@@ -652,7 +652,7 @@
               {{ prop.nombre }}
             </h4>
             <p style="color:#c9a227;" class="font-price-display text-[17px] font-bold">
-              {{ prop.precio }}
+              {{ prop.precio | precio_corto }}
             </p>
 
             <!-- Iconos: área · hab · baños · garaje -->

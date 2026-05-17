@@ -110,6 +110,31 @@ if not _tpl_dir.exists():
     _tpl_dir = BASE_DIR / "templates"
 templates = Jinja2Templates(directory=str(_tpl_dir))
 
+def _precio_corto(precio_str: str) -> str:
+    """
+    Convierte un precio formateado a versión corta:
+      '$1.100.000.000 COP' → '$1.100M'
+      '$850.515.415 COP'   → '$851M'
+      '$450.000 COP'       → '$450K'
+    """
+    import re as _re
+    nums = _re.sub(r"[^\d]", "", str(precio_str or ""))
+    if not nums:
+        return precio_str
+    n = int(nums)
+    if n >= 1_000_000_000:
+        m = round(n / 1_000_000)
+        return f"${m:,}M".replace(",", ".")
+    if n >= 1_000_000:
+        m = round(n / 1_000_000)
+        return f"${m:,}M".replace(",", ".")
+    if n >= 1_000:
+        k = round(n / 1_000)
+        return f"${k:,}K".replace(",", ".")
+    return precio_str
+
+templates.env.filters["precio_corto"] = _precio_corto
+
 # Crear carpetas necesarias si no existen (por si Railway no las recibe del repo)
 _static_dir  = BASE_DIR / "static"
 _uploads_dir = BASE_DIR / "uploads"
