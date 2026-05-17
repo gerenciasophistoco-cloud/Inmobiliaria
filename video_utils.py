@@ -73,34 +73,40 @@ def _ffmpeg_bin() -> str:
     return "ffmpeg"
 
 
+_MAX_PHOTO_DIM = 1920   # máximo lado antes de pasar a FFmpeg
+
+
 def _to_jpeg(src: str) -> str:
-    """Descarga / lee src y lo convierte a JPEG sin ICC Profile."""
+    """
+    Descarga/lee src, redimensiona si excede _MAX_PHOTO_DIM y guarda JPEG limpio.
+    Redimensionar evita timeouts de FFmpeg con fotos de cámara 4K o superior.
+    """
+    import io as _io
+    from PIL import Image as _PILImg
     out = str(Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.jpg")
-    raw = src
+
+    # 1. Leer bytes
     if src.startswith(("http://", "https://")):
-        raw = str(Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.img")
         req = urllib.request.Request(src, headers={"User-Agent": "ListaPro/1.0"})
-        with urllib.request.urlopen(req, timeout=20) as r:
-            with open(raw, "wb") as f:
-                f.write(r.read())
+        with urllib.request.urlopen(req, timeout=40) as resp:
+            raw_bytes = resp.read()
     elif src.startswith(("/uploads/", "/tmp/")):
         candidate = Path(__file__).parent / src.lstrip("/")
-        if candidate.exists():
-            raw = str(candidate)
-    r = subprocess.run(
-        [_ffmpeg_bin(), "-y", "-i", raw,
-         "-frames:v", "1", "-q:v", "2", "-map_metadata", "-1", out],
-        capture_output=True, timeout=30,
-    )
-    if r.returncode == 0 and os.path.exists(out) and os.path.getsize(out) > 0:
+        raw_bytes = candidate.read_bytes() if candidate.exists() else Path(src).read_bytes()
+    else:
+        raw_bytes = Path(src).read_bytes()
+
+    # 2. Abrir con Pillow y redimensionar si hace falta
+    img = _PILImg.open(_io.BytesIO(raw_bytes)).convert("RGB")
+    if max(img.size) > _MAX_PHOTO_DIM:
+        log.info("Foto grande %dx%d → redimensionando a máx %dpx", img.width, img.height, _MAX_PHOTO_DIM)
+        img.thumbnail((_MAX_PHOTO_DIM, _MAX_PHOTO_DIM), _PILImg.LANCZOS)
+
+    # 3. Guardar JPEG sin metadata ni ICC
+    img.save(out, "JPEG", quality=92)
+    if os.path.getsize(out) > 0:
         return out
-    try:
-        from PIL import Image
-        Image.open(raw).convert("RGB").save(out, "JPEG", quality=90)
-        return out
-    except Exception:
-        pass
-    return raw
+    raise RuntimeError(f"_to_jpeg produjo archivo vacío: {src[:80]}")
 
 
 # ─── Pillow helpers ───────────────────────────────────────────────────────────
@@ -945,7 +951,7 @@ def _make_clip(jpeg: str, idx: int, overlay_path: Optional[str] = None,
         "-pix_fmt", "yuv420p",
         "-bsf:v", "filter_units=remove_types=6", out,
     ]
-    r = subprocess.run(cmd, capture_output=True, timeout=120)
+    r = subprocess.run(cmd, capture_output=True, timeout=180)
     if r.returncode != 0:
         raise RuntimeError(r.stderr.decode("utf-8", errors="replace")[-600:])
     size = os.path.getsize(out)

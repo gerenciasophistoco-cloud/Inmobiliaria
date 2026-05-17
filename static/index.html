@@ -843,5 +843,136 @@
     }
   })();
   </script>
+
+  <!-- ── Pre-llenado del formulario en modo edición ── -->
+  <script>
+  (function () {
+    if (!window.EDIT_MODE || !window.EDIT_DATA) return;
+    var d = window.EDIT_DATA;
+
+    /* Cambiar título y botón */
+    document.title = 'Editar Inmueble — ListaPro';
+    var btn = document.getElementById('btnGenerate');
+    if (btn) {
+      btn.querySelector('.btn-text').textContent = '💾 Guardar cambios';
+    }
+
+    /* Redirigir el submit al endpoint de actualización */
+    var form = document.getElementById('propertyForm');
+    if (form) {
+      form.dataset.editId = d.property_id;
+      form.addEventListener('submit', function (e) {
+        if (!form.dataset.editId) return; // modo normal
+        e.preventDefault();
+        guardarEdicion(form, d.property_id, d.slug);
+      }, true);
+    }
+
+    async function guardarEdicion(form, propId, slug) {
+      var btn = document.getElementById('btnGenerate');
+      if (btn) { btn.disabled = true; btn.querySelector('.btn-text').textContent = '⏳ Guardando...'; }
+      try {
+        var fd = new FormData(form);
+        fd.delete('fotos');
+        Array.from(document.getElementById('fotos').files || []).forEach(function(f) { fd.append('fotos', f); });
+        fd.set('foto_labels',       JSON.stringify(photoLabels));
+        fd.set('foto_descriptions', JSON.stringify(photoDescriptions));
+        var tipoSel = document.getElementById('tipo_propiedad');
+        if (tipoSel && tipoSel.value === 'Otro') {
+          fd.set('tipo_propiedad', (tipoSel.dataset.customValue || '').trim() || 'Otro');
+        }
+        var res = await fetch('/admin/actualizar/' + propId, { method: 'POST', body: fd });
+        if (!res.ok) throw new Error('Error HTTP ' + res.status);
+        var result = await res.json();
+        /* Redirigir al micrositio actualizado */
+        window.location.href = '/propiedad/' + (result.property_slug || propId);
+      } catch (err) {
+        alert('Error al guardar: ' + err.message);
+        if (btn) { btn.disabled = false; btn.querySelector('.btn-text').textContent = '💾 Guardar cambios'; }
+      }
+    }
+
+    /* Pre-llenar campos de texto */
+    function setVal(id, val) {
+      var el = document.getElementById(id);
+      if (el && val !== undefined && val !== null) el.value = val;
+    }
+    setVal('direccion',         d.direccion);
+    setVal('habitaciones',      d.habitaciones);
+    setVal('banos',             d.banos);
+    setVal('metros_construidos', d.metros_construidos);
+    setVal('metros_terreno',    d.metros_terreno);
+    setVal('estacionamientos',  d.estacionamientos);
+    setVal('estrato',           d.estrato);
+    setVal('ano_construccion',  d.ano_construccion);
+    setVal('otras_caracteristicas', d.otras_caracteristicas);
+    setVal('nombre_inmobiliaria', d.nombre_inmobiliaria);
+    setVal('nombre_agente',     d.nombre_agente);
+    setVal('telefono_agente',   d.telefono_agente);
+    setVal('email_agente',      d.email_agente);
+
+    /* Ciudad */
+    var ciudadEl = document.getElementById('ciudad');
+    if (ciudadEl && d.ciudad) ciudadEl.value = d.ciudad;
+
+    /* Precio: formatear como número local */
+    if (d.precio) {
+      var precioEl = document.getElementById('precio');
+      if (precioEl) {
+        var num = parseInt(String(d.precio).replace(/\D/g, ''));
+        if (!isNaN(num)) precioEl.value = num.toLocaleString('de-DE');
+      }
+    }
+
+    /* Tipo de propiedad */
+    var tipoSel = document.getElementById('tipo_propiedad');
+    if (tipoSel && d.tipo_propiedad) {
+      var opt = Array.from(tipoSel.options).find(function(o) { return o.value === d.tipo_propiedad; });
+      if (opt) {
+        tipoSel.value = d.tipo_propiedad;
+      } else {
+        /* Tipo personalizado → seleccionar "Otro" y mostrar input */
+        tipoSel.value = 'Otro';
+        tipoSel.dataset.customValue = d.tipo_propiedad;
+        var inp = document.getElementById('tipo_otro');
+        if (inp) { inp.style.display = 'block'; inp.value = d.tipo_propiedad; }
+      }
+    }
+
+    /* Operación (radio) */
+    if (d.operacion) {
+      var radios = document.querySelectorAll('input[name="operacion"]');
+      radios.forEach(function(r) { if (r.value === d.operacion) r.checked = true; });
+      /* Disparar evento para actualizar el estilo del toggle */
+      var checked = document.querySelector('input[name="operacion"]:checked');
+      if (checked) checked.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    /* Amenidades */
+    if (Array.isArray(d.amenidades) && d.amenidades.length) {
+      d.amenidades.forEach(function(am) {
+        var cb = document.querySelector('input[name="amenidades"][value="' + am + '"]');
+        if (cb) { cb.checked = true; cb.dispatchEvent(new Event('change', { bubbles: true })); }
+      });
+    }
+
+    /* Fotos existentes: mostrar banner informativo */
+    if (Array.isArray(d.fotos) && d.fotos.length) {
+      var placeholder = document.getElementById('uploadPlaceholder');
+      if (placeholder) {
+        var info = document.createElement('p');
+        info.style.cssText = 'margin:8px 0 0;font-size:12px;color:#735c00;font-weight:600;';
+        info.textContent = '📁 ' + d.fotos.length + ' foto(s) ya guardadas. Sube nuevas solo si quieres añadir más.';
+        placeholder.appendChild(info);
+      }
+    }
+
+    /* Coordenadas: llenar campo oculto */
+    if (d.coordenadas) {
+      var coordEl = document.getElementById('coordenadas');
+      if (coordEl) coordEl.value = d.coordenadas;
+    }
+  })();
+  </script>
 </body>
 </html>

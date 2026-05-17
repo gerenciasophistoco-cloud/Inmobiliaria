@@ -211,6 +211,179 @@ async def root():
         return f.read()
 
 
+# ── Editar propiedad existente ────────────────────────────────────────────────
+@app.get("/admin/editar/{property_id}", response_class=HTMLResponse)
+async def editar_propiedad(property_id: str):
+    data = db.get_property(property_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Propiedad no encontrada")
+    # Extraer precio numérico del formato "$850.000.000 COP"
+    precio_raw = re.sub(r"[^\d]", "", data.get("precio", ""))
+    edit_payload = _json.dumps({
+        "property_id":       property_id,
+        "tipo_propiedad":    data.get("tipo_propiedad", ""),
+        "operacion":         data.get("operacion", "Venta"),
+        "ciudad":            data.get("ciudad", ""),
+        "precio":            precio_raw,
+        "direccion":         data.get("direccion", ""),
+        "habitaciones":      data.get("habitaciones") or "",
+        "banos":             data.get("banos") or "",
+        "metros_construidos": data.get("metros") or "",
+        "metros_terreno":    data.get("metros_terreno") or "",
+        "estacionamientos":  data.get("estacionamientos") or "",
+        "estrato":           data.get("estrato") or "",
+        "ano_construccion":  data.get("ano_construccion") or "",
+        "otras_caracteristicas": data.get("otras_caracteristicas") or "",
+        "nombre_inmobiliaria": data.get("nombre_inmobiliaria") or "",
+        "nombre_agente":     data.get("nombre_agente") or "",
+        "telefono_agente":   data.get("telefono_agente") or "",
+        "email_agente":      data.get("email_agente") or "",
+        "amenidades":        data.get("amenidades") or [],
+        "coordenadas":       data.get("coordenadas") or "",
+        "fotos":             data.get("fotos") or [],
+        "slug":              data.get("slug") or property_id,
+    }, ensure_ascii=False)
+    with open("static/index.html", "r", encoding="utf-8") as f:
+        html = f.read()
+    inject = (
+        f'\n<script>\nwindow.EDIT_MODE=true;\n'
+        f'window.EDIT_DATA={edit_payload};\n</script>\n'
+    )
+    return html.replace("</body>", inject + "</body>")
+
+
+@app.post("/admin/actualizar/{property_id}")
+async def actualizar_propiedad(
+    property_id: str,
+    tipo_propiedad: str = Form(...),
+    operacion:      str = Form(...),
+    direccion:      str = Form(...),
+    ciudad:         str = Form(...),
+    precio:         str = Form(...),
+    habitaciones:   Optional[str] = Form(None),
+    banos:          Optional[str] = Form(None),
+    metros_construidos: Optional[str] = Form(None),
+    metros_terreno: Optional[str] = Form(None),
+    estacionamientos: Optional[str] = Form(None),
+    estrato:        Optional[str] = Form(None),
+    ano_construccion: Optional[str] = Form(None),
+    amenidades:     List[str] = Form(default=[]),
+    otras_caracteristicas: Optional[str] = Form(None),
+    nombre_inmobiliaria: Optional[str] = Form(None),
+    nombre_agente:  str = Form(...),
+    telefono_agente: str = Form(...),
+    email_agente:   Optional[str] = Form(None),
+    coordenadas:    Optional[str] = Form(None),
+    fotos:          List[UploadFile] = File(default=[]),
+    foto_agente:    Optional[UploadFile] = File(default=None),
+):
+    existing = db.get_property(property_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Propiedad no encontrada")
+
+    precio_digits = "".join(filter(str.isdigit, precio))
+    precio_num    = int(precio_digits) if precio_digits else 0
+    precio_fmt    = "$" + f"{precio_num:,}".replace(",", ".") + " COP"
+
+    # Subir fotos nuevas si las hay
+    new_foto_paths: List[str] = []
+    for foto in fotos:
+        if foto.filename and foto.filename.strip():
+            url = storage.upload_file(foto.file, foto.filename, folder="listapro/fotos")
+            if url:
+                new_foto_paths.append(url)
+
+    # Mantener fotos existentes; agregar nuevas al final
+    foto_paths = existing.get("fotos") or []
+    if new_foto_paths:
+        foto_paths = foto_paths + new_foto_paths
+
+    # Foto del agente: reusar existente si no se subió nueva
+    foto_agente_path = existing.get("foto_agente_url") or ""
+    if foto_agente and foto_agente.filename and foto_agente.filename.strip():
+        url = storage.upload_file(foto_agente.file, foto_agente.filename, folder="listapro/agentes")
+        if url:
+            foto_agente_path = url
+
+    updated = {
+        **existing,
+        "tipo_propiedad":    tipo_propiedad,
+        "operacion":         operacion,
+        "direccion":         direccion,
+        "ciudad":            ciudad,
+        "precio":            precio_fmt,
+        "habitaciones":      habitaciones or "",
+        "banos":             banos or "",
+        "metros":            metros_construidos or "",
+        "metros_terreno":    metros_terreno or "",
+        "estacionamientos":  estacionamientos or "",
+        "estrato":           estrato or "",
+        "ano_construccion":  ano_construccion or "",
+        "amenidades":        amenidades or [],
+        "otras_caracteristicas": otras_caracteristicas or "",
+        "nombre_inmobiliaria": nombre_inmobiliaria or nombre_agente,
+        "nombre_agente":     nombre_agente,
+        "telefono_agente":   telefono_agente,
+        "email_agente":      email_agente or "",
+        "coordenadas":       coordenadas or "",
+        "fotos":             foto_paths,
+        "foto_agente_url":   foto_agente_path,
+        "whatsapp_link":     _whatsapp_link(
+            telefono_agente,
+            f"Hola, estoy interesado en la propiedad en {direccion}, {ciudad}"
+        ),
+    }
+    db.save_property(property_id, updated)
+
+    # Regenerar video solo si se añadieron fotos nuevas
+    if new_foto_paths:
+        from video_utils import ffmpeg_available
+        if ffmpeg_available():
+            import threading as _th
+            task_id = str(uuid.uuid4())
+            _video_tasks[task_id] = {
+                "status": "running", "progress": 0,
+                "status_text": "regenerando video",
+                "output_path": None, "error": None, "video_url": None,
+                "property_id": property_id,
+            }
+            video_data = {
+                "fotos": foto_paths,
+                "nombre_agente": nombre_agente,
+                "telefono_agente": telefono_agente,
+                "habitaciones": habitaciones or "",
+                "banos": banos or "",
+                "metros_construidos": metros_construidos or "",
+                "estacionamientos": estacionamientos or "",
+                "precio": precio_fmt,
+                "ciudad": ciudad,
+                "direccion": direccion,
+                "tipo_propiedad": tipo_propiedad,
+                "operacion": operacion,
+                "nombre_inmobiliaria": nombre_inmobiliaria or nombre_agente,
+                "amenidades": amenidades or [],
+                "foto_labels": existing.get("foto_labels") or [],
+                "foto_descriptions": existing.get("foto_descriptions") or [],
+                "foto_agente_url": foto_agente_path,
+                "logo_url": existing.get("logo_url") or "",
+                "video_url_propio": None,
+            }
+            db.update_property(property_id, {"video_url": None, "video_ready": False})
+            _th.Thread(
+                target=_video_task,
+                args=(task_id, video_data, property_id, "video_url"),
+                daemon=True,
+            ).start()
+
+    slug = existing.get("slug") or property_id
+    return JSONResponse({
+        "ok": True,
+        "property_id": property_id,
+        "property_slug": slug,
+        "regenerating_video": bool(new_foto_paths),
+    })
+
+
 # ── Panel de administración ───────────────────────────────────────────────────
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_panel(request: Request):
