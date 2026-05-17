@@ -138,38 +138,44 @@
           {{ precio }}
         </div>
 
-        <!-- Características + estrato -->
-        <div class="flex items-end justify-between text-white gap-2">
-          <div class="flex gap-4">
+        <!-- Bar inferior hero: iconos de specs + estrato -->
+        <div class="flex items-end justify-between text-white gap-2 flex-wrap">
+          <div class="flex flex-wrap gap-x-4 gap-y-1">
             {% if metros %}
             <div class="flex flex-col items-center gap-0.5">
-              <span class="material-symbols-outlined text-primary-fixed" style="font-size:22px;">square_foot</span>
-              <span style="font-size:10px;" class="font-label-caps">{{ metros }} m²</span>
+              <span class="material-symbols-outlined text-primary-fixed" style="font-size:20px;">square_foot</span>
+              <span style="font-size:9px;" class="font-label-caps">{{ metros }} m²</span>
+            </div>
+            {% endif %}
+            {% if metros_terreno %}
+            <div class="flex flex-col items-center gap-0.5">
+              <span class="material-symbols-outlined text-primary-fixed" style="font-size:20px;">landscape</span>
+              <span style="font-size:9px;" class="font-label-caps">{{ metros_terreno }} m²T</span>
             </div>
             {% endif %}
             {% if habitaciones %}
             <div class="flex flex-col items-center gap-0.5">
-              <span class="material-symbols-outlined text-primary-fixed" style="font-size:22px;">bed</span>
-              <span style="font-size:10px;" class="font-label-caps">{{ habitaciones }} Hab.</span>
+              <span class="material-symbols-outlined text-primary-fixed" style="font-size:20px;">bed</span>
+              <span style="font-size:9px;" class="font-label-caps">{{ habitaciones }} Hab.</span>
             </div>
             {% endif %}
             {% if banos %}
             <div class="flex flex-col items-center gap-0.5">
-              <span class="material-symbols-outlined text-primary-fixed" style="font-size:22px;">bathtub</span>
-              <span style="font-size:10px;" class="font-label-caps">{{ banos }} Baños</span>
+              <span class="material-symbols-outlined text-primary-fixed" style="font-size:20px;">bathtub</span>
+              <span style="font-size:9px;" class="font-label-caps">{{ banos }} Baños</span>
             </div>
             {% endif %}
             {% if estacionamientos %}
             <div class="flex flex-col items-center gap-0.5">
-              <span class="material-symbols-outlined text-primary-fixed" style="font-size:22px;">directions_car</span>
-              <span style="font-size:10px;" class="font-label-caps">{{ estacionamientos }} Parq.</span>
+              <span class="material-symbols-outlined text-primary-fixed" style="font-size:20px;">directions_car</span>
+              <span style="font-size:9px;" class="font-label-caps">{{ estacionamientos }} Parq.</span>
             </div>
             {% endif %}
           </div>
           {% if estrato %}
           <div class="bg-black/40 backdrop-blur-md px-2.5 py-1.5 rounded-xl
                       flex items-center gap-1.5 border border-white/10 flex-shrink-0">
-            <span class="material-symbols-outlined text-primary-fixed" style="font-size:16px;">apartment</span>
+            <span class="material-symbols-outlined text-primary-fixed" style="font-size:15px;">apartment</span>
             <div>
               <p style="font-size:10px;" class="font-label-caps text-white">Estrato {{ estrato }}</p>
               <p style="font-size:9px;" class="text-white/60">{{ ciudad }}</p>
@@ -379,74 +385,76 @@
       <div class="space-y-6">
 
       <!-- Características -->
-      <div class="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/30
+      <div class="bg-surface-container-low p-5 rounded-2xl border border-outline-variant/30
                   shadow-[0px_4px_20px_rgba(0,0,0,0.05)]">
-        <h3 class="font-headline-md text-headline-md mb-6">Características principales</h3>
-        <div class="space-y-4">
+        <div class="flex items-center gap-2 mb-5">
+          <span class="material-symbols-outlined text-primary">fact_check</span>
+          <h3 class="font-headline-md text-headline-md">Características</h3>
+        </div>
+
+        <!-- Grid de tarjetas: 2 col móvil → 3-4 col desktop -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {% if metros %}
-          <div class="flex justify-between items-center pb-3 border-b border-outline-variant/20">
-            <div class="flex items-center gap-3">
-              <span class="material-symbols-outlined text-outline">square_foot</span>
-              <span class="font-body-base">Área construida</span>
-            </div>
-            <span class="font-bold">{{ metros }} m²</span>
+          <div class="bg-white rounded-xl p-3 border border-outline-variant/20 flex flex-col items-center text-center gap-1">
+            <span class="material-symbols-outlined text-primary text-[22px]">square_foot</span>
+            <span class="font-bold text-lg leading-none">{{ metros }}</span>
+            <span class="text-[10px] font-label-caps text-on-surface-variant/60 tracking-wide">M² CONST.</span>
           </div>
           {% endif %}
           {% if metros_terreno %}
-          <div class="flex justify-between items-center pb-3 border-b border-outline-variant/20">
-            <div class="flex items-center gap-3">
-              <span class="material-symbols-outlined text-outline">landscape</span>
-              <span class="font-body-base">Área terreno</span>
-            </div>
-            <span class="font-bold">{{ metros_terreno }} m²</span>
+          <div class="bg-white rounded-xl p-3 border border-outline-variant/20 flex flex-col items-center text-center gap-1">
+            <span class="material-symbols-outlined text-primary text-[22px]">landscape</span>
+            <span class="font-bold text-lg leading-none">{{ metros_terreno }}</span>
+            <span class="text-[10px] font-label-caps text-on-surface-variant/60 tracking-wide">M² TERRENO</span>
           </div>
           {% endif %}
           {% if habitaciones %}
-          <div class="flex justify-between items-center pb-3 border-b border-outline-variant/20">
-            <div class="flex items-center gap-3">
-              <span class="material-symbols-outlined text-outline">bed</span>
-              <span class="font-body-base">Habitaciones</span>
-            </div>
-            <span class="font-bold">{{ habitaciones }}</span>
+          <div class="bg-white rounded-xl p-3 border border-outline-variant/20 flex flex-col items-center text-center gap-1">
+            <span class="material-symbols-outlined text-primary text-[22px]">bed</span>
+            <span class="font-bold text-lg leading-none">{{ habitaciones }}</span>
+            <span class="text-[10px] font-label-caps text-on-surface-variant/60 tracking-wide">HABITACIONES</span>
           </div>
           {% endif %}
           {% if banos %}
-          <div class="flex justify-between items-center pb-3 border-b border-outline-variant/20">
-            <div class="flex items-center gap-3">
-              <span class="material-symbols-outlined text-outline">bathtub</span>
-              <span class="font-body-base">Baños</span>
-            </div>
-            <span class="font-bold">{{ banos }}</span>
+          <div class="bg-white rounded-xl p-3 border border-outline-variant/20 flex flex-col items-center text-center gap-1">
+            <span class="material-symbols-outlined text-primary text-[22px]">bathtub</span>
+            <span class="font-bold text-lg leading-none">{{ banos }}</span>
+            <span class="text-[10px] font-label-caps text-on-surface-variant/60 tracking-wide">BAÑOS</span>
           </div>
           {% endif %}
           {% if estacionamientos %}
-          <div class="flex justify-between items-center pb-3 border-b border-outline-variant/20">
-            <div class="flex items-center gap-3">
-              <span class="material-symbols-outlined text-outline">directions_car</span>
-              <span class="font-body-base">Parqueadero</span>
-            </div>
-            <span class="font-bold">{{ estacionamientos }}</span>
+          <div class="bg-white rounded-xl p-3 border border-outline-variant/20 flex flex-col items-center text-center gap-1">
+            <span class="material-symbols-outlined text-primary text-[22px]">directions_car</span>
+            <span class="font-bold text-lg leading-none">{{ estacionamientos }}</span>
+            <span class="text-[10px] font-label-caps text-on-surface-variant/60 tracking-wide">GARAJES</span>
           </div>
           {% endif %}
           {% if estrato %}
-          <div class="flex justify-between items-center pb-3 border-b border-outline-variant/20">
-            <div class="flex items-center gap-3">
-              <span class="material-symbols-outlined text-outline">apartment</span>
-              <span class="font-body-base">Estrato</span>
-            </div>
-            <span class="font-bold">{{ estrato }}</span>
+          <div class="bg-white rounded-xl p-3 border border-outline-variant/20 flex flex-col items-center text-center gap-1">
+            <span class="material-symbols-outlined text-primary text-[22px]">apartment</span>
+            <span class="font-bold text-lg leading-none">{{ estrato }}</span>
+            <span class="text-[10px] font-label-caps text-on-surface-variant/60 tracking-wide">ESTRATO</span>
           </div>
           {% endif %}
           {% if ano_construccion %}
-          <div class="flex justify-between items-center">
-            <div class="flex items-center gap-3">
-              <span class="material-symbols-outlined text-outline">calendar_today</span>
-              <span class="font-body-base">Año construido</span>
-            </div>
-            <span class="font-bold">{{ ano_construccion }}</span>
+          <div class="bg-white rounded-xl p-3 border border-outline-variant/20 flex flex-col items-center text-center gap-1">
+            <span class="material-symbols-outlined text-primary text-[22px]">calendar_today</span>
+            <span class="font-bold text-lg leading-none">{{ ano_construccion }}</span>
+            <span class="text-[10px] font-label-caps text-on-surface-variant/60 tracking-wide">AÑO CONST.</span>
           </div>
           {% endif %}
         </div>
+
+        <!-- Información adicional (otras_caracteristicas) -->
+        {% if otras_caracteristicas %}
+        <div class="mt-4 pt-4 border-t border-outline-variant/20 flex items-start gap-3">
+          <span class="material-symbols-outlined text-primary text-[20px] mt-0.5 flex-shrink-0">info</span>
+          <div>
+            <p class="text-[10px] font-label-caps text-on-surface-variant/60 tracking-wide mb-1">INFORMACIÓN ADICIONAL</p>
+            <p class="text-body-sm text-on-surface-variant leading-relaxed">{{ otras_caracteristicas }}</p>
+          </div>
+        </div>
+        {% endif %}
       </div>
 
       <!-- Descripción -->
