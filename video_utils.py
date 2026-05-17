@@ -80,16 +80,27 @@ def _to_jpeg(src: str) -> str:
     """
     Descarga/lee src, redimensiona si excede _MAX_PHOTO_DIM y guarda JPEG limpio.
     Redimensionar evita timeouts de FFmpeg con fotos de cámara 4K o superior.
+    Reintenta hasta 3 veces si la descarga falla por red.
     """
     import io as _io
+    import time as _time
     from PIL import Image as _PILImg
     out = str(Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}.jpg")
 
-    # 1. Leer bytes
+    # 1. Leer bytes (con reintentos para URLs HTTP)
     if src.startswith(("http://", "https://")):
         req = urllib.request.Request(src, headers={"User-Agent": "ListaPro/1.0"})
-        with urllib.request.urlopen(req, timeout=40) as resp:
-            raw_bytes = resp.read()
+        raw_bytes = None
+        for attempt in range(3):
+            try:
+                with urllib.request.urlopen(req, timeout=45) as resp:
+                    raw_bytes = resp.read()
+                break
+            except Exception as dl_err:
+                if attempt == 2:
+                    raise RuntimeError(f"Descarga fallida tras 3 intentos ({src[:80]}): {dl_err}")
+                log.warning("_to_jpeg intento %d/%d falló: %s — reintentando...", attempt + 1, 3, dl_err)
+                _time.sleep(2)
     elif src.startswith(("/uploads/", "/tmp/")):
         candidate = Path(__file__).parent / src.lstrip("/")
         raw_bytes = candidate.read_bytes() if candidate.exists() else Path(src).read_bytes()
@@ -883,7 +894,7 @@ def _outro_clip(outro_png: str, dur: float = 4.0) -> str:
     cmd = [
         _ffmpeg_bin(), "-y",
         "-loop", "1", "-i", outro_png,
-        "-vf", (f"scale={VW}:{VH}:force_original_aspect_ratio=disable,"
+        "-vf", (f"scale={OUT_W}:{OUT_H}:force_original_aspect_ratio=disable,"
                 f"fade=t=in:st=0:d={FADE_DUR},"
                 f"fade=t=out:st={fade_out_st:.3f}:d={FADE_DUR}"),
         "-t", str(dur), "-r", str(FPS),
@@ -906,28 +917,19 @@ def _outro_clip(outro_png: str, dur: float = 4.0) -> str:
 def _make_clip(jpeg: str, idx: int, overlay_path: Optional[str] = None,
                dur: float = DUR_PER) -> str:
     """
-    JPEG → clip MP4 1080×1350 con Smart Crop centrado.
-
-    Smart Crop:
-      scale con force_original_aspect_ratio=increase escala la foto hasta
-      que CUBRE completamente el marco 4:5 (sin barras ni blur).
-      crop=1080:1350 recorta al centro lo que sobre → cero píxeles vacíos.
-
-    Con overlay: el PNG Pillow (vignette + textos) se pega encima del crop.
+    JPEG → clip MP4 OUT_W×OUT_H (720×900) con Smart Crop.
+    Codifica directamente a la resolución de salida para evitar el doble-encode
+    en el paso de concat, reduciendo el tiempo de generación ~3x.
     """
     out         = str(Path(tempfile.mkdtemp()) / f"clip_{idx}.mp4")
     fade_out_st = max(0.0, dur - FADE_DUR)
 
     if overlay_path:
-        # Secuencia cinematográfica:
-        #   0s         → FADE_DUR : foto aparece desde negro (clip transition)
-        #   FADE_DUR   → +TEXT_FADE_IN : vignette + textos se disuelven suavemente
-        #   resto      : foto + datos 100% visibles
-        #   fade_out_st → fin : clip funde a negro (transición siguiente)
         fc = (
-            f"[0:v]scale={VW}:{VH}:force_original_aspect_ratio=increase,"
-            f"crop={VW}:{VH}[photo];"
-            f"[1:v]format=rgba,"
+            f"[0:v]scale={OUT_W}:{OUT_H}:force_original_aspect_ratio=increase,"
+            f"crop={OUT_W}:{OUT_H}[photo];"
+            f"[1:v]scale={OUT_W}:{OUT_H}:force_original_aspect_ratio=disable,"
+            f"format=rgba,"
             f"fade=t=in:st={FADE_DUR:.3f}:d={TEXT_FADE_IN:.3f}:alpha=1[ov];"
             f"[photo][ov]overlay=0:0[main];"
             f"[main]fade=t=in:st=0:d={FADE_DUR},"
@@ -936,8 +938,8 @@ def _make_clip(jpeg: str, idx: int, overlay_path: Optional[str] = None,
         inputs = ["-loop", "1", "-i", jpeg, "-loop", "1", "-i", overlay_path]
     else:
         fc = (
-            f"[0:v]scale={VW}:{VH}:force_original_aspect_ratio=increase,"
-            f"crop={VW}:{VH},"
+            f"[0:v]scale={OUT_W}:{OUT_H}:force_original_aspect_ratio=increase,"
+            f"crop={OUT_W}:{OUT_H},"
             f"fade=t=in:st=0:d={FADE_DUR},"
             f"fade=t=out:st={fade_out_st:.3f}:d={FADE_DUR}[out]"
         )
@@ -951,7 +953,7 @@ def _make_clip(jpeg: str, idx: int, overlay_path: Optional[str] = None,
         "-pix_fmt", "yuv420p",
         "-bsf:v", "filter_units=remove_types=6", out,
     ]
-    r = subprocess.run(cmd, capture_output=True, timeout=180)
+    r = subprocess.run(cmd, capture_output=True, timeout=240)
     if r.returncode != 0:
         raise RuntimeError(r.stderr.decode("utf-8", errors="replace")[-600:])
     size = os.path.getsize(out)
@@ -1168,7 +1170,9 @@ def generate_slideshow(
             else:
                 log.warning("Clip %d/%d vacío, omitido", i + 1, len(jpegs))
         except Exception as e:
-            log.warning("Clip %d/%d falló, omitido: %s", i + 1, len(jpegs), str(e)[:200])
+            import traceback as _tb
+            log.warning("Clip %d/%d falló, omitido: %s\n%s",
+                        i + 1, len(jpegs), str(e)[:300], _tb.format_exc()[-600:])
 
     if not clips:
         raise RuntimeError("No se pudo generar ningún clip de video. Verifica que las fotos sean válidas.")
@@ -1200,28 +1204,27 @@ def generate_slideshow(
             output,
         ], capture_output=True, timeout=600)
 
-    # Intento 1: re-encode h264 escalado a OUT_W×OUT_H para reducir peso en móvil
-    # CRF 26 = calidad aceptable, ~60% menos peso que CRF 22 a 1080p
-    r = _run_concat([
-        "-vf", f"scale={OUT_W}:{OUT_H}",
-        "-c:v", "libx264", "-preset", "fast", "-crf", "26",
-        "-pix_fmt", "yuv420p", "-an",
-    ])
+    # Intento 1: copy directo — clips ya están a OUT_W×OUT_H, no hace falta re-encode
+    r = _run_concat(["-c", "copy", "-fflags", "+genpts"])
 
-    # Intento 2: sin escalar (por si el filtro falla en algún entorno)
+    # Intento 2: re-encode si copy falla (diferencia de parámetros entre clips, etc.)
     if r.returncode != 0:
-        log.warning("Re-encode con scale falló, intentando sin scale: %s",
+        log.warning("Concat copy falló, intentando re-encode: %s",
                     r.stderr.decode("utf-8", errors="replace")[-200:])
         r = _run_concat([
             "-c:v", "libx264", "-preset", "fast", "-crf", "26",
             "-pix_fmt", "yuv420p", "-an",
         ])
 
-    # Intento 3: si libx264 no disponible → copy con genpts
+    # Intento 3: re-encode con scale explícita (por si algún clip tiene resolución distinta)
     if r.returncode != 0:
-        log.warning("Re-encode falló, intentando -c copy: %s",
+        log.warning("Re-encode sin scale falló, intentando con scale: %s",
                     r.stderr.decode("utf-8", errors="replace")[-200:])
-        r = _run_concat(["-c", "copy", "-fflags", "+genpts"])
+        r = _run_concat([
+            "-vf", f"scale={OUT_W}:{OUT_H}",
+            "-c:v", "libx264", "-preset", "fast", "-crf", "26",
+            "-pix_fmt", "yuv420p", "-an",
+        ])
 
     if r.returncode != 0:
         stderr_tail = r.stderr.decode('utf-8', errors='replace')[-600:]
