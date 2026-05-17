@@ -241,6 +241,9 @@ async def editar_propiedad(property_id: str):
         "amenidades":        data.get("amenidades") or [],
         "coordenadas":       data.get("coordenadas") or "",
         "fotos":             data.get("fotos") or [],
+        "foto_labels":       data.get("foto_labels") or [],
+        "foto_descriptions": data.get("foto_descriptions") or [],
+        "video_recorrido_url": data.get("video_recorrido_url") or "",
         "slug":              data.get("slug") or property_id,
     }, ensure_ascii=False)
     with open("static/index.html", "r", encoding="utf-8") as f:
@@ -273,9 +276,12 @@ async def actualizar_propiedad(
     telefono_agente: str = Form(...),
     email_agente:   Optional[str] = Form(None),
     coordenadas:    Optional[str] = Form(None),
-    fotos_existentes: List[str] = Form(default=[]),   # URLs de fotos que el usuario conservó
-    foto_labels:    Optional[str] = Form(default="[]"),
-    foto_descriptions: Optional[str] = Form(default="[]"),
+    fotos_existentes:   List[str] = Form(default=[]),     # URLs que el usuario conservó
+    labels_existentes:  Optional[str] = Form(default="[]"), # labels de las fotos existentes conservadas
+    descs_existentes:   Optional[str] = Form(default="[]"), # descs  de las fotos existentes conservadas
+    foto_labels:        Optional[str] = Form(default="[]"), # labels de las fotos NUEVAS
+    foto_descriptions:  Optional[str] = Form(default="[]"), # descs  de las fotos NUEVAS
+    video_recorrido_url: Optional[str] = Form(default=None),
     fotos:          List[UploadFile] = File(default=[]),
     foto_agente:    Optional[UploadFile] = File(default=None),
 ):
@@ -310,8 +316,16 @@ async def actualizar_propiedad(
         if url:
             foto_agente_path = url
 
-    labels_parsed = _json.loads(foto_labels or "[]")
-    descs_parsed  = _json.loads(foto_descriptions or "[]")
+    # Labels: [labels de fotos existentes conservadas] + [labels de fotos nuevas]
+    labs_ex   = _json.loads(labels_existentes  or "[]")
+    desc_ex   = _json.loads(descs_existentes   or "[]")
+    labs_new  = _json.loads(foto_labels        or "[]")
+    descs_new = _json.loads(foto_descriptions  or "[]")
+    final_labels = labs_ex + labs_new
+    final_descs  = desc_ex + descs_new
+
+    # Video de recorrido: usar el nuevo si se envió, sino conservar el existente
+    video_rec = video_recorrido_url or existing.get("video_recorrido_url") or None
 
     updated = {
         **existing,
@@ -335,9 +349,10 @@ async def actualizar_propiedad(
         "email_agente":      email_agente or "",
         "coordenadas":       coordenadas or "",
         "fotos":             foto_paths,
-        "foto_labels":       labels_parsed or existing.get("foto_labels") or [],
-        "foto_descriptions": descs_parsed  or existing.get("foto_descriptions") or [],
+        "foto_labels":       final_labels,
+        "foto_descriptions": final_descs,
         "foto_agente_url":   foto_agente_path,
+        "video_recorrido_url": video_rec,
         "whatsapp_link":     _whatsapp_link(
             telefono_agente,
             f"Hola, estoy interesado en la propiedad en {direccion}, {ciudad}"
@@ -371,8 +386,8 @@ async def actualizar_propiedad(
             "operacion":           operacion,
             "nombre_inmobiliaria": nombre_inmobiliaria or nombre_agente,
             "amenidades":          amenidades or [],
-            "foto_labels":         updated["foto_labels"],
-            "foto_descriptions":   updated["foto_descriptions"],
+            "foto_labels":         final_labels,
+            "foto_descriptions":   final_descs,
             "foto_agente_url":     foto_agente_path,
             "logo_url":            existing.get("logo_url") or "",
             "video_url_propio":    None,

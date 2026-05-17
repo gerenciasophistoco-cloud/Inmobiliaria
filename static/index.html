@@ -876,10 +876,18 @@
         fd.delete('fotos');
         /* photoFiles es el array global de script.js; el input #fotos se resetea tras cada selección */
         (typeof photoFiles !== 'undefined' ? photoFiles : []).forEach(function(f) { fd.append('fotos', f); });
-        fd.set('foto_labels',       JSON.stringify(typeof photoLabels !== 'undefined' ? photoLabels : []));
+        /* Labels/descs de fotos NUEVAS (script.js photoLabels/photoDescriptions) */
+        fd.set('foto_labels',       JSON.stringify(typeof photoLabels       !== 'undefined' ? photoLabels       : []));
         fd.set('foto_descriptions', JSON.stringify(typeof photoDescriptions !== 'undefined' ? photoDescriptions : []));
-        /* Enviar las URLs de fotos existentes que el usuario conservó */
+        /* Labels/descs de fotos EXISTENTES conservadas (en paralelo con fotos_existentes) */
+        fd.set('labels_existentes', JSON.stringify(window._labelsExistentes || []));
+        fd.set('descs_existentes',  JSON.stringify(window._descsExistentes  || []));
+        /* URLs de fotos existentes conservadas */
         (window._fotosExistentes || []).forEach(function(url) { fd.append('fotos_existentes', url); });
+        /* Video de recorrido: enviar si el usuario subió uno nuevo */
+        if (typeof lastVideoPropio !== 'undefined' && lastVideoPropio) {
+          fd.set('video_recorrido_url', lastVideoPropio);
+        }
         var tipoSel = document.getElementById('tipo_propiedad');
         if (tipoSel && tipoSel.value === 'Otro') {
           fd.set('tipo_propiedad', (tipoSel.dataset.customValue || '').trim() || 'Otro');
@@ -960,11 +968,18 @@
     }
 
     /* Fotos existentes: grid con X para eliminar individualmente */
-    window._fotosExistentes = Array.isArray(d.fotos) ? d.fotos.slice() : [];
+    window._fotosExistentes  = Array.isArray(d.fotos)             ? d.fotos.slice()             : [];
+    window._labelsExistentes = Array.isArray(d.foto_labels)        ? d.foto_labels.slice()        : window._fotosExistentes.map(function() { return ''; });
+    window._descsExistentes  = Array.isArray(d.foto_descriptions)  ? d.foto_descriptions.slice()  : window._fotosExistentes.map(function() { return ''; });
 
-    function _crearItemFotoExistente(url) {
+    /* Garantizar que los arrays de labels/descs tengan la misma longitud que las fotos */
+    while (window._labelsExistentes.length < window._fotosExistentes.length) window._labelsExistentes.push('');
+    while (window._descsExistentes.length  < window._fotosExistentes.length) window._descsExistentes.push('');
+
+    function _crearItemFotoExistente(url, idx) {
       var item = document.createElement('div');
       item.dataset.fotoUrl = url;
+      item.dataset.idx     = String(idx);
       item.style.cssText = 'position:relative;border-radius:8px;overflow:hidden;aspect-ratio:1;' +
         'border:1.5px solid #e5e0d8;background:#f9f6f0;flex-shrink:0;width:88px;height:88px;';
       var img = document.createElement('img');
@@ -979,7 +994,13 @@
         'color:#fff;border:none;border-radius:50%;width:22px;height:22px;cursor:pointer;' +
         'font-size:16px;line-height:1;padding:0;display:flex;align-items:center;justify-content:center;font-weight:700;';
       xBtn.onclick = function() {
-        window._fotosExistentes = window._fotosExistentes.filter(function(u) { return u !== url; });
+        /* Eliminar foto y sus labels/descs en paralelo por posición actual */
+        var pos = window._fotosExistentes.indexOf(url);
+        if (pos >= 0) {
+          window._fotosExistentes.splice(pos, 1);
+          window._labelsExistentes.splice(pos, 1);
+          window._descsExistentes.splice(pos, 1);
+        }
         item.style.transition = 'opacity 0.2s,transform 0.2s';
         item.style.opacity = '0'; item.style.transform = 'scale(0.85)';
         setTimeout(function() {
@@ -1010,8 +1031,8 @@
         var grid = document.createElement('div');
         grid.id = 'fotosExistentesGrid';
         grid.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;';
-        window._fotosExistentes.forEach(function(url) {
-          grid.appendChild(_crearItemFotoExistente(url));
+        window._fotosExistentes.forEach(function(url, i) {
+          grid.appendChild(_crearItemFotoExistente(url, i));
         });
         gridWrap.appendChild(header);
         gridWrap.appendChild(grid);
@@ -1023,6 +1044,21 @@
     if (d.coordenadas) {
       var coordEl = document.getElementById('coordenadas');
       if (coordEl) coordEl.value = d.coordenadas;
+    }
+
+    /* Video de recorrido: mostrar badge si ya tiene uno guardado */
+    if (d.video_recorrido_url) {
+      var videoArea = document.getElementById('videoUploadArea');
+      if (videoArea) {
+        var badge = document.createElement('div');
+        badge.style.cssText = 'margin-top:8px;padding:8px 12px;background:#f0fdf4;border:1.5px solid #86efac;' +
+          'border-radius:8px;font-size:12px;color:#166534;font-weight:600;display:flex;align-items:center;gap:8px;';
+        badge.innerHTML = '<span>✅ Video de recorrido guardado</span>' +
+          '<a href="' + d.video_recorrido_url + '" target="_blank" ' +
+          'style="color:#16a34a;text-decoration:underline;font-weight:700;">Ver →</a>' +
+          '<span style="color:#6b7280;font-weight:400;">· Sube uno nuevo para reemplazarlo</span>';
+        videoArea.appendChild(badge);
+      }
     }
   })();
   </script>
