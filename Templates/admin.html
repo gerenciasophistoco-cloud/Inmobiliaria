@@ -232,7 +232,8 @@
         </div>
 
         <!-- Acciones: Editar + Eliminar -->
-        <div style="display:flex;justify-content:center;gap:6px;">
+        <div class="acciones-col" id="acc-{{ prop.id }}"
+             style="display:flex;justify-content:center;align-items:center;gap:6px;">
           <a href="/admin/editar/{{ prop.id }}"
              title="Editar inmueble"
              style="background:none;border:1px solid #bfdbfe;border-radius:8px;
@@ -243,7 +244,7 @@
              onmouseout="this.style.background='none'">✏️</a>
           <button class="del-btn"
                   data-prop-id="{{ prop.id }}"
-                  onclick="confirmarEliminar('{{ prop.id }}', {{ prop.nombre | tojson }})"
+                  onclick="pedirConfirmacion('{{ prop.id }}')"
                   title="Eliminar inmueble">
             🗑️
           </button>
@@ -316,24 +317,55 @@
     finally { trackEl.style.opacity = '1'; trackEl.style.pointerEvents = 'auto'; }
   }
 
-  /* ── Eliminar ── */
-  async function confirmarEliminar(propId, propName) {
-    if (!confirm('¿Está seguro que quiere eliminar esta propiedad?\n\n' + propName + '\n\nEsta acción es permanente y no se puede deshacer.')) return;
-    var btn = document.querySelector('.del-btn[data-prop-id="' + propId + '"]');
-    if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+  /* ── Eliminar (confirmación inline, sin popup del navegador) ── */
+  var _accionesOrig = {};
+
+  function pedirConfirmacion(propId) {
+    var col = document.getElementById('acc-' + propId);
+    if (!col || col.dataset.confirming) return;
+    col.dataset.confirming = '1';
+    _accionesOrig[propId] = col.innerHTML;
+    col.innerHTML =
+      '<div style="display:flex;flex-direction:column;align-items:center;gap:5px;">' +
+        '<span style="font-size:10px;color:#dc2626;font-weight:800;letter-spacing:0.02em;">¿ELIMINAR?</span>' +
+        '<div style="display:flex;gap:5px;">' +
+          '<button onclick="ejecutarEliminar(\'' + propId + '\')" ' +
+                 'style="background:#dc2626;color:#fff;border:none;border-radius:7px;' +
+                        'padding:5px 10px;cursor:pointer;font-size:12px;font-weight:700;">Sí</button>' +
+          '<button onclick="cancelarEliminar(\'' + propId + '\')" ' +
+                 'style="background:#e5e0d8;color:#44403c;border:none;border-radius:7px;' +
+                        'padding:5px 10px;cursor:pointer;font-size:12px;font-weight:700;">No</button>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function cancelarEliminar(propId) {
+    var col = document.getElementById('acc-' + propId);
+    if (!col) return;
+    col.innerHTML = _accionesOrig[propId] || '';
+    delete col.dataset.confirming;
+    delete _accionesOrig[propId];
+  }
+
+  async function ejecutarEliminar(propId) {
+    var col = document.getElementById('acc-' + propId);
+    if (col) col.innerHTML = '<span style="font-size:12px;color:#9ca3af;">⏳</span>';
     try {
       var r = await fetch('/admin/propiedad/' + propId, { method: 'DELETE' });
-      if (!r.ok) { var err = await r.json().catch(function(){ return {}; }); throw new Error(err.detail || 'Error ' + r.status); }
+      if (!r.ok) {
+        var err = await r.json().catch(function(){ return {}; });
+        throw new Error(err.detail || 'Error ' + r.status);
+      }
       var row = document.getElementById('row-' + propId);
       if (row) {
-        row.style.transition = 'opacity 0.3s';
+        row.style.transition = 'opacity 0.3s, max-height 0.4s';
         row.style.opacity = '0';
         setTimeout(function() { row.remove(); }, 320);
       }
       showToast('🗑️ Inmueble eliminado');
     } catch(e) {
       showToast('⚠️ Error al eliminar: ' + e.message);
-      if (btn) { btn.disabled = false; btn.textContent = '🗑️'; }
+      cancelarEliminar(propId);
     }
   }
 
