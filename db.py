@@ -32,11 +32,22 @@ def _init_supabase():
     try:
         from supabase import create_client
         _supabase_client = create_client(url, key)
-        # Prueba de conexión real
-        _supabase_client.table("propiedades").select("id").limit(1).execute()
-        log.info("✅ Supabase conectado: %s", url)
+        log.info("✅ Supabase cliente creado: %s", url)
+        # Verificar que la tabla existe (sin fallar si no existe aún)
+        try:
+            _supabase_client.table("propiedades").select("id").limit(1).execute()
+            log.info("✅ Tabla 'propiedades' OK")
+        except Exception as table_err:
+            msg = str(table_err)
+            if "propiedades" in msg and ("not found" in msg or "PGRST205" in msg or "cache" in msg):
+                # La tabla no existe — la conexión sí funciona, solo falta crear la tabla
+                _supabase_error = "TABLA_FALTANTE"
+                log.warning("⚠️  Tabla 'propiedades' no existe — créala en Supabase SQL Editor")
+            else:
+                raise  # Otro error real, propagarlo
     except Exception as e:
-        _supabase_error = str(e)
+        if _supabase_error != "TABLA_FALTANTE":
+            _supabase_error = str(e)
         _supabase_client = None
         log.error("❌ Supabase ERROR: %s", e)
 
