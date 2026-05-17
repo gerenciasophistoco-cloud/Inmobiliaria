@@ -387,11 +387,14 @@ async def actualizar_propiedad(
 # ── Panel de administración ───────────────────────────────────────────────────
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_panel(request: Request):
-    properties = db.get_all_properties()
+    properties  = db.get_all_properties()
+    db_status   = db.connection_status()
     return templates.TemplateResponse("admin.html", {
-        "request":         request,
-        "properties":      properties,
-        "db_persistente":  db.is_persistent(),
+        "request":        request,
+        "properties":     properties,
+        "db_persistente": db_status["connected"],
+        "db_error":       db_status["error"],
+        "db_url":         db_status["url"],
     })
 
 

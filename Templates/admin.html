@@ -80,20 +80,34 @@
 
   <main style="max-width:1100px;margin:0 auto;padding:24px 16px;">
 
-    <!-- ⚠️ Advertencia si los datos NO están en Supabase (se perderían al reiniciar) -->
-    {% if not db_persistente %}
+    <!-- Estado de conexión Supabase -->
+    {% if db_persistente %}
+    <div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;
+                padding:10px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px;">
+      <span style="font-size:18px;">✅</span>
+      <span style="font-size:13px;color:#166534;font-weight:600;">
+        Supabase conectado — datos persistentes seguros
+        <span style="font-weight:400;opacity:0.7;">({{ db_url }})</span>
+      </span>
+    </div>
+    {% else %}
     <div style="background:#fef3c7;border:2px solid #f59e0b;border-radius:12px;
                 padding:14px 18px;margin-bottom:20px;display:flex;gap:12px;align-items:flex-start;">
       <span style="font-size:22px;flex-shrink:0;">⚠️</span>
       <div>
-        <p style="font-weight:800;color:#92400e;font-size:14px;margin:0 0 4px;">
-          Base de datos en modo temporal — los datos se perderán al reiniciar
+        <p style="font-weight:800;color:#92400e;font-size:14px;margin:0 0 6px;">
+          ¡Datos en modo temporal! — se borran al reiniciar el servidor
         </p>
+        {% if db_error %}
+        <p style="font-size:12px;color:#b45309;margin:0 0 6px;background:#fde68a;
+                  padding:6px 10px;border-radius:6px;font-family:monospace;">
+          Error: {{ db_error[:200] }}
+        </p>
+        {% endif %}
         <p style="font-size:13px;color:#78350f;margin:0;line-height:1.5;">
-          Las variables de entorno <code>SUPABASE_URL</code> y <code>SUPABASE_KEY</code>
-          no están configuradas en Railway. Todos los inmuebles se guardan en RAM
-          y se <strong>borran automáticamente</strong> con cada nuevo deploy o reinicio del servidor.
-          <br><strong>Configúralas en Railway → Variables para proteger tus datos.</strong>
+          Verifica en Railway → Variables que <code>SUPABASE_URL</code> y
+          <code>SUPABASE_KEY</code> tengan los valores correctos de tu proyecto
+          Supabase (Settings → API → Project API keys → <strong>anon public</strong>).
         </p>
       </div>
     </div>

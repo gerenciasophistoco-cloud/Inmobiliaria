@@ -12,24 +12,54 @@ log = logging.getLogger(__name__)
 # Almacén en memoria como fallback
 _memory_store: dict = {}
 
+# ── Cliente Supabase: singleton inicializado UNA VEZ al arrancar ─────────────
+_supabase_client = None
+_supabase_error: Optional[str] = None
 
-def _get_client():
-    url = os.getenv("SUPABASE_URL")
-    key = os.getenv("SUPABASE_KEY")
+
+def _init_supabase():
+    global _supabase_client, _supabase_error
+    url = os.getenv("SUPABASE_URL", "").strip()
+    key = os.getenv("SUPABASE_KEY", "").strip()
     if not url or not key:
-        return None
+        _supabase_error = (
+            f"Variables no configuradas — "
+            f"SUPABASE_URL={'✓' if url else '✗ FALTA'}, "
+            f"SUPABASE_KEY={'✓' if key else '✗ FALTA'}"
+        )
+        log.warning("Supabase: %s", _supabase_error)
+        return
     try:
         from supabase import create_client
-        return create_client(url, key)
+        _supabase_client = create_client(url, key)
+        # Prueba de conexión real
+        _supabase_client.table("propiedades").select("id").limit(1).execute()
+        log.info("✅ Supabase conectado: %s", url)
     except Exception as e:
-        log.warning("No se pudo conectar a Supabase: %s", e)
-        return None
+        _supabase_error = str(e)
+        _supabase_client = None
+        log.error("❌ Supabase ERROR: %s", e)
+
+
+_init_supabase()   # Se ejecuta al importar el módulo (al arrancar Railway)
+
+
+def _get_client():
+    return _supabase_client
 
 
 def is_persistent() -> bool:
-    """Retorna True si los datos se guardan en Supabase (persistente).
-    False = modo memoria temporal (datos se pierden al reiniciar)."""
-    return _get_client() is not None
+    """True = datos en Supabase (permanentes). False = datos en RAM (efímeros)."""
+    return _supabase_client is not None
+
+
+def connection_status() -> dict:
+    """Diagnóstico de la conexión para el panel admin."""
+    return {
+        "connected": _supabase_client is not None,
+        "error":     _supabase_error,
+        "url":       (os.getenv("SUPABASE_URL") or "")[:40] or "(no configurada)",
+    }
 
 
 def save_property(property_id: str, data: dict) -> str:
