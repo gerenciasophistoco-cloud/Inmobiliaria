@@ -246,6 +246,23 @@
               <input type="number" id="ano_construccion" name="ano_construccion" min="1900" max="2030" placeholder="2020">
             </div>
           </div>
+
+          <!-- Características personalizadas -->
+          <div style="margin-top:1.1rem;padding-top:1rem;border-top:1px solid #e5e0d8;">
+            <p style="font-size:12px;font-weight:700;color:#44403c;margin:0 0 10px;letter-spacing:0.02em;">
+              ➕ Características adicionales <span style="font-weight:400;color:#9ca3af;">(opcionales)</span>
+            </p>
+            <div id="caractExtrasContainer" style="display:flex;flex-direction:column;gap:8px;"></div>
+            <button type="button" onclick="addCaractExtra()"
+                    style="margin-top:8px;background:#f6f3ee;border:1.5px dashed #c9a227;border-radius:9px;
+                           padding:8px 16px;cursor:pointer;font-size:13px;font-weight:700;color:#735c00;
+                           width:100%;transition:background 0.15s;"
+                    onmouseover="this.style.background='#fef9e7'"
+                    onmouseout="this.style.background='#f6f3ee'">
+              + Agregar característica (ej: Cocinas · Piscinas · Cuartos de servicio)
+            </button>
+            <input type="hidden" id="caracteristicas_extra" name="caracteristicas_extra" value="[]">
+          </div>
         </div>
 
         <!-- 3. Amenidades -->
@@ -844,6 +861,50 @@
   })();
   </script>
 
+  <!-- ── Características personalizadas ── -->
+  <script>
+  function addCaractExtra(nombre, valor) {
+    var container = document.getElementById('caractExtrasContainer');
+    var row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:8px;align-items:center;';
+    var inp1 = document.createElement('input');
+    inp1.type = 'text';
+    inp1.placeholder = 'Nombre  (ej: Cocinas)';
+    inp1.value = nombre || '';
+    inp1.style.cssText = 'flex:1;padding:8px 12px;border:1.5px solid #e5e0d8;border-radius:8px;font-size:13px;font-family:inherit;';
+    inp1.addEventListener('input', syncCaractExtras);
+    var inp2 = document.createElement('input');
+    inp2.type = 'text';
+    inp2.placeholder = 'Valor  (ej: 2)';
+    inp2.value = valor || '';
+    inp2.style.cssText = 'width:110px;padding:8px 12px;border:1.5px solid #e5e0d8;border-radius:8px;font-size:13px;font-family:inherit;';
+    inp2.addEventListener('input', syncCaractExtras);
+    var del = document.createElement('button');
+    del.type = 'button';
+    del.textContent = '×';
+    del.style.cssText = 'background:none;border:1px solid #fecaca;border-radius:8px;width:34px;height:34px;cursor:pointer;color:#dc2626;font-size:18px;font-weight:700;flex-shrink:0;';
+    del.addEventListener('click', function() { row.remove(); syncCaractExtras(); });
+    row.appendChild(inp1);
+    row.appendChild(inp2);
+    row.appendChild(del);
+    container.appendChild(row);
+    inp1.focus();
+    syncCaractExtras();
+  }
+
+  function syncCaractExtras() {
+    var rows = document.querySelectorAll('#caractExtrasContainer > div');
+    var data = [];
+    rows.forEach(function(row) {
+      var inputs = row.querySelectorAll('input');
+      var n = inputs[0] ? inputs[0].value.trim() : '';
+      var v = inputs[1] ? inputs[1].value.trim() : '';
+      if (n) data.push({ nombre: n, valor: v });
+    });
+    document.getElementById('caracteristicas_extra').value = JSON.stringify(data);
+  }
+  </script>
+
   <!-- ── Pre-llenado del formulario en modo edición ── -->
   <script>
   (function () {
@@ -1142,6 +1203,11 @@
     if (d.coordenadas) {
       var coordEl = document.getElementById('coordenadas');
       if (coordEl) coordEl.value = d.coordenadas;
+    }
+
+    /* Características personalizadas */
+    if (Array.isArray(d.caracteristicas_extra) && d.caracteristicas_extra.length) {
+      d.caracteristicas_extra.forEach(function(c) { addCaractExtra(c.nombre, c.valor); });
     }
 
     /* Video de recorrido: mostrar badge si ya tiene uno guardado */
