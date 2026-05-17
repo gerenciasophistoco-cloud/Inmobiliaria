@@ -864,6 +864,7 @@
       form.addEventListener('submit', function (e) {
         if (!form.dataset.editId) return; // modo normal
         e.preventDefault();
+        e.stopPropagation(); // impide que el listener de script.js (bubble) también dispare
         guardarEdicion(form, d.property_id, d.slug);
       }, true);
     }
