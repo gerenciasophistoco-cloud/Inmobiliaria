@@ -42,7 +42,7 @@ _MUSIC_PATH = next(
 VW, VH       = 1080, 1350   # resolución interna de clips (Pillow overlay)
 OUT_W, OUT_H = 720,   900   # resolución de salida — ~55% menos peso en móvil
 FPS          = 25
-DUR_PER      = 3.5          # más tiempo por slide para leer los datos
+DUR_PER      = 3.0          # 3 segundos por foto
 FADE_DUR     = 0.5          # fade clip in/out
 TEXT_FADE_IN = 0.6          # el texto aparece después de que la foto ya está visible
 
@@ -888,7 +888,7 @@ def _outro_clip(outro_png: str, dur: float = 4.0) -> str:
                 f"fade=t=out:st={fade_out_st:.3f}:d={FADE_DUR}"),
         "-t", str(dur), "-r", str(FPS),
         "-c:v", "libx264", "-profile:v", "high", "-level:v", "4.2",
-        "-preset", "ultrafast", "-crf", "18",
+        "-preset", "ultrafast", "-crf", "26",
         "-pix_fmt", "yuv420p",
         "-bsf:v", "filter_units=remove_types=6",
         out,
@@ -947,7 +947,7 @@ def _make_clip(jpeg: str, idx: int, overlay_path: Optional[str] = None,
         "-filter_complex", fc, "-map", "[out]",
         "-t", str(dur), "-r", str(FPS), "-map_metadata", "-1",
         "-c:v", "libx264", "-profile:v", "high", "-level:v", "4.2",
-        "-preset", "ultrafast", "-crf", "18",
+        "-preset", "ultrafast", "-crf", "26",
         "-pix_fmt", "yuv420p",
         "-bsf:v", "filter_units=remove_types=6", out,
     ]
@@ -1152,27 +1152,23 @@ def generate_slideshow(
         label = (foto_labels[i].strip()       if i < len(foto_labels)       else "")
         desc  = (foto_descriptions[i].strip() if i < len(foto_descriptions) else "")
 
-        if label:
-            # Overlay contextual: la foto "habla" por sí misma
-            ov = _overlay_contextual(i, label, desc, specs, nombre, foto_labels)
-        else:
-            # Sin etiqueta: usar secuencia de specs normal
-            stype   = sequence[seq_idx % len(sequence)]
-            seq_idx += 1
-            base_ov = ov_cache.get(stype)
-            # Añadir zona pill (descripción) si la hay
-            ov = _add_zone(base_ov, desc) if desc and base_ov else base_ov
-
         try:
+            if label:
+                ov = _overlay_contextual(i, label, desc, specs, nombre, foto_labels)
+            else:
+                stype   = sequence[seq_idx % len(sequence)]
+                seq_idx += 1
+                base_ov = ov_cache.get(stype)
+                ov = _add_zone(base_ov, desc) if desc and base_ov else base_ov
+
             clip_path = _make_clip(jp, i, overlay_path=ov, dur=dur_per)
-            # Validar que el clip tenga contenido
             if os.path.exists(clip_path) and os.path.getsize(clip_path) > 1000:
                 clips.append(clip_path)
-                log.info("Clip %d OK (%d bytes)", i, os.path.getsize(clip_path))
+                log.info("Clip %d/%d OK (%d bytes)", i + 1, len(jpegs), os.path.getsize(clip_path))
             else:
-                log.warning("Clip %d vacío, omitido", i)
+                log.warning("Clip %d/%d vacío, omitido", i + 1, len(jpegs))
         except Exception as e:
-            log.warning("Clip %d falló, omitido: %s", i, e)
+            log.warning("Clip %d/%d falló, omitido: %s", i + 1, len(jpegs), str(e)[:200])
 
     if not clips:
         raise RuntimeError("No se pudo generar ningún clip de video. Verifica que las fotos sean válidas.")
