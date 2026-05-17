@@ -1138,22 +1138,24 @@
     function _crearItemFotoExistente(url, idx) {
       var item = document.createElement('div');
       item.dataset.fotoUrl = url;
-      item.dataset.idx     = String(idx);
-      item.style.cssText = 'position:relative;border-radius:8px;overflow:hidden;aspect-ratio:1;' +
-        'border:1.5px solid #e5e0d8;background:#f9f6f0;flex-shrink:0;width:88px;height:88px;';
+      item.style.cssText = 'border:1.5px solid #e5e0d8;border-radius:10px;overflow:hidden;' +
+        'background:#fff;flex-shrink:0;width:148px;display:flex;flex-direction:column;';
+
+      /* ── Thumbnail ── */
+      var thumbWrap = document.createElement('div');
+      thumbWrap.style.cssText = 'position:relative;height:96px;background:#f9f6f0;';
       var img = document.createElement('img');
       img.src = url;
       img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
-      img.onerror = function() { img.style.background = '#f0ede7'; img.style.opacity = '0.4'; };
+      img.onerror = function() { img.style.opacity = '0.3'; };
       var xBtn = document.createElement('button');
       xBtn.type = 'button';
       xBtn.innerHTML = '&times;';
       xBtn.title = 'Eliminar foto';
-      xBtn.style.cssText = 'position:absolute;top:3px;right:3px;background:rgba(220,38,38,0.9);' +
+      xBtn.style.cssText = 'position:absolute;top:3px;right:3px;background:rgba(220,38,38,0.88);' +
         'color:#fff;border:none;border-radius:50%;width:22px;height:22px;cursor:pointer;' +
         'font-size:16px;line-height:1;padding:0;display:flex;align-items:center;justify-content:center;font-weight:700;';
       xBtn.onclick = function() {
-        /* Eliminar foto y sus labels/descs en paralelo por posición actual */
         var pos = window._fotosExistentes.indexOf(url);
         if (pos >= 0) {
           window._fotosExistentes.splice(pos, 1);
@@ -1168,8 +1170,45 @@
           if (counter) counter.textContent = window._fotosExistentes.length + ' foto(s) guardadas';
         }, 220);
       };
-      item.appendChild(img);
-      item.appendChild(xBtn);
+      thumbWrap.appendChild(img);
+      thumbWrap.appendChild(xBtn);
+
+      /* ── Inputs de título y subtítulo ── */
+      var inputWrap = document.createElement('div');
+      inputWrap.style.cssText = 'padding:6px 7px;display:flex;flex-direction:column;gap:4px;';
+
+      var inpStyle = 'width:100%;border:1px solid #e5e0d8;border-radius:6px;padding:4px 7px;' +
+        'font-size:11px;font-family:inherit;box-sizing:border-box;outline:none;' +
+        'transition:border-color 0.15s;';
+
+      var inp1 = document.createElement('input');
+      inp1.type = 'text';
+      inp1.placeholder = 'Título (ej: Cocina)';
+      inp1.value = window._labelsExistentes[idx] || '';
+      inp1.style.cssText = inpStyle;
+      inp1.addEventListener('focus',  function(){ inp1.style.borderColor='#c9a227'; });
+      inp1.addEventListener('blur',   function(){ inp1.style.borderColor='#e5e0d8'; });
+      inp1.addEventListener('input', function() {
+        var pos = window._fotosExistentes.indexOf(url);
+        if (pos >= 0) window._labelsExistentes[pos] = inp1.value;
+      });
+
+      var inp2 = document.createElement('input');
+      inp2.type = 'text';
+      inp2.placeholder = 'Subtítulo (opcional)';
+      inp2.value = window._descsExistentes[idx] || '';
+      inp2.style.cssText = inpStyle + 'color:#64748b;';
+      inp2.addEventListener('focus',  function(){ inp2.style.borderColor='#c9a227'; });
+      inp2.addEventListener('blur',   function(){ inp2.style.borderColor='#e5e0d8'; });
+      inp2.addEventListener('input', function() {
+        var pos = window._fotosExistentes.indexOf(url);
+        if (pos >= 0) window._descsExistentes[pos] = inp2.value;
+      });
+
+      inputWrap.appendChild(inp1);
+      inputWrap.appendChild(inp2);
+      item.appendChild(thumbWrap);
+      item.appendChild(inputWrap);
       return item;
     }
 
@@ -1189,7 +1228,7 @@
         header.appendChild(counter);
         var grid = document.createElement('div');
         grid.id = 'fotosExistentesGrid';
-        grid.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;';
+        grid.style.cssText = 'display:flex;flex-wrap:wrap;gap:10px;';
         window._fotosExistentes.forEach(function(url, i) {
           grid.appendChild(_crearItemFotoExistente(url, i));
         });
