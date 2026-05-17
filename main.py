@@ -303,10 +303,17 @@ async def actualizar_propiedad(
 
     # Base de fotos: las que el usuario conservó (enviadas desde el frontend).
     # Si no se envió nada (petición legacy), mantener todas las existentes.
+    old_fotos = existing.get("fotos") or []
     if fotos_existentes:
         foto_paths = [u for u in fotos_existentes if u]
+        # Eliminar de Cloudinary las fotos que el usuario borró
+        removed = [u for u in old_fotos if u and u not in set(foto_paths)]
+        if removed:
+            import threading as _th
+            _th.Thread(target=storage.delete_files, args=(removed,), daemon=True).start()
+            log.info("Eliminando %d foto(s) de Cloudinary en background", len(removed))
     else:
-        foto_paths = existing.get("fotos") or []
+        foto_paths = old_fotos
     foto_paths = foto_paths + new_foto_paths
 
     # Foto del agente: reusar existente si no se subió nueva
@@ -476,6 +483,17 @@ async def actualizar_propiedad(
     })
 
 
+# ── Diagnóstico de Cloudinary ────────────────────────────────────────────────
+@app.get("/admin/test-cloudinary")
+async def test_cloudinary():
+    """
+    Verifica si Cloudinary está correctamente configurado y operativo.
+    Abre este link en Railway para diagnosticar problemas de subida de fotos.
+    """
+    result = storage.diagnose()
+    return JSONResponse(result)
+
+
 # ── Guardar descripción elegida por el usuario después de la edición ─────────
 @app.post("/admin/descripcion/{property_id}")
 async def guardar_descripcion(
@@ -507,11 +525,21 @@ async def admin_panel(request: Request):
 
 @app.delete("/admin/propiedad/{property_id}")
 async def eliminar_propiedad(property_id: str):
-    """Elimina una propiedad permanentemente del sistema."""
+    """Elimina una propiedad permanentemente y borra sus fotos de Cloudinary."""
+    data = db.get_property(property_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Propiedad no encontrada")
+
+    # Eliminar fotos de Cloudinary en background (no bloquea la respuesta)
+    fotos_a_borrar = [u for u in (data.get("fotos") or []) if u]
+    if fotos_a_borrar:
+        import threading as _th
+        _th.Thread(target=storage.delete_files, args=(fotos_a_borrar,), daemon=True).start()
+
     ok = db.delete_property(property_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Propiedad no encontrada")
-    return JSONResponse({"deleted": True})
+    return JSONResponse({"deleted": True, "fotos_eliminadas": len(fotos_a_borrar)})
 
 
 @app.post("/admin/acceso/{property_id}")
