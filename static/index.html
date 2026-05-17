@@ -877,6 +877,8 @@
         Array.from(document.getElementById('fotos').files || []).forEach(function(f) { fd.append('fotos', f); });
         fd.set('foto_labels',       JSON.stringify(photoLabels));
         fd.set('foto_descriptions', JSON.stringify(photoDescriptions));
+        /* Enviar las URLs de fotos existentes que el usuario conservó */
+        (window._fotosExistentes || []).forEach(function(url) { fd.append('fotos_existentes', url); });
         var tipoSel = document.getElementById('tipo_propiedad');
         if (tipoSel && tipoSel.value === 'Otro') {
           fd.set('tipo_propiedad', (tipoSel.dataset.customValue || '').trim() || 'Otro');
@@ -884,8 +886,8 @@
         var res = await fetch('/admin/actualizar/' + propId, { method: 'POST', body: fd });
         if (!res.ok) throw new Error('Error HTTP ' + res.status);
         var result = await res.json();
-        /* Redirigir al micrositio actualizado */
-        window.location.href = '/propiedad/' + (result.property_slug || propId);
+        /* Redirigir al mismo micrositio (link no cambia) */
+        window.location.href = '/propiedad/' + (result.property_slug || slug || propId);
       } catch (err) {
         alert('Error al guardar: ' + err.message);
         if (btn) { btn.disabled = false; btn.querySelector('.btn-text').textContent = '💾 Guardar cambios'; }
@@ -956,14 +958,63 @@
       });
     }
 
-    /* Fotos existentes: mostrar banner informativo */
-    if (Array.isArray(d.fotos) && d.fotos.length) {
-      var placeholder = document.getElementById('uploadPlaceholder');
-      if (placeholder) {
-        var info = document.createElement('p');
-        info.style.cssText = 'margin:8px 0 0;font-size:12px;color:#735c00;font-weight:600;';
-        info.textContent = '📁 ' + d.fotos.length + ' foto(s) ya guardadas. Sube nuevas solo si quieres añadir más.';
-        placeholder.appendChild(info);
+    /* Fotos existentes: grid con X para eliminar individualmente */
+    window._fotosExistentes = Array.isArray(d.fotos) ? d.fotos.slice() : [];
+
+    function _crearItemFotoExistente(url) {
+      var item = document.createElement('div');
+      item.dataset.fotoUrl = url;
+      item.style.cssText = 'position:relative;border-radius:8px;overflow:hidden;aspect-ratio:1;' +
+        'border:1.5px solid #e5e0d8;background:#f9f6f0;flex-shrink:0;width:88px;height:88px;';
+      var img = document.createElement('img');
+      img.src = url;
+      img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
+      img.onerror = function() { img.style.background = '#f0ede7'; img.style.opacity = '0.4'; };
+      var xBtn = document.createElement('button');
+      xBtn.type = 'button';
+      xBtn.innerHTML = '&times;';
+      xBtn.title = 'Eliminar foto';
+      xBtn.style.cssText = 'position:absolute;top:3px;right:3px;background:rgba(220,38,38,0.9);' +
+        'color:#fff;border:none;border-radius:50%;width:22px;height:22px;cursor:pointer;' +
+        'font-size:16px;line-height:1;padding:0;display:flex;align-items:center;justify-content:center;font-weight:700;';
+      xBtn.onclick = function() {
+        window._fotosExistentes = window._fotosExistentes.filter(function(u) { return u !== url; });
+        item.style.transition = 'opacity 0.2s,transform 0.2s';
+        item.style.opacity = '0'; item.style.transform = 'scale(0.85)';
+        setTimeout(function() {
+          item.remove();
+          var counter = document.getElementById('fotosExistentesCount');
+          if (counter) counter.textContent = window._fotosExistentes.length + ' foto(s) guardadas';
+        }, 220);
+      };
+      item.appendChild(img);
+      item.appendChild(xBtn);
+      return item;
+    }
+
+    if (window._fotosExistentes.length) {
+      var uploadArea = document.getElementById('uploadArea');
+      if (uploadArea) {
+        var gridWrap = document.createElement('div');
+        gridWrap.style.cssText = 'margin-bottom:14px;padding:12px;background:#fef9e7;' +
+          'border:1.5px solid #e9c349;border-radius:10px;';
+        var header = document.createElement('p');
+        header.style.cssText = 'font-size:12px;color:#735c00;font-weight:700;margin:0 0 10px;';
+        header.innerHTML = '📁 Fotos guardadas — haz clic en <strong style="color:#dc2626">×</strong> para eliminar una';
+        var counter = document.createElement('span');
+        counter.id = 'fotosExistentesCount';
+        counter.style.cssText = 'font-weight:400;opacity:0.7;margin-left:6px;';
+        counter.textContent = window._fotosExistentes.length + ' foto(s)';
+        header.appendChild(counter);
+        var grid = document.createElement('div');
+        grid.id = 'fotosExistentesGrid';
+        grid.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;';
+        window._fotosExistentes.forEach(function(url) {
+          grid.appendChild(_crearItemFotoExistente(url));
+        });
+        gridWrap.appendChild(header);
+        gridWrap.appendChild(grid);
+        uploadArea.parentNode.insertBefore(gridWrap, uploadArea);
       }
     }
 

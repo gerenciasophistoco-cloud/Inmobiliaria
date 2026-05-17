@@ -273,6 +273,9 @@ async def actualizar_propiedad(
     telefono_agente: str = Form(...),
     email_agente:   Optional[str] = Form(None),
     coordenadas:    Optional[str] = Form(None),
+    fotos_existentes: List[str] = Form(default=[]),   # URLs de fotos que el usuario conservó
+    foto_labels:    Optional[str] = Form(default="[]"),
+    foto_descriptions: Optional[str] = Form(default="[]"),
     fotos:          List[UploadFile] = File(default=[]),
     foto_agente:    Optional[UploadFile] = File(default=None),
 ):
@@ -292,10 +295,13 @@ async def actualizar_propiedad(
             if url:
                 new_foto_paths.append(url)
 
-    # Mantener fotos existentes; agregar nuevas al final
-    foto_paths = existing.get("fotos") or []
-    if new_foto_paths:
-        foto_paths = foto_paths + new_foto_paths
+    # Base de fotos: las que el usuario conservó (enviadas desde el frontend).
+    # Si no se envió nada (petición legacy), mantener todas las existentes.
+    if fotos_existentes:
+        foto_paths = [u for u in fotos_existentes if u]
+    else:
+        foto_paths = existing.get("fotos") or []
+    foto_paths = foto_paths + new_foto_paths
 
     # Foto del agente: reusar existente si no se subió nueva
     foto_agente_path = existing.get("foto_agente_url") or ""
@@ -303,6 +309,9 @@ async def actualizar_propiedad(
         url = storage.upload_file(foto_agente.file, foto_agente.filename, folder="listapro/agentes")
         if url:
             foto_agente_path = url
+
+    labels_parsed = _json.loads(foto_labels or "[]")
+    descs_parsed  = _json.loads(foto_descriptions or "[]")
 
     updated = {
         **existing,
@@ -326,6 +335,8 @@ async def actualizar_propiedad(
         "email_agente":      email_agente or "",
         "coordenadas":       coordenadas or "",
         "fotos":             foto_paths,
+        "foto_labels":       labels_parsed or existing.get("foto_labels") or [],
+        "foto_descriptions": descs_parsed  or existing.get("foto_descriptions") or [],
         "foto_agente_url":   foto_agente_path,
         "whatsapp_link":     _whatsapp_link(
             telefono_agente,
@@ -334,52 +345,51 @@ async def actualizar_propiedad(
     }
     db.save_property(property_id, updated)
 
-    # Regenerar video solo si se añadieron fotos nuevas
-    if new_foto_paths:
-        from video_utils import ffmpeg_available
-        if ffmpeg_available():
-            import threading as _th
-            task_id = str(uuid.uuid4())
-            _video_tasks[task_id] = {
-                "status": "running", "progress": 0,
-                "status_text": "regenerando video",
-                "output_path": None, "error": None, "video_url": None,
-                "property_id": property_id,
-            }
-            video_data = {
-                "fotos": foto_paths,
-                "nombre_agente": nombre_agente,
-                "telefono_agente": telefono_agente,
-                "habitaciones": habitaciones or "",
-                "banos": banos or "",
-                "metros_construidos": metros_construidos or "",
-                "estacionamientos": estacionamientos or "",
-                "precio": precio_fmt,
-                "ciudad": ciudad,
-                "direccion": direccion,
-                "tipo_propiedad": tipo_propiedad,
-                "operacion": operacion,
-                "nombre_inmobiliaria": nombre_inmobiliaria or nombre_agente,
-                "amenidades": amenidades or [],
-                "foto_labels": existing.get("foto_labels") or [],
-                "foto_descriptions": existing.get("foto_descriptions") or [],
-                "foto_agente_url": foto_agente_path,
-                "logo_url": existing.get("logo_url") or "",
-                "video_url_propio": None,
-            }
-            db.update_property(property_id, {"video_url": None, "video_ready": False})
-            _th.Thread(
-                target=_video_task,
-                args=(task_id, video_data, property_id, "video_url"),
-                daemon=True,
-            ).start()
+    # Regenerar video siempre que haya fotos (mismo link, video actualizado)
+    from video_utils import ffmpeg_available
+    if ffmpeg_available() and foto_paths:
+        import threading as _th
+        task_id = str(uuid.uuid4())
+        _video_tasks[task_id] = {
+            "status": "running", "progress": 0,
+            "status_text": "regenerando video",
+            "output_path": None, "error": None, "video_url": None,
+            "property_id": property_id,
+        }
+        video_data = {
+            "fotos":               foto_paths,
+            "nombre_agente":       nombre_agente,
+            "telefono_agente":     telefono_agente,
+            "habitaciones":        habitaciones or "",
+            "banos":               banos or "",
+            "metros_construidos":  metros_construidos or "",
+            "estacionamientos":    estacionamientos or "",
+            "precio":              precio_fmt,
+            "ciudad":              ciudad,
+            "direccion":           direccion,
+            "tipo_propiedad":      tipo_propiedad,
+            "operacion":           operacion,
+            "nombre_inmobiliaria": nombre_inmobiliaria or nombre_agente,
+            "amenidades":          amenidades or [],
+            "foto_labels":         updated["foto_labels"],
+            "foto_descriptions":   updated["foto_descriptions"],
+            "foto_agente_url":     foto_agente_path,
+            "logo_url":            existing.get("logo_url") or "",
+            "video_url_propio":    None,
+        }
+        db.update_property(property_id, {"video_url": None, "video_ready": False})
+        _th.Thread(
+            target=_video_task,
+            args=(task_id, video_data, property_id, "video_url"),
+            daemon=True,
+        ).start()
 
     slug = existing.get("slug") or property_id
     return JSONResponse({
         "ok": True,
         "property_id": property_id,
         "property_slug": slug,
-        "regenerating_video": bool(new_foto_paths),
+        "regenerating_video": bool(foto_paths),
     })
 
 

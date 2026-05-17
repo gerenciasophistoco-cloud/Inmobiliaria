@@ -242,6 +242,7 @@
              onmouseover="this.style.background='#eff6ff'"
              onmouseout="this.style.background='none'">✏️</a>
           <button class="del-btn"
+                  data-prop-id="{{ prop.id }}"
                   onclick="confirmarEliminar('{{ prop.id }}', {{ prop.nombre | tojson }})"
                   title="Eliminar inmueble">
             🗑️
@@ -318,7 +319,7 @@
   /* ── Eliminar ── */
   async function confirmarEliminar(propId, propName) {
     if (!confirm('¿Está seguro que quiere eliminar esta propiedad?\n\n' + propName + '\n\nEsta acción es permanente y no se puede deshacer.')) return;
-    var btn = document.querySelector('[onclick*="' + propId + '"].del-btn');
+    var btn = document.querySelector('.del-btn[data-prop-id="' + propId + '"]');
     if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
     try {
       var r = await fetch('/admin/propiedad/' + propId, { method: 'DELETE' });
