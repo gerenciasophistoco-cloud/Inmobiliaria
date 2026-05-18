@@ -1307,6 +1307,18 @@
       d.caracteristicas_extra.forEach(function(c) { addCaractExtra(c.nombre, c.valor); });
     }
 
+    /* Foto del agente: mostrar la foto guardada en la vista previa */
+    if (d.foto_agente_url) {
+      var prevImg = document.getElementById('fotoAgentePreviewImg');
+      var placeholder = document.getElementById('fotoAgentePlaceholder');
+      var previewWrap = document.getElementById('fotoAgentePreviewWrap');
+      if (prevImg && placeholder && previewWrap) {
+        prevImg.src = d.foto_agente_url;
+        placeholder.style.display = 'none';
+        previewWrap.style.display = 'flex';
+      }
+    }
+
     /* Video de recorrido: mostrar badge si ya tiene uno guardado */
     if (d.video_recorrido_url) {
       var videoArea = document.getElementById('videoUploadArea');

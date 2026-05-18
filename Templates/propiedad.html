@@ -775,16 +775,22 @@
 
       <!-- Izquierda: foto + texto -->
       <div class="flex items-center gap-3 min-w-0">
-        {% if foto_agente_url %}
-        <img style="width:44px;height:44px;border-radius:50%;object-fit:cover;
-                    border:2px solid rgba(201,162,39,0.7);flex-shrink:0;"
-             src="{{ foto_agente_url }}" alt="{{ nombre_agente }}"/>
-        {% else %}
-        <div style="width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,0.12);
-                    display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-          <span class="material-symbols-outlined text-white">person</span>
+        <!-- Foto del agente: muestra imagen si carga, icono como fallback -->
+        <div id="agentAvatarWrap" style="flex-shrink:0;width:44px;height:44px;position:relative;">
+          {% if foto_agente_url %}
+          <img id="agentAvatarImg"
+               style="width:44px;height:44px;border-radius:50%;object-fit:cover;
+                      border:2px solid rgba(201,162,39,0.7);display:block;"
+               src="{{ foto_agente_url }}" alt="{{ nombre_agente }}"
+               onerror="this.style.display='none';document.getElementById('agentAvatarFallback').style.display='flex'"/>
+          {% endif %}
+          <div id="agentAvatarFallback"
+               style="display:{% if not foto_agente_url %}flex{% else %}none{% endif %};
+                      width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,0.12);
+                      align-items:center;justify-content:center;">
+            <span class="material-symbols-outlined text-white">person</span>
+          </div>
         </div>
-        {% endif %}
         <div class="min-w-0">
           <p style="color:#fff;font-size:13px;font-weight:600;line-height:1.2;">
             ¿Quieres agendar una visita o recibir más información?

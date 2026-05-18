@@ -377,6 +377,7 @@ async def editar_propiedad(property_id: str, _: str = Depends(require_admin)):
         "foto_labels":       data.get("foto_labels") or [],
         "foto_descriptions": data.get("foto_descriptions") or [],
         "video_recorrido_url": data.get("video_recorrido_url") or "",
+        "foto_agente_url":   data.get("foto_agente_url") or "",
         "slug":              data.get("slug") or property_id,
     }, ensure_ascii=False)
     with open("static/index.html", "r", encoding="utf-8") as f:
