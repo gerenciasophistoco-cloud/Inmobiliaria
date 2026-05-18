@@ -283,6 +283,9 @@
         <div style="position:relative; width:100%; padding-top:125%; background:#000; border-radius:12px;"
 >
           <video controls preload="none" playsinline
+                 controlsList="nodownload noremoteplayback"
+                 disablePictureInPicture
+                 oncontextmenu="return false"
                  style="position:absolute; inset:0; width:100%; height:100%;
                         object-fit:cover; display:block; border-radius:12px;"
                  poster="{{ fotos[0] if fotos else '' }}">
@@ -327,6 +330,9 @@
              <div style="position:relative;width:100%;padding-top:125%;
                          background:#000;border-radius:12px;">
                <video controls preload="none" playsinline
+                      controlsList="nodownload noremoteplayback"
+                      disablePictureInPicture
+                      oncontextmenu="return false"
                       style="position:absolute;inset:0;width:100%;height:100%;
                              object-fit:cover;display:block;border-radius:12px;">
                  <source src="${url}" type="video/mp4"/>
@@ -582,7 +588,10 @@
       </div>
       <div style="position:relative; width:100%; padding-top:56.25%; overflow:hidden; border-radius:16px;
                   box-shadow:0 8px 32px rgba(0,0,0,0.12);">
-        <video controls preload="none"
+        <video controls preload="none" playsinline
+               controlsList="nodownload noremoteplayback"
+               disablePictureInPicture
+               oncontextmenu="return false"
                style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;display:block;"
                poster="{{ fotos[0] if fotos else '' }}">
           <source src="{{ video_recorrido_url }}" type="video/mp4"/>
@@ -874,6 +883,42 @@
         section.querySelectorAll('video').forEach(attachIos);
       }).observe(section, { childList: true, subtree: true });
     }
+  })();
+  </script>
+
+  <script>
+  /* ── Protección de video: bloquear descarga y clic derecho ── */
+  (function () {
+    function protegerVideo(v) {
+      if (!v || v._protegido) return;
+      v._protegido = true;
+      /* Bloquear clic derecho y menú contextual */
+      v.addEventListener('contextmenu', function (e) { e.preventDefault(); return false; });
+      /* iOS: el long-press también dispara contextmenu */
+      v.addEventListener('touchstart', function () {}, { passive: true });
+    }
+
+    /* Proteger todos los videos existentes al cargar */
+    document.querySelectorAll('video').forEach(protegerVideo);
+
+    /* Proteger videos inyectados dinámicamente (poller de video) */
+    document.addEventListener('contextmenu', function (e) {
+      if (e.target && e.target.tagName === 'VIDEO') {
+        e.preventDefault();
+        return false;
+      }
+    });
+
+    /* MutationObserver: protege videos añadidos después del load */
+    new MutationObserver(function (mutations) {
+      mutations.forEach(function (m) {
+        m.addedNodes.forEach(function (node) {
+          if (node.nodeType !== 1) return;
+          if (node.tagName === 'VIDEO') protegerVideo(node);
+          node.querySelectorAll && node.querySelectorAll('video').forEach(protegerVideo);
+        });
+      });
+    }).observe(document.body, { childList: true, subtree: true });
   })();
   </script>
 
