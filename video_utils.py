@@ -664,31 +664,12 @@ def _overlay_contextual(
     user_subtitle = description.strip()
 
     if zone == "hab":
-        current, total = _count_zone("hab")
-        if len(display_text) > 3:
-            # Texto rico del usuario como título (ej: "HABITACIÓN PRINCIPAL")
-            # Añadir contador solo si hay más de una habitación
-            subtitle = (f"Habitación {current} de {total}"
-                        if total > 1 and not user_subtitle else user_subtitle)
-        elif total > 1:
-            display_text = f"HAB. {current} DE {total}"
-            subtitle     = user_subtitle
-        else:
-            display_text = display_text or "HABITACIÓN"
-            subtitle     = user_subtitle
-        return _slide_zona(display_text, subtitle, specs, nombre)
+        display_text = display_text or "HABITACIÓN"
+        return _slide_zona(display_text, user_subtitle, specs, nombre)
 
     if zone == "bano":
-        current, total = _count_zone("bano")
-        if len(display_text) > 4:
-            subtitle = (f"Baño {current} de {total}"
-                        if total > 1 and not user_subtitle else user_subtitle)
-        elif total > 1:
-            display_text = f"BAÑO {current} DE {total}"
-            subtitle     = user_subtitle
-        else:
-            subtitle = user_subtitle
-        return _slide_zona(display_text, subtitle, specs, nombre)
+        display_text = display_text or "BAÑO"
+        return _slide_zona(display_text, user_subtitle, specs, nombre)
 
     if zone == "amenidad":
         return _slide_amenidad_single(display_text, specs, nombre, subtitle=user_subtitle)
