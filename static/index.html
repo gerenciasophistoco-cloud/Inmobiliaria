@@ -1151,11 +1151,22 @@
       if (checked) checked.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
-    /* Amenidades */
+    /* Amenidades: predefinidas → marcar checkbox; personalizadas → recrear chip */
     if (Array.isArray(d.amenidades) && d.amenidades.length) {
       d.amenidades.forEach(function(am) {
-        var cb = document.querySelector('input[name="amenidades"][value="' + am + '"]');
-        if (cb) { cb.checked = true; cb.dispatchEvent(new Event('change', { bubbles: true })); }
+        var cb = document.querySelector('input[name="amenidades"][value="' + am.replace(/"/g, '\\"') + '"]');
+        if (cb) {
+          /* Amenidad predefinida: activar su checkbox */
+          cb.checked = true;
+          cb.dispatchEvent(new Event('change', { bubbles: true }));
+        } else {
+          /* Amenidad personalizada: recrear el chip dinámico */
+          var inpOtra = document.getElementById('otraInput');
+          if (inpOtra && typeof agregarOtraAmenidad === 'function') {
+            inpOtra.value = am;
+            agregarOtraAmenidad();
+          }
+        }
       });
     }
 
