@@ -961,7 +961,12 @@
         /* Si hay nuevas descripciones, mostrar picker antes de redirigir */
         if (result.descripciones && result.descripciones.length > 0) {
           if (btn) { btn.disabled = false; btn.querySelector('.btn-text').textContent = '💾 Guardar cambios'; }
-          _mostrarPickerDesc(result.descripciones, propId, destino, result.ig_copy || '', result.frase_inspiradora || '');
+          /* Preponer la descripción actual como primera opción para que pueda conservarla */
+          var descActual = d.descripcion || '';
+          var todasLasOpciones = descActual
+            ? [descActual].concat(result.descripciones)
+            : result.descripciones;
+          _mostrarPickerDesc(todasLasOpciones, propId, destino, result.ig_copy || '', result.frase_inspiradora || '', !!descActual);
         } else {
           window.location.href = destino;
         }
@@ -976,7 +981,7 @@
     var _igElegido   = '';
     var _fraseElegida = '';
 
-    function _mostrarPickerDesc(descs, propId, destino, igCopy, frase) {
+    function _mostrarPickerDesc(descs, propId, destino, igCopy, frase, tieneActual) {
       _igElegido = igCopy; _fraseElegida = frase;
       var overlay = document.createElement('div');
       overlay.id = 'descPickerOverlay';
@@ -985,15 +990,25 @@
       var box = document.createElement('div');
       box.style.cssText = 'background:#fff;border-radius:18px;padding:28px 24px;max-width:620px;width:100%;' +
         'max-height:88vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,0.35);';
-      box.innerHTML = '<h2 style="font-size:17px;font-weight:800;color:#1c1b1b;margin:0 0 6px;">✨ Nuevas opciones de descripción</h2>' +
-        '<p style="font-size:13px;color:#6b7280;margin:0 0 20px;">El texto fue generado con tus notas actualizadas. Elige la opción que mejor represente el inmueble:</p>';
+      box.innerHTML = '<h2 style="font-size:17px;font-weight:800;color:#1c1b1b;margin:0 0 6px;">📝 Elige la descripción</h2>' +
+        '<p style="font-size:13px;color:#6b7280;margin:0 0 20px;">' +
+        (tieneActual
+          ? 'La primera opción es tu descripción actual. Las demás son nuevas, generadas con tus notas.'
+          : 'Elige la opción que mejor represente el inmueble:') +
+        '</p>';
       descs.forEach(function(desc, i) {
+        var esActual = tieneActual && i === 0;
         var card = document.createElement('div');
         card.className = 'desc-pick-card';
         card.dataset.desc = desc;
-        card.style.cssText = 'border:2px solid #e5e0d8;border-radius:12px;padding:14px 16px;margin-bottom:10px;' +
-          'cursor:pointer;transition:border-color 0.15s,background 0.15s;';
-        card.innerHTML = '<span style="font-size:10px;font-weight:800;color:#735c00;letter-spacing:0.06em;">OPCIÓN ' + (i+1) + ' — haz clic para seleccionar y editar</span>' +
+        card.style.cssText = 'border:2px solid ' + (esActual ? '#86efac' : '#e5e0d8') + ';' +
+          'border-radius:12px;padding:14px 16px;margin-bottom:10px;' +
+          'cursor:pointer;transition:border-color 0.15s,background 0.15s;' +
+          (esActual ? 'background:#f0fdf4;' : '');
+        var etiqueta = esActual
+          ? '<span style="font-size:10px;font-weight:800;color:#16a34a;letter-spacing:0.06em;">✅ DESCRIPCIÓN ACTUAL — conservar esta</span>'
+          : '<span style="font-size:10px;font-weight:800;color:#735c00;letter-spacing:0.06em;">NUEVA OPCIÓN ' + i + ' — haz clic para seleccionar y editar</span>';
+        card.innerHTML = etiqueta +
           '<p style="font-size:13px;color:#374151;margin:6px 0 0;line-height:1.6;">' + desc + '</p>';
         card.addEventListener('mouseover', function(){ if (!card.dataset.sel) card.style.borderColor='#c9a227'; });
         card.addEventListener('mouseout',  function(){ if (!card.dataset.sel) card.style.borderColor='#e5e0d8'; });
@@ -1076,6 +1091,24 @@
     setVal('estrato',           d.estrato);
     setVal('ano_construccion',  d.ano_construccion);
     setVal('otras_caracteristicas', d.otras_caracteristicas);
+
+    /* Descripción actual: mostrar en un banner visible dentro del formulario */
+    if (d.descripcion) {
+      var otrasField = document.getElementById('otras_caracteristicas');
+      if (otrasField) {
+        var banner = document.createElement('div');
+        banner.style.cssText = 'margin-bottom:14px;padding:12px 14px;background:#f0fdf4;' +
+          'border:1.5px solid #86efac;border-radius:10px;';
+        banner.innerHTML =
+          '<p style="font-size:11px;font-weight:800;color:#166534;letter-spacing:0.05em;margin:0 0 6px;">DESCRIPCIÓN ACTUAL (guardada)</p>' +
+          '<p id="descActualTexto" style="font-size:13px;color:#374151;line-height:1.6;margin:0;">' +
+          d.descripcion.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</p>' +
+          '<p style="font-size:11px;color:#16a34a;margin:6px 0 0;">' +
+          '💡 Si no escribes notas abajo, esta descripción se conserva tal cual. ' +
+          'Si escribes notas, el sistema te ofrecerá nuevas opciones y podrás elegir esta u otra.</p>';
+        otrasField.parentElement.insertBefore(banner, otrasField.parentElement.firstChild);
+      }
+    }
     setVal('nombre_inmobiliaria', d.nombre_inmobiliaria);
     setVal('nombre_agente',     d.nombre_agente);
     setVal('telefono_agente',   d.telefono_agente);
