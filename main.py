@@ -5,8 +5,11 @@ import os
 import re
 import shutil
 import tempfile
+import threading
+import time
 import unicodedata
 import uuid
+from collections import defaultdict
 
 log = logging.getLogger(__name__)
 from pathlib import Path
@@ -26,27 +29,88 @@ import storage
 
 load_dotenv()
 
-app = FastAPI(title="ListaPro")
+app = FastAPI(
+    title="ListaPro",
+    docs_url=None,      # Deshabilitar Swagger UI público
+    redoc_url=None,     # Deshabilitar ReDoc público
+    openapi_url=None,   # Deshabilitar esquema OpenAPI público
+)
+
+# ── Seguridad: rate limiter + brute force ─────────────────────────────────────
+_rate_buckets: dict = defaultdict(list)   # "key:ip" → [timestamps]
+_failed_logins: dict = {}                  # ip → {"count": int, "locked_until": float}
+
+
+def _client_ip(request: Request) -> str:
+    fwd = request.headers.get("X-Forwarded-For", "")
+    return fwd.split(",")[0].strip() or (request.client.host if request.client else "unknown")
+
+
+def _rate_limit(ip: str, bucket: str, max_calls: int, window_s: int) -> None:
+    """Lanza 429 si ip supera max_calls en window_s segundos."""
+    key  = f"{bucket}:{ip}"
+    now  = time.time()
+    calls = [t for t in _rate_buckets[key] if now - t < window_s]
+    if len(calls) >= max_calls:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Demasiadas solicitudes. Espera {window_s // 60} minuto(s) e intenta de nuevo.",
+        )
+    calls.append(now)
+    _rate_buckets[key] = calls
+
+
+def _check_brute_force(ip: str) -> None:
+    entry = _failed_logins.get(ip)
+    if entry and entry["locked_until"] > time.time():
+        remaining = int(entry["locked_until"] - time.time())
+        raise HTTPException(
+            status_code=429,
+            detail=f"Cuenta bloqueada por intentos fallidos. Intenta en {remaining}s.",
+            headers={"WWW-Authenticate": 'Basic realm="ListaPro Admin"'},
+        )
+
+
+def _register_failed_login(ip: str) -> None:
+    entry = _failed_logins.get(ip, {"count": 0, "locked_until": 0.0})
+    entry["count"] += 1
+    if entry["count"] >= 5:                # 5 intentos → bloqueo 10 min
+        entry["locked_until"] = time.time() + 600
+        entry["count"] = 0
+        log.warning("🔒 IP bloqueada por fuerza bruta: %s", ip)
+    _failed_logins[ip] = entry
+
 
 # ── Protección del panel de administración ────────────────────────────────────
 _http_basic = HTTPBasic(auto_error=False)
 
-def require_admin(credentials: Optional[HTTPBasicCredentials] = Depends(_http_basic)):
+
+def require_admin(
+    request: Request,
+    credentials: Optional[HTTPBasicCredentials] = Depends(_http_basic),
+) -> str:
     """
-    Protege todas las rutas /admin con HTTP Basic Auth.
-    Configura en Railway → Variables:
-      ADMIN_USER     = tu_usuario   (defecto: "admin")
-      ADMIN_PASSWORD = tu_contraseña_secreta
-    Si ADMIN_PASSWORD no está configurada, el panel queda desprotegido
-    y aparece un aviso en los logs (solo para desarrollo local).
+    Protege todas las rutas /admin.
+    - Deny-by-default: si ADMIN_PASSWORD no está configurada, bloquea igual.
+    - Anti-brute-force: bloquea la IP 10 minutos tras 5 intentos fallidos.
+    Variables en Railway → Variables:
+      ADMIN_USER     = tu_usuario   (defecto: admin)
+      ADMIN_PASSWORD = tu_contraseña_larga_y_segura
     """
     import secrets
+    ip  = _client_ip(request)
     pwd = os.getenv("ADMIN_PASSWORD", "").strip()
     usr = os.getenv("ADMIN_USER", "admin").strip()
 
+    # DENY BY DEFAULT: si la contraseña no está configurada, bloquear siempre
     if not pwd:
-        log.warning("⚠️  ADMIN_PASSWORD no configurada — panel de admin SIN protección")
-        return "dev"
+        log.error("🚨 ADMIN_PASSWORD no configurada — acceso denegado a %s", ip)
+        raise HTTPException(
+            status_code=503,
+            detail="Panel de administración no disponible. Configura ADMIN_PASSWORD en Railway.",
+        )
+
+    _check_brute_force(ip)
 
     if credentials is None:
         raise HTTPException(
@@ -55,18 +119,19 @@ def require_admin(credentials: Optional[HTTPBasicCredentials] = Depends(_http_ba
             headers={"WWW-Authenticate": 'Basic realm="ListaPro Admin"'},
         )
 
-    user_ok = secrets.compare_digest(
-        credentials.username.encode("utf-8"), usr.encode("utf-8")
-    )
-    pass_ok = secrets.compare_digest(
-        credentials.password.encode("utf-8"), pwd.encode("utf-8")
-    )
+    user_ok = secrets.compare_digest(credentials.username.encode(), usr.encode())
+    pass_ok = secrets.compare_digest(credentials.password.encode(), pwd.encode())
+
     if not (user_ok and pass_ok):
+        _register_failed_login(ip)
         raise HTTPException(
             status_code=401,
             detail="Usuario o contraseña incorrectos.",
             headers={"WWW-Authenticate": 'Basic realm="ListaPro Admin"'},
         )
+
+    # Login exitoso: limpiar contador de fallos
+    _failed_logins.pop(ip, None)
     return credentials.username
 
 # ── Patrón UUID para distinguir IDs legacy de slugs amigables ────────────────
@@ -380,7 +445,7 @@ async def actualizar_propiedad(
         removed = [u for u in old_fotos if u and u not in set(foto_paths)]
         if removed:
             import threading as _th
-            _th.Thread(target=storage.delete_files, args=(removed,), daemon=True).start()
+            _th.Thread(target=storage.delete_files, args=(removed,), daemon=False).start()
             log.info("Eliminando %d foto(s) de Cloudinary en background", len(removed))
     else:
         foto_paths = old_fotos
@@ -394,10 +459,17 @@ async def actualizar_propiedad(
             foto_agente_path = url
 
     # Labels: [labels de fotos existentes conservadas] + [labels de fotos nuevas]
-    labs_ex   = _json.loads(labels_existentes  or "[]")
-    desc_ex   = _json.loads(descs_existentes   or "[]")
-    labs_new  = _json.loads(foto_labels        or "[]")
-    descs_new = _json.loads(foto_descriptions  or "[]")
+    def _safe_json(raw: Optional[str], fallback: list) -> list:
+        try:
+            val = _json.loads(raw or "[]")
+            return val if isinstance(val, list) else fallback
+        except Exception:
+            return fallback
+
+    labs_ex   = _safe_json(labels_existentes, [])
+    desc_ex   = _safe_json(descs_existentes,  [])
+    labs_new  = _safe_json(foto_labels,        [])
+    descs_new = _safe_json(foto_descriptions,  [])
     final_labels = labs_ex + labs_new
     final_descs  = desc_ex + descs_new
 
@@ -606,7 +678,7 @@ async def eliminar_propiedad(property_id: str, _: str = Depends(require_admin)):
     fotos_a_borrar = [u for u in (data.get("fotos") or []) if u]
     if fotos_a_borrar:
         import threading as _th
-        _th.Thread(target=storage.delete_files, args=(fotos_a_borrar,), daemon=True).start()
+        _th.Thread(target=storage.delete_files, args=(fotos_a_borrar,), daemon=False).start()
 
     ok = db.delete_property(property_id)
     if not ok:
@@ -627,7 +699,7 @@ async def toggle_acceso(property_id: str, _: str = Depends(require_admin)):
 
 # ── Ruta de prueba con datos de ejemplo ──────────────────────────────────────
 @app.get("/test-video")
-async def test_video_generation():
+async def test_video_generation(_: str = Depends(require_admin)):
     """
     Endpoint de prueba interna del motor de video.
     Llama a /test-video en Railway para verificar sin llenar el formulario.
@@ -668,7 +740,7 @@ async def test_video_generation():
 
 
 @app.get("/test")
-async def test_propiedad(request: Request):
+async def test_propiedad(request: Request, _: str = Depends(require_admin)):
     datos_ejemplo = {
         "tipo_propiedad":    "Apartamento",
         "operacion":         "Venta",
@@ -728,6 +800,7 @@ async def test_propiedad(request: Request):
 # ── Generación de contenido ──────────────────────────────────────────────────
 @app.post("/generate")
 async def generate_content(
+    request: Request,
     tipo_propiedad: str = Form(...),
     operacion: str = Form(...),
     direccion: str = Form(...),
@@ -756,7 +829,9 @@ async def generate_content(
     logo: Optional[UploadFile] = File(default=None),
     foto_agente: Optional[UploadFile] = File(default=None),
 ):
-    # Guardar logo
+    # Rate limit: máx 10 generaciones por IP por hora
+    _rate_limit(_client_ip(request), "generate", max_calls=10, window_s=3600)
+
     # ── Subir archivos (Cloudinary en prod, disco local en dev) ──────────────
     logo_path = None
     logo_colors = None
@@ -993,18 +1068,31 @@ Datos:
 
 
 # ── Upload de video del usuario (Plan A) ─────────────────────────────────────
+_MAX_VIDEO_BYTES = 500 * 1024 * 1024  # 500 MB
+
 @app.post("/upload-video")
-async def upload_video_endpoint(video: UploadFile = File(...)):
+async def upload_video_endpoint(request: Request, video: UploadFile = File(...)):
     """Recibe el video del usuario y lo sube a Cloudinary. Devuelve la URL."""
     ext = Path(video.filename or "video.mp4").suffix.lower()
     if ext not in {".mp4", ".mov", ".avi", ".mkv", ".webm"}:
         raise HTTPException(status_code=400, detail="Formato de video no soportado")
 
-    # Guardar temporalmente
+    # Rate limit: máx 5 uploads de video por IP por hora
+    _rate_limit(_client_ip(request), "upload_video", max_calls=5, window_s=3600)
+
+    # Leer en chunks de 64KB y rechazar si supera el límite de 500 MB
     tmp = Path(tempfile.mkdtemp()) / f"{uuid.uuid4()}{ext}"
+    total = 0
     with open(tmp, "wb") as f:
-        content = await video.read()
-        f.write(content)
+        while True:
+            chunk = await video.read(65536)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > _MAX_VIDEO_BYTES:
+                tmp.unlink(missing_ok=True)
+                raise HTTPException(status_code=413, detail="El video supera el límite de 500 MB.")
+            f.write(chunk)
 
     # Intentar Cloudinary primero
     try:
@@ -1033,7 +1121,11 @@ async def upload_video_endpoint(video: UploadFile = File(...)):
 @app.get("/video/{filename}")
 async def stream_video(filename: str, request: Request):
     """Sirve archivos mp4 con soporte completo de HTTP Range para seek en browser."""
-    file_path = _uploads_dir / filename
+    # Prevenir path traversal: solo el nombre del archivo, sin directorios
+    safe_name = Path(filename).name
+    if not safe_name or safe_name != filename:
+        raise HTTPException(status_code=400, detail="Nombre de archivo inválido.")
+    file_path = _uploads_dir / safe_name
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Video no encontrado")
 
@@ -1226,25 +1318,40 @@ async def property_ready(property_id: str):
     })
 
 
-# ── Consulta de video para la página pública ─────────────────────────────────
-@app.get("/propiedad-video-status/{property_id}")
-async def propiedad_video_status(property_id: str):
-    """El template de propiedad hace polling a este endpoint para saber si el video ya está listo."""
-    data = db.get_property(property_id)
-    if not data:
-        raise HTTPException(status_code=404)
-    video_url = data.get("video_url")
-    # Comprobar si hay alguna tarea de video corriendo para esta propiedad
-    generating = any(
-        t.get("status") == "running" for t in _video_tasks.values()
-    )
-    return JSONResponse({"video_url": video_url, "generating": generating})
-
-
 # ── Video endpoints ───────────────────────────────────────────────────────────
 
 # Estado en memoria de tareas de video (suficiente para un servidor persistente)
 _video_tasks: dict = {}
+
+# Semáforo: máximo 2 generaciones de video simultáneas para evitar OOM
+_video_semaphore = threading.Semaphore(2)
+
+
+def _cleanup_tmp(max_age_s: int = 7200) -> None:
+    """Elimina directorios temporales propios de más de max_age_s segundos."""
+    tmp_root = Path(tempfile.gettempdir())
+    now = time.time()
+    deleted = 0
+    try:
+        for entry in tmp_root.iterdir():
+            try:
+                if entry.is_dir() and (now - entry.stat().st_mtime) > max_age_s:
+                    shutil.rmtree(str(entry), ignore_errors=True)
+                    deleted += 1
+            except Exception:
+                pass
+    except Exception:
+        pass
+    if deleted:
+        log.info("🧹 Cleanup: %d directorios temporales eliminados", deleted)
+
+
+def _prune_video_tasks(max_tasks: int = 200) -> None:
+    """Elimina entradas antiguas de _video_tasks para evitar fuga de memoria."""
+    if len(_video_tasks) > max_tasks:
+        done = [k for k, v in _video_tasks.items() if v.get("status") in ("done", "error")]
+        for k in done[:len(done) // 2]:
+            _video_tasks.pop(k, None)
 
 
 def _video_task(task_id: str, data: dict, prop_id: Optional[str],
@@ -1259,7 +1366,9 @@ def _video_task(task_id: str, data: dict, prop_id: Optional[str],
     def _up(**kw):
         _video_tasks[task_id].update(kw)
 
-    try:
+    # Semáforo: máximo 2 videos concurrentes (evita OOM en Railway)
+    with _video_semaphore:
+      try:
         _up(progress=5, status_text="preparando")
 
         nombre   = data.get("nombre_agente", "")
@@ -1317,13 +1426,11 @@ def _video_task(task_id: str, data: dict, prop_id: Optional[str],
         except Exception:
             pass
 
-    except Exception as e:
+      except Exception as e:
         import traceback
         traceback.print_exc()
         raw = str(e)
-        # Guardar en log el error completo; al usuario mostrar solo la causa raíz
         log.error("Video task %s falló: %s", task_id, raw[:500])
-        # Mensaje limpio para el cliente: primera línea sin stderr de FFmpeg
         first_line = raw.split('\n')[0][:200]
         _up(status="error", error=first_line, progress=0)
         if prop_id:
@@ -1331,5 +1438,9 @@ def _video_task(task_id: str, data: dict, prop_id: Optional[str],
             if field == "video_url":
                 update_err["video_ready"] = True
             db.update_property(prop_id, update_err)
+      finally:
+        # Limpiar /tmp de archivos viejos y podar el dict de tareas
+        threading.Thread(target=_cleanup_tmp, daemon=False).start()
+        _prune_video_tasks()
 
 
