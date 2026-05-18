@@ -553,7 +553,7 @@ _ZONE_KEYWORDS: Dict[str, List[str]] = {
     "cocina":   ["cocina"],
     "sala":     ["sala", "living", "comedor", "salón ", "salon "],
     "bano":     ["baño", "bano"],
-    "fachada":  ["fachada", "exterior", "frente", "entrada", "vista exterior", "fachada"],
+    "fachada":  ["fachada", "portada"],   # solo palabras que indican slide de intro
     "garaje":   ["garaje", "parqueadero", "garage"],
     "amenidad": ["terraza", "balcón", "balcon", "patio", "piscina", "gimnasio",
                  "gym", "bbq", "asador", "zona ", "área com", "jardin", "jardín"],
@@ -608,9 +608,10 @@ _ZONE_MAP: Dict[str, str] = {
     # baño
     "baño": "bano", "bano": "bano", "baños": "bano",
     "bathroom": "bano",
-    # fachada / exterior
-    "fachada": "fachada", "exterior": "fachada", "frente": "fachada",
-    "entrada": "fachada",
+    # fachada (solo el slide explícito de portada/intro)
+    "fachada": "fachada", "portada": "fachada",
+    # exterior / entrada / frente → "otro" para que muestre el texto del usuario
+    "exterior": "otro", "frente": "otro", "entrada": "otro",
     # amenidad
     "amenidad": "amenidad", "amenidades": "amenidad",
     "zona común": "amenidad", "zona comun": "amenidad",
@@ -651,6 +652,9 @@ def _overlay_contextual(
     zone = _parse_zone(display_text)
 
     if zone == "fachada":
+        # Si el usuario añadió un subtítulo, mostrar su texto en lugar del intro genérico
+        if user_subtitle:
+            return _slide_zona(display_text, user_subtitle, specs, nombre)
         return _slide_intro(specs, nombre)
 
     def _count_zone(z: str) -> tuple:
