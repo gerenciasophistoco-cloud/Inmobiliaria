@@ -268,6 +268,7 @@ def _header(ov, draw, specs: dict, nombre: str):
     tipo       = str(specs.get("tipo_propiedad") or "")
     operacion  = str(specs.get("operacion") or "")
     logo_src   = str(specs.get("logo_path") or specs.get("logo_url") or "")
+    telefono   = str(specs.get("telefono") or "")
 
     logo_w = 0
     logo_local = _fetch_img(logo_src)
@@ -281,8 +282,12 @@ def _header(ov, draw, specs: dict, nombre: str):
             pass
 
     if nombre_inm:
-        _txt(draw, (M + logo_w, 52),
+        _txt(draw, (M + logo_w, 46),
              nombre_inm.upper(), _load_font(19), _WHITE, sh=2)
+
+    if telefono:
+        _txt(draw, (M + logo_w, 72),
+             telefono, _load_font(15), _WHITE_DIM, sh=1)
 
     tipo_line = " · ".join(filter(None, [tipo.upper(), operacion.upper()]))
     if tipo_line:
@@ -1109,7 +1114,10 @@ def generate_slideshow(
     if not ffmpeg_available():
         raise RuntimeError("FFmpeg no está instalado en este servidor.")
 
-    specs = specs or {}
+    specs = dict(specs or {})
+    # Inyectar teléfono en specs para que _header lo dibuje bajo el nombre
+    if telefono and "telefono" not in specs:
+        specs["telefono"] = telefono
 
     # 1. Fotos → JPEG (máximo 50)
     jpegs: List[str] = []
