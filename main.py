@@ -1238,7 +1238,14 @@ async def toggle_pago(property_id: str, _: str = Depends(require_admin)):
 
 
 # ── Página web de la propiedad (acepta UUID legacy o slug amigable) ───────────
-@app.get("/propiedad/{id_or_slug}", response_class=HTMLResponse)
+@app.get("/propiedad/{id_or_slug}", include_in_schema=False)
+async def ver_propiedad_redirect(id_or_slug: str):
+    """Redirect 301 permanente para mantener compatibilidad con links anteriores."""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url=f"/ver/{id_or_slug}", status_code=301)
+
+
+@app.get("/ver/{id_or_slug}", response_class=HTMLResponse)
 async def ver_propiedad(id_or_slug: str, request: Request):
     # Detectar formato: UUID vs slug
     if _UUID_RE.match(id_or_slug):

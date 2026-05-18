@@ -125,7 +125,7 @@ def _format_card(prop_id: str, data: dict) -> dict:
     return {
         "id":               prop_id,
         "slug":             slug,
-        "url":              f"/propiedad/{slug}",
+        "url":              f"/ver/{slug}",
         "nombre":           f"{data.get('tipo_propiedad', 'Propiedad')} en {data.get('ciudad', '')}",
         "ciudad":           data.get("ciudad", ""),
         "operacion":        data.get("operacion", ""),

@@ -621,7 +621,7 @@
            style="scrollbar-width:none; -ms-overflow-style:none;">
 
         {% for prop in otras_propiedades %}
-        <a href="/propiedad/{{ prop.id }}"
+        <a href="{{ prop.url }}"
            class="snap-start flex-shrink-0 flex flex-col bg-white rounded-2xl overflow-hidden
                   border border-outline-variant/10 no-underline
                   hover:-translate-y-0.5 transition-transform duration-150"

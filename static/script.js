@@ -530,7 +530,7 @@ function downloadPDF() {
 function openPropiedad() {
   if (!lastPropertyId) { showToast('⚠️ Genera el contenido primero'); return; }
   const slug = lastPropertySlug || lastPropertyId;
-  window.open(`/propiedad/${slug}`, '_blank');
+  window.open(`/ver/${slug}`, '_blank');
 }
 
 /* ── Polling: esperar a que video_ready = true en DB ── */

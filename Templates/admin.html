@@ -202,7 +202,7 @@
                          padding:3px 7px;border-radius:5px;border:1px solid #e9c349;
                          white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
                          max-width:135px;display:block;"
-                  title="/propiedad/{{ prop.slug }}">/…/{{ prop.slug[:20] }}{% if prop.slug|length > 20 %}…{% endif %}</code>
+                  title="/ver/{{ prop.slug }}">/…/{{ prop.slug[:20] }}{% if prop.slug|length > 20 %}…{% endif %}</code>
             <button onclick="copyLink('{{ prop.slug }}')"
                     id="copy-{{ prop.slug }}"
                     title="Copiar link"
@@ -211,7 +211,7 @@
               📋
             </button>
           </div>
-          <a href="/propiedad/{{ prop.slug }}" target="_blank"
+          <a href="/ver/{{ prop.slug }}" target="_blank"
              style="font-size:11px;color:#735c00;text-decoration:none;opacity:0.7;">
             Ver micrositio →
           </a>
@@ -291,7 +291,7 @@
 
   /* ── Copiar link ── */
   function copyLink(slug) {
-    var url = window.location.origin + '/propiedad/' + slug;
+    var url = window.location.origin + '/ver/' + slug;
     navigator.clipboard.writeText(url).then(function() {
       var btn = document.getElementById('copy-' + slug);
       if (btn) { btn.textContent = '✅'; setTimeout(function(){ btn.textContent = '📋'; }, 1800); }

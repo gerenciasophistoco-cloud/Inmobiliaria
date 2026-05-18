@@ -957,7 +957,7 @@
         var res = await fetch('/admin/actualizar/' + propId, { method: 'POST', body: fd });
         if (!res.ok) throw new Error('Error HTTP ' + res.status);
         var result = await res.json();
-        var destino = '/propiedad/' + (result.property_slug || slug || propId);
+        var destino = '/ver/' + (result.property_slug || slug || propId);
         /* Si hay nuevas descripciones, mostrar picker antes de redirigir */
         if (result.descripciones && result.descripciones.length > 0) {
           if (btn) { btn.disabled = false; btn.querySelector('.btn-text').textContent = '💾 Guardar cambios'; }
