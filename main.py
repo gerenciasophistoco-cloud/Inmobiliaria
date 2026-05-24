@@ -1327,13 +1327,21 @@ async def propiedad_video_status(property_id: str):
         t.get("status") == "running" and t.get("property_id") == property_id
         for t in _video_tasks.values()
     )
+    video_url   = data.get("video_url")
+    video_ready = bool(data.get("video_ready", False))
+
+    # Si no hay video ni tarea corriendo, no tiene sentido seguir esperando:
+    # forzar video_ready=True para que el frontend detenga el polling y oculte la sección.
+    if not video_url and not generating:
+        video_ready = True
+
     return JSONResponse({
-        "video_url":             data.get("video_url"),
+        "video_url":             video_url,
         "video_url_error":       data.get("video_url_error"),
         "video_recorrido_url":   data.get("video_recorrido_url"),
         "video_recorrido_error": data.get("video_recorrido_url_error"),
         "generating":            generating,
-        "video_ready":           bool(data.get("video_ready", False)),
+        "video_ready":           video_ready,
     })
 
 
