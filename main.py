@@ -1330,10 +1330,55 @@ async def propiedad_video_status(property_id: str):
     video_url   = data.get("video_url")
     video_ready = bool(data.get("video_ready", False))
 
-    # Si no hay video ni tarea corriendo, no tiene sentido seguir esperando:
-    # forzar video_ready=True para que el frontend detenga el polling y oculte la sección.
-    if not video_url and not generating:
-        video_ready = True
+    # Si no hay video, no hay tarea corriendo y video_ready sigue en False →
+    # la propiedad quedó atascada (copia, restart del servidor, etc.)
+    # Si tiene fotos: auto-arrancar generación. Si no tiene fotos: parar polling.
+    if not video_url and not generating and not video_ready:
+        fotos = [f for f in (data.get("fotos") or []) if f]
+        if fotos:
+            # Auto-regenerar video con las fotos existentes
+            try:
+                from video_utils import ffmpeg_available
+                if ffmpeg_available():
+                    task_id = str(uuid.uuid4())
+                    _video_tasks[task_id] = {
+                        "status": "running", "progress": 0, "status_text": "iniciando",
+                        "output_path": None, "error": None, "video_url": None,
+                        "property_id": property_id,
+                    }
+                    task_data = {
+                        "fotos":              fotos,
+                        "nombre_agente":      data.get("nombre_agente", ""),
+                        "telefono_agente":    data.get("telefono_agente", ""),
+                        "habitaciones":       data.get("habitaciones", ""),
+                        "banos":              data.get("banos", ""),
+                        "metros_construidos": data.get("metros", ""),
+                        "estacionamientos":   data.get("estacionamientos", ""),
+                        "precio":             data.get("precio", ""),
+                        "ciudad":             data.get("ciudad", ""),
+                        "direccion":          data.get("direccion", ""),
+                        "tipo_propiedad":     data.get("tipo_propiedad", ""),
+                        "operacion":          data.get("operacion", ""),
+                        "nombre_inmobiliaria": data.get("nombre_inmobiliaria", ""),
+                        "amenidades":         data.get("amenidades") or [],
+                        "foto_labels":        data.get("foto_labels") or [],
+                        "foto_descriptions":  data.get("foto_descriptions") or [],
+                        "logo_url":           data.get("logo_url", ""),
+                        "foto_agente_url":    data.get("foto_agente_url", ""),
+                        "video_url_propio":   None,
+                    }
+                    threading.Thread(
+                        target=_video_task,
+                        args=(task_id, task_data, property_id, "video_url"),
+                        daemon=True,
+                    ).start()
+                    generating = True
+                    log.info("Auto-regenerando video para propiedad atascada: %s", property_id)
+            except Exception as _e:
+                log.warning("No se pudo auto-regenerar video: %s", _e)
+        else:
+            # Sin fotos: no hay nada que generar → detener polling limpiamente
+            video_ready = True
 
     return JSONResponse({
         "video_url":             video_url,
