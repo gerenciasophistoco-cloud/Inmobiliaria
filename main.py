@@ -700,10 +700,12 @@ async def duplicar_propiedad(property_id: str, _: str = Depends(require_admin)):
     new_slug  = _unique_slug(base_slug)
 
     new_data = dict(data)
-    new_data["slug"]         = new_slug
-    new_data["video_url"]    = None
-    new_data["video_ready"]  = False
+    new_data["slug"]          = new_slug
     new_data["acceso_activo"] = False   # la copia sale inactiva para no exponer duplicados
+    # Copiar el video existente (mismas fotos de Cloudinary) para que no quede en "Preparando..."
+    # Si no hay video, marcar como listo-sin-video para detener el polling
+    if not new_data.get("video_url"):
+        new_data["video_ready"] = True   # detiene el polling en el micrositio
     # Quitar campos de Supabase que no deben copiarse como datos
     for _k in ("id", "property_id", "created_at", "updated_at"):
         new_data.pop(_k, None)
