@@ -145,7 +145,7 @@
     <div style="background:#fff;border-radius:16px;border:1px solid #e5e0d8;overflow:hidden;">
 
       <!-- Cabecera -->
-      <div style="display:grid;grid-template-columns:72px 1fr 200px 112px 86px;gap:0;
+      <div style="display:grid;grid-template-columns:72px 1fr 200px 112px 116px;gap:0;
                   background:#f6f3ee;border-bottom:1px solid #e5e0d8;padding:10px 16px;
                   font-size:11px;font-weight:700;letter-spacing:0.06em;
                   color:#78716c;text-transform:uppercase;align-items:center;">
@@ -161,7 +161,7 @@
       {% for prop in properties %}
       <div class="prop-row" id="row-{{ prop.id }}"
            data-search="{{ (prop.nombre ~ ' ' ~ prop.nombre_agente ~ ' ' ~ prop.ciudad ~ ' ' ~ prop.slug) | lower }}"
-           style="display:grid;grid-template-columns:72px 1fr 200px 112px 86px;gap:0;
+           style="display:grid;grid-template-columns:72px 1fr 200px 112px 116px;gap:0;
                   align-items:center;border-bottom:1px solid #f0ede7;padding:14px 16px;
                   background:#fff;{% if not prop.acceso_activo %}opacity:0.6;{% endif %}">
 
@@ -231,9 +231,9 @@
           </span>
         </div>
 
-        <!-- Acciones: Editar + Eliminar -->
+        <!-- Acciones: Editar + Duplicar + Eliminar -->
         <div class="acciones-col" id="acc-{{ prop.id }}"
-             style="display:flex;justify-content:center;align-items:center;gap:6px;">
+             style="display:flex;justify-content:center;align-items:center;gap:6px;flex-wrap:wrap;">
           <a href="/admin/editar/{{ prop.id }}"
              title="Editar inmueble"
              style="background:none;border:1px solid #bfdbfe;border-radius:8px;
@@ -242,6 +242,14 @@
                     transition:background 0.15s;flex-shrink:0;color:#1d4ed8;"
              onmouseover="this.style.background='#eff6ff'"
              onmouseout="this.style.background='none'">✏️</a>
+          <button title="Duplicar inmueble"
+                  onclick="duplicarPropiedad('{{ prop.id }}')"
+                  style="background:none;border:1px solid #d4e7bc;border-radius:8px;
+                         width:34px;height:34px;cursor:pointer;display:flex;
+                         align-items:center;justify-content:center;font-size:15px;
+                         transition:background 0.15s;flex-shrink:0;"
+                  onmouseover="this.style.background='#f0fdf4'"
+                  onmouseout="this.style.background='none'">📄</button>
           <button class="del-btn"
                   data-prop-id="{{ prop.id }}"
                   onclick="pedirConfirmacion('{{ prop.id }}')"
@@ -366,6 +374,20 @@
     } catch(e) {
       showToast('⚠️ Error al eliminar: ' + e.message);
       cancelarEliminar(propId);
+    }
+  }
+
+  /* ── Duplicar inmueble ── */
+  async function duplicarPropiedad(propId) {
+    showToast('⏳ Duplicando inmueble…');
+    try {
+      var r = await fetch('/admin/duplicar/' + propId, { method: 'POST' });
+      var d = await r.json();
+      if (!r.ok) throw new Error(d.detail || 'Error ' + r.status);
+      showToast('✅ Duplicado como /ver/' + d.new_slug + ' (inactivo)');
+      setTimeout(function(){ location.reload(); }, 1800);
+    } catch(e) {
+      showToast('⚠️ Error al duplicar: ' + e.message);
     }
   }
 

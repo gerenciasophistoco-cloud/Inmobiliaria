@@ -688,6 +688,30 @@ async def eliminar_propiedad(property_id: str, _: str = Depends(require_admin)):
     return JSONResponse({"deleted": True, "fotos_eliminadas": len(fotos_a_borrar)})
 
 
+@app.post("/admin/duplicar/{property_id}")
+async def duplicar_propiedad(property_id: str, _: str = Depends(require_admin)):
+    """Duplica una propiedad creando una copia con slug único y sin video generado."""
+    data = db.get_property(property_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Propiedad no encontrada")
+
+    new_id   = str(uuid.uuid4())
+    base_slug = data.get("slug", "propiedad") + "-copia"
+    new_slug  = _unique_slug(base_slug)
+
+    new_data = dict(data)
+    new_data["slug"]         = new_slug
+    new_data["video_url"]    = None
+    new_data["video_ready"]  = False
+    new_data["acceso_activo"] = False   # la copia sale inactiva para no exponer duplicados
+    # Quitar campos de Supabase que no deben copiarse como datos
+    for _k in ("id", "property_id", "created_at", "updated_at"):
+        new_data.pop(_k, None)
+
+    db.save_property(new_id, new_data)
+    return JSONResponse({"ok": True, "new_id": new_id, "new_slug": new_slug})
+
+
 @app.post("/admin/acceso/{property_id}")
 async def toggle_acceso(property_id: str, _: str = Depends(require_admin)):
     """Activa o desactiva el acceso público a un inmueble."""
