@@ -580,12 +580,12 @@
 
 
     <!-- ══ RECORRIDO EN VIDEO ══ -->
-    {% if video_recorrido_url %}
     <section class="space-y-4">
       <div class="flex items-center gap-3">
         <span class="material-symbols-outlined text-primary" style="font-size:28px;">videocam</span>
         <h3 class="font-headline-md text-headline-md">Recorrido en Video</h3>
       </div>
+      {% if video_recorrido_url %}
       <div style="position:relative; width:100%; padding-top:56.25%; overflow:hidden; border-radius:16px;
                   box-shadow:0 8px 32px rgba(0,0,0,0.12);">
         <video controls preload="none" playsinline
@@ -597,8 +597,23 @@
           <source src="{{ video_recorrido_url }}" type="video/mp4"/>
         </video>
       </div>
+      {% else %}
+      <div style="border:1.5px dashed #d4b96a;border-radius:16px;padding:32px 28px;
+                  background:linear-gradient(135deg,#fdfaf3,#fef9ec);
+                  display:flex;align-items:flex-start;gap:18px;">
+        <span class="material-symbols-outlined" style="font-size:36px;color:#c9a227;flex-shrink:0;margin-top:2px;">play_circle</span>
+        <div>
+          <p style="font-size:15px;font-weight:700;color:#1c1b1b;margin:0 0 6px;line-height:1.4;">
+            ¿Tienes un video de esta propiedad?
+          </p>
+          <p style="font-size:13px;color:#78716c;margin:0;line-height:1.6;">
+            Podemos integrarlo aquí mismo para ofrecer al potencial cliente una experiencia
+            completa y detallada del inmueble.
+          </p>
+        </div>
+      </div>
+      {% endif %}
     </section>
-    {% endif %}
 
 
     <!-- ══ CARRUSEL: OTROS INMUEBLES ══ -->
